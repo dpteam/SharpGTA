@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net40;net9.0</TargetFrameworks>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>SharpGTA.Tests</AssemblyName>
+    <RootNamespace>SharpGTA.Tests</RootNamespace>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\SharpGTA.Core\SharpGTA.Core.csproj" />
+    <ProjectReference Include="..\..\src\SharpGTA.Games.III\SharpGTA.Games.III.csproj" />
+    <ProjectReference Include="..\..\src\SharpGTA.Games.VC\SharpGTA.Games.VC.csproj" />
+    <ProjectReference Include="..\..\src\SharpGTA.Headless\SharpGTA.Headless.csproj" />
+  </ItemGroup>
+</Project>

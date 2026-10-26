@@ -1,0 +1,29 @@
+# Local references, original game assets and other private material
+refs/
+
+# Build output
+[Bb]in/
+[Oo]bj/
+**/bin/
+**/obj/
+artifacts/
+
+# IDE and user state
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test and runtime output
+TestResults/
+*.log
+*.dmp
+*.sav
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

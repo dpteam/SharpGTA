@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net40;net9.0</TargetFrameworks>
+    <AssemblyName>SharpGTA.Games.VC</AssemblyName>
+    <RootNamespace>SharpGTA.Games.VC</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SharpGTA.Core\SharpGTA.Core.csproj" />
+  </ItemGroup>
+</Project>

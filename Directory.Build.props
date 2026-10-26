@@ -1,0 +1,27 @@
+<Project>
+  <PropertyGroup>
+    <BrandName>SharpGTA</BrandName>
+    <BrandVersion>0.1.0</BrandVersion>
+    <BrandTagline>A managed engine for GTA III and Vice City</BrandTagline>
+    <BrandHomeUrl></BrandHomeUrl>
+    <Company>$(BrandName)</Company>
+    <Product>$(BrandName)</Product>
+    <AssemblyTitle>$(BrandName)</AssemblyTitle>
+    <Version>$(BrandVersion)</Version>
+    <LangVersion>4</LangVersion>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <WarningLevel>4</WarningLevel>
+    <ErrorReport>none</ErrorReport>
+    <DebugType>portable</DebugType>
+    <DebugSymbols>true</DebugSymbols>
+  </PropertyGroup>
+
+  <!-- Compile-only .NET 4.0 targeting pack; no assembly is shipped from this package. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net40'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

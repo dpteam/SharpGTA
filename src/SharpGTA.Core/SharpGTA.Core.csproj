@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net40;net9.0</TargetFrameworks>
+    <AssemblyName>SharpGTA.Core</AssemblyName>
+    <RootNamespace>SharpGTA</RootNamespace>
+  </PropertyGroup>
+
+  <!-- Display branding and assembly metadata share Directory.Build.props. -->
+  <Target Name="GenerateBranding" BeforeTargets="CoreCompile">
+    <PropertyGroup>
+      <BrandingSource>$(IntermediateOutputPath)SharpGTA.Branding.g.cs</BrandingSource>
+    </PropertyGroup>
+    <ItemGroup>
+      <BrandingLine Include="// &lt;auto-generated /&gt;" />
+      <BrandingLine Include="namespace SharpGTA" />
+      <BrandingLine Include="{" />
+      <BrandingLine Include="    public static class Branding" />
+      <BrandingLine Include="    {" />
+      <BrandingLine Include="        public const string Name = &quot;$(BrandName)&quot;%3B" />
+      <BrandingLine Include="        public const string Version = &quot;$(BrandVersion)&quot;%3B" />
+      <BrandingLine Include="        public const string Title = Name + &quot; v&quot; + Version%3B" />
+      <BrandingLine Include="        public const string Tagline = &quot;$(BrandTagline)&quot;%3B" />
+      <BrandingLine Include="        public const string HomeUrl = &quot;$(BrandHomeUrl)&quot;%3B" />
+      <BrandingLine Include="    }" />
+      <BrandingLine Include="}" />
+    </ItemGroup>
+    <WriteLinesToFile File="$(BrandingSource)" Lines="@(BrandingLine)" Overwrite="true" />
+    <ItemGroup>
+      <Compile Include="$(BrandingSource)" />
+      <FileWrites Include="$(BrandingSource)" />
+    </ItemGroup>
+  </Target>
+</Project>
