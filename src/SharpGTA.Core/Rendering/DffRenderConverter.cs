@@ -9,6 +9,11 @@ namespace SharpGTA.Rendering
     {
         public static GeometryRenderData ConvertSingleGeometry(DffGeometry geometry, string name)
         {
+            return ConvertSingleGeometry(geometry, name, -1);
+        }
+
+        public static GeometryRenderData ConvertSingleGeometry(DffGeometry geometry, string name, int atomicFrameIndex)
+        {
             if (geometry == null)
                 throw new ArgumentNullException("geometry");
             if (name == null)
@@ -54,7 +59,7 @@ namespace SharpGTA.Rendering
                     material.Texture == null ? null : material.Texture.Name,
                     PackRgba(material.Color));
             }
-            return new GeometryRenderData(name, vertices, materials, meshes);
+            return new GeometryRenderData(name, vertices, materials, meshes, atomicFrameIndex);
         }
 
         public static GeometryRenderData[] ConvertClump(DffClump clump, string name)
@@ -68,7 +73,7 @@ namespace SharpGTA.Rendering
             {
                 DffAtomic atomic = clump.Atomics[i];
                 models[i] = ConvertSingleGeometry(atomic.Geometry,
-                    name + "#atomic" + i + "#geometry" + atomic.GeometryIndex);
+                    name + "#atomic" + i + "#geometry" + atomic.GeometryIndex, atomic.FrameIndex);
             }
             return models;
         }

@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using SharpGTA.Mathematics;
 
 namespace SharpGTA.D3D9
 {
@@ -106,7 +107,7 @@ namespace SharpGTA.D3D9
             sceneOpen = true;
             try
             {
-                ClearChecked(D3dConstants.ClearTarget, color, 1.0f, 0);
+                ClearChecked(D3dConstants.ClearTarget | D3dConstants.ClearZBuffer, color, 1.0f, 0);
             }
             catch
             {
@@ -176,6 +177,7 @@ namespace SharpGTA.D3D9
             SetTextureStageStateChecked(0, D3dConstants.TextureAlphaArg1,
                 texture == null ? D3dConstants.TextureArgumentDiffuse : D3dConstants.TextureArgumentTexture);
             SetTextureStageStateChecked(0, D3dConstants.TextureAlphaArg2, D3dConstants.TextureArgumentDiffuse);
+            SetTextureStageStateChecked(1, D3dConstants.TextureColorOp, D3dConstants.TextureOpDisable);
             SetSamplerStateChecked(0, D3dConstants.SamplerAddressU, D3dConstants.TextureAddressClamp);
             SetSamplerStateChecked(0, D3dConstants.SamplerAddressV, D3dConstants.TextureAddressClamp);
             SetSamplerStateChecked(0, D3dConstants.SamplerMagFilter, D3dConstants.TextureFilterLinear);
@@ -187,6 +189,85 @@ namespace SharpGTA.D3D9
             {
                 DrawPrimitiveUpChecked((uint)(vertices.Length / 3), pin.AddrOfPinnedObject(),
                     (uint)Marshal.SizeOf(typeof(D3dTexturedVertex)));
+            }
+            finally
+            {
+                pin.Free();
+            }
+        }
+
+        internal void SetTransform(uint state, ref D3dMatrix matrix)
+        {
+            SetTransformChecked(state, ref matrix);
+        }
+
+        internal void SetDirectionalLight(D3dVector direction)
+        {
+            ThrowIfUnavailable();
+            D3dLight light = new D3dLight();
+            light.Type = D3dConstants.LightDirectional;
+            light.Diffuse = new D3dColorValue(1.0f, 1.0f, 1.0f, 1.0f);
+            light.Specular = new D3dColorValue(0.25f, 0.25f, 0.25f, 1.0f);
+            light.Direction = direction;
+            DeviceSetLightDelegate set = ComVtable.GetMethod<DeviceSetLightDelegate>(device, D3dVtableSlots.SetLight);
+            Check(set(device, 0, ref light), "SetLight");
+            DeviceLightEnableDelegate enable = ComVtable.GetMethod<DeviceLightEnableDelegate>(device, D3dVtableSlots.LightEnable);
+            Check(enable(device, 0, true), "LightEnable");
+            SetRenderStateChecked(D3dConstants.StateAmbient, 0xFFA0A0A0);
+            SetRenderStateChecked(D3dConstants.StateColorVertex, 1);
+            SetRenderStateChecked(D3dConstants.StateDiffuseMaterialSource, D3dConstants.MaterialSourceVertexColor);
+            SetRenderStateChecked(D3dConstants.StateAmbientMaterialSource, D3dConstants.MaterialSourceVertexColor);
+        }
+
+        internal void DrawModelMesh(D3D9Texture texture, uint materialColor, D3dModelVertex[] vertices)
+        {
+            ThrowIfUnavailable();
+            if (!sceneOpen)
+                throw new InvalidOperationException("DrawModelMesh requires an open frame.");
+            if (vertices == null)
+                throw new ArgumentNullException("vertices");
+            if (vertices.Length == 0 || vertices.Length % 3 != 0)
+                throw new ArgumentException("Model batches must contain complete triangles.", "vertices");
+
+            SetFvfChecked(D3dConstants.FvfModelVertex);
+            SetTextureChecked(0, texture == null ? IntPtr.Zero : texture.Handle);
+            SetRenderStateChecked(D3dConstants.StateLighting, 1);
+            SetRenderStateChecked(D3dConstants.StateCullMode, D3dConstants.CullNone);
+            SetRenderStateChecked(D3dConstants.StateZEnable, 1);
+            SetRenderStateChecked(D3dConstants.StateZWriteEnable, 1);
+            SetRenderStateChecked(D3dConstants.StateAlphaTestEnable, 0);
+            SetRenderStateChecked(D3dConstants.StateAlphaBlendEnable, 1);
+            SetRenderStateChecked(D3dConstants.StateSourceBlend, D3dConstants.BlendSourceAlpha);
+            SetRenderStateChecked(D3dConstants.StateDestinationBlend, D3dConstants.BlendInverseSourceAlpha);
+            SetTextureStageStateChecked(0, D3dConstants.TextureColorOp,
+                texture == null ? D3dConstants.TextureOpSelectArg1 : D3dConstants.TextureOpModulate);
+            SetTextureStageStateChecked(0, D3dConstants.TextureColorArg1,
+                texture == null ? D3dConstants.TextureArgumentDiffuse : D3dConstants.TextureArgumentTexture);
+            SetTextureStageStateChecked(0, D3dConstants.TextureColorArg2, D3dConstants.TextureArgumentDiffuse);
+            SetTextureStageStateChecked(0, D3dConstants.TextureAlphaOp,
+                texture == null ? D3dConstants.TextureOpSelectArg1 : D3dConstants.TextureOpModulate);
+            SetTextureStageStateChecked(0, D3dConstants.TextureAlphaArg1,
+                texture == null ? D3dConstants.TextureArgumentDiffuse : D3dConstants.TextureArgumentTexture);
+            SetTextureStageStateChecked(0, D3dConstants.TextureAlphaArg2, D3dConstants.TextureArgumentDiffuse);
+            SetTextureStageStateChecked(1, D3dConstants.TextureStageConstant, materialColor);
+            SetTextureStageStateChecked(1, D3dConstants.TextureColorOp, D3dConstants.TextureOpModulate);
+            SetTextureStageStateChecked(1, D3dConstants.TextureColorArg1, D3dConstants.TextureArgumentCurrent);
+            SetTextureStageStateChecked(1, D3dConstants.TextureColorArg2, D3dConstants.TextureArgumentConstant);
+            SetTextureStageStateChecked(1, D3dConstants.TextureAlphaOp, D3dConstants.TextureOpModulate);
+            SetTextureStageStateChecked(1, D3dConstants.TextureAlphaArg1, D3dConstants.TextureArgumentCurrent);
+            SetTextureStageStateChecked(1, D3dConstants.TextureAlphaArg2, D3dConstants.TextureArgumentConstant);
+            SetTextureStageStateChecked(2, D3dConstants.TextureColorOp, D3dConstants.TextureOpDisable);
+            SetSamplerStateChecked(0, D3dConstants.SamplerAddressU, D3dConstants.TextureAddressWrap);
+            SetSamplerStateChecked(0, D3dConstants.SamplerAddressV, D3dConstants.TextureAddressWrap);
+            SetSamplerStateChecked(0, D3dConstants.SamplerMagFilter, D3dConstants.TextureFilterLinear);
+            SetSamplerStateChecked(0, D3dConstants.SamplerMinFilter, D3dConstants.TextureFilterLinear);
+            SetSamplerStateChecked(0, D3dConstants.SamplerMipFilter, D3dConstants.TextureFilterNone);
+
+            GCHandle pin = GCHandle.Alloc(vertices, GCHandleType.Pinned);
+            try
+            {
+                DrawPrimitiveUpChecked((uint)(vertices.Length / 3), pin.AddrOfPinnedObject(),
+                    (uint)Marshal.SizeOf(typeof(D3dModelVertex)));
             }
             finally
             {
@@ -381,8 +462,8 @@ namespace SharpGTA.D3D9
                 SwapEffect = D3dConstants.SwapEffectDiscard,
                 DeviceWindow = window,
                 Windowed = true,
-                EnableAutoDepthStencil = false,
-                AutoDepthStencilFormat = 0,
+                EnableAutoDepthStencil = true,
+                AutoDepthStencilFormat = D3dConstants.FormatD24S8,
                 Flags = D3dConstants.PresentFlagLockableBackBuffer,
                 FullScreenRefreshRateInHz = 0,
                 PresentationInterval = verticalSync ? 1u : 0u

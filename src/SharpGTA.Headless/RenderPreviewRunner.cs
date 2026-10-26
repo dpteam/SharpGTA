@@ -61,15 +61,9 @@ namespace SharpGTA.Headless
                 }
             }
 
-            // Use a unit transform: preview validates resource conversion, not entity placement.
-            RenderSceneSnapshot snapshot;
-            if (geometry.Length == 0)
-                snapshot = new RenderSceneSnapshot(new RenderDrawCall[0]);
-            else
-            {
-                RenderSceneBuilderHelper helper = new RenderSceneBuilderHelper();
-                snapshot = helper.Build(geometry);
-            }
+            // Validate the same static frame hierarchy used by the real renderer.
+            RenderSceneSnapshot snapshot = DffRenderSceneBuilder.Build(geometry,
+                DffFrameTransforms.Resolve(document.Clumps[0]), Matrix.Identity);
 
             using (NullRenderDevice device = new NullRenderDevice())
             {
@@ -82,25 +76,5 @@ namespace SharpGTA.Headless
             }
         }
 
-        private sealed class RenderSceneBuilderHelper
-        {
-            internal RenderSceneSnapshot Build(GeometryRenderData[] geometry)
-            {
-                System.Collections.Generic.List<RenderDrawCall> calls =
-                    new System.Collections.Generic.List<RenderDrawCall>();
-                for (int i = 0; i < geometry.Length; i++)
-                {
-                    for (int j = 0; j < geometry[i].Meshes.Length; j++)
-                    {
-                        MeshData mesh = geometry[i].Meshes[j];
-                        MaterialData material = mesh.MaterialIndex >= 0 && mesh.MaterialIndex < geometry[i].Materials.Length
-                            ? geometry[i].Materials[mesh.MaterialIndex]
-                            : null;
-                        calls.Add(new RenderDrawCall(geometry[i], mesh, material, Matrix.Identity));
-                    }
-                }
-                return new RenderSceneSnapshot(calls);
-            }
-        }
     }
 }

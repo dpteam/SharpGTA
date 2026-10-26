@@ -76,7 +76,7 @@ namespace SharpGTA.Rendering
     public sealed class GeometryRenderData
     {
         internal GeometryRenderData(string name, RenderVertex[] vertices,
-            MaterialData[] materials, MeshData[] meshes)
+            MaterialData[] materials, MeshData[] meshes, int atomicFrameIndex)
         {
             if (name == null)
                 throw new ArgumentNullException("name");
@@ -90,12 +90,14 @@ namespace SharpGTA.Rendering
             Vertices = vertices;
             Materials = materials;
             Meshes = meshes;
+            AtomicFrameIndex = atomicFrameIndex;
         }
 
         public string Name { get; private set; }
         public RenderVertex[] Vertices { get; private set; }
         public MaterialData[] Materials { get; private set; }
         public MeshData[] Meshes { get; private set; }
+        public int AtomicFrameIndex { get; private set; }
     }
 
     public struct RenderDrawCall

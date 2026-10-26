@@ -17,6 +17,8 @@ namespace SharpGTA.D3D9
         internal const int EndScene = 42;
         internal const int Clear = 43;
         internal const int SetTransform = 44;
+        internal const int SetLight = 51;
+        internal const int LightEnable = 53;
         internal const int SetRenderState = 57;
         internal const int SetTexture = 65;
         internal const int SetTextureStageState = 67;
@@ -69,6 +71,13 @@ namespace SharpGTA.D3D9
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     internal delegate int DeviceSetTransformDelegate(IntPtr device, uint state, ref D3dMatrix matrix);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceSetLightDelegate(IntPtr device, uint index, ref D3dLight light);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceLightEnableDelegate(IntPtr device, uint index,
+        [MarshalAs(UnmanagedType.Bool)] bool enable);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     internal delegate int DeviceSetRenderStateDelegate(IntPtr device, uint state, uint value);

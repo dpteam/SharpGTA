@@ -52,6 +52,7 @@ namespace SharpGTA.Frontend
         SetLanguage,
         RestoreDefaults,
         Unsupported,
+        StartModelPreview,
         ExitApplication
     }
 
@@ -308,6 +309,7 @@ namespace SharpGTA.Frontend
         public int SelectedIndex { get; private set; }
         public string Notice { get; private set; }
         public bool ExitRequested { get; private set; }
+        public bool ModelPreviewRequested { get; private set; }
         public bool LanguageChanged { get; private set; }
         public bool ResolutionChanged { get; private set; }
         public bool PresentationChanged { get; private set; }
@@ -359,6 +361,10 @@ namespace SharpGTA.Frontend
                     break;
                 case FrontendOptionAction.Unsupported:
                     Notice = option.UnavailableReason;
+                    break;
+                case FrontendOptionAction.StartModelPreview:
+                    ModelPreviewRequested = true;
+                    Notice = null;
                     break;
                 case FrontendOptionAction.ExitApplication:
                     ExitRequested = true;
@@ -444,7 +450,8 @@ namespace SharpGTA.Frontend
                 BackOption());
             Add(result, FrontendPage.NewGameConfirm, "FET_NG", "FESZ_QR", "singleplayer24",
                 BackOption("FEM_NO"),
-                Unsupported("FEM_YES", "Gameplay bootstrap is not connected yet."));
+                new FrontendOption("FEM_YES", FrontendOptionAction.StartModelPreview,
+                    FrontendPage.NewGameConfirm, FrontendSetting.None, FrontendLanguage.English, null));
             Add(result, FrontendPage.LoadGame, "FET_LG", null, "singleplayer24",
                 Slots(false));
             Add(result, FrontendPage.DeleteGame, "FET_DG", null, "singleplayer24",

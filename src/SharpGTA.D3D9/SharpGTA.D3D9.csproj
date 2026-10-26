@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\SharpGTA.Core\SharpGTA.Core.csproj" />
+    <ProjectReference Include="..\SharpGTA.Games.III\SharpGTA.Games.III.csproj" />
     <ProjectReference Include="..\SharpGTA.Presentation\SharpGTA.Presentation.csproj" />
     <InternalsVisibleTo Include="SharpGTA.Tests" />
   </ItemGroup>

@@ -21,6 +21,8 @@ namespace SharpGTA.D3D9
         internal const uint WmSysKeyDown = 0x0104;
         internal const uint WmMouseMove = 0x0200;
         internal const uint WmLButtonDown = 0x0201;
+        internal const uint WmLButtonUp = 0x0202;
+        internal const uint WmMouseWheel = 0x020A;
         internal const uint SwpNoMove = 0x0002;
         internal const uint SwpNoZOrder = 0x0004;
         internal const uint SwpNoActivate = 0x0010;

@@ -64,14 +64,15 @@ try {
     $d3d9Allowed = @(
         "SharpGTA.D3D9.exe", "SharpGTA.D3D9.exe.config", "SharpGTA.D3D9.pdb",
         "SharpGTA.Core.dll", "SharpGTA.Core.pdb",
-        "SharpGTA.Presentation.dll", "SharpGTA.Presentation.pdb"
+        "SharpGTA.Presentation.dll", "SharpGTA.Presentation.pdb",
+        "SharpGTA.Games.III.dll", "SharpGTA.Games.III.pdb"
     )
     Get-ChildItem $d3d9Shipping -File | ForEach-Object {
         if ($d3d9Allowed -notcontains $_.Name) {
             throw "Unexpected file in D3D9 output: $($_.Name)"
         }
     }
-    foreach ($required in @("SharpGTA.Core.dll", "SharpGTA.Presentation.dll", "SharpGTA.D3D9.exe.config")) {
+    foreach ($required in @("SharpGTA.Core.dll", "SharpGTA.Presentation.dll", "SharpGTA.Games.III.dll", "SharpGTA.D3D9.exe.config")) {
         if (-not (Test-Path "$d3d9Shipping/$required")) { throw "Missing D3D9 file: $required" }
     }
     $d3d9Config = Get-Content "$d3d9Shipping/SharpGTA.D3D9.exe.config" -Raw

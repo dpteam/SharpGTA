@@ -65,7 +65,7 @@ namespace SharpGTA.Tests
         }
 
         [Test]
-        public void UnsupportedGameplayAndSavesStayHonestAndExitNeedsConfirmation()
+        public void ModelPreviewIsExplicitAndSavesAndExitStayHonest()
         {
             FrontendMenuModel menu = new FrontendMenuModel();
             menu.Select(0);
@@ -76,7 +76,8 @@ namespace SharpGTA.Tests
             menu.Select(1);
             menu.Activate();
             Assert.Equal(FrontendPage.NewGameConfirm, menu.CurrentPage);
-            Assert.Equal("Gameplay bootstrap is not connected yet.", menu.Notice);
+            Assert.True(menu.ModelPreviewRequested);
+            Assert.Equal(null, menu.Notice);
             Assert.False(menu.ExitRequested);
 
             menu.Back();

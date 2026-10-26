@@ -8,6 +8,8 @@ namespace SharpGTA.D3D9
     {
         MouseMove,
         LeftButtonDown,
+        LeftButtonUp,
+        MouseWheel,
         KeyDown
     }
 
@@ -194,6 +196,13 @@ namespace SharpGTA.D3D9
             else if (message == NativeMethods.WmLButtonDown)
                 QueueInput(new WindowInputEvent { Type = WindowInputType.LeftButtonDown,
                     X = SignedLowWord(lParam), Y = SignedHighWord(lParam) });
+            else if (message == NativeMethods.WmLButtonUp)
+                QueueInput(new WindowInputEvent { Type = WindowInputType.LeftButtonUp,
+                    X = SignedLowWord(lParam), Y = SignedHighWord(lParam) });
+            else if (message == NativeMethods.WmMouseWheel)
+                QueueInput(new WindowInputEvent { Type = WindowInputType.MouseWheel,
+                    X = SignedLowWord(lParam), Y = SignedHighWord(lParam),
+                    Key = SignedHighWord(wParam) });
             else if ((message == NativeMethods.WmKeyDown || message == NativeMethods.WmSysKeyDown) &&
                 (lParam.ToInt64() & 0x40000000L) == 0)
                 QueueInput(new WindowInputEvent { Type = WindowInputType.KeyDown, Key = wParam.ToInt32() });

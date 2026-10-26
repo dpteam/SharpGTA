@@ -1,7 +1,9 @@
 using System;
 using System.Globalization;
 using System.IO;
+using SharpGTA.Assets;
 using SharpGTA.Frontend;
+using SharpGTA.Games.III;
 using SharpGTA.IO;
 
 namespace SharpGTA.D3D9
@@ -17,6 +19,7 @@ namespace SharpGTA.D3D9
             string screenshot = null;
             string root = null;
             string game = "iii";
+            string modelName = null;
             string importSettings = null;
             string exportSettings = null;
             string languageText = null;
@@ -32,6 +35,8 @@ namespace SharpGTA.D3D9
                     exerciseReset = true;
                 else if (args[i] == "--menu")
                     menuMode = true;
+                else if (args[i] == "--model" && i + 1 < args.Length)
+                    modelName = args[++i];
                 else if (args[i] == "--root" && i + 1 < args.Length)
                     root = args[++i];
                 else if (args[i] == "--game" && i + 1 < args.Length)
@@ -89,30 +94,36 @@ namespace SharpGTA.D3D9
                 if (game == "iii")
                     game = imported.Game;
             }
-            if (menuMode && root == null)
+            bool modelMode = modelName != null;
+            if (modelMode && menuMode)
             {
-                Console.Error.WriteLine("--menu requires --root PATH to an original GTA III data tree.");
+                Console.Error.WriteLine("--model and --menu cannot be used together.");
                 return 2;
             }
-            if (menuMode && game != "iii")
+            if ((menuMode || modelMode) && root == null)
             {
-                Console.Error.WriteLine("The interactive frontend currently supports only --game iii.");
+                Console.Error.WriteLine("--menu/--model requires --root PATH to an original GTA III data tree.");
                 return 2;
             }
-            if (!menuMode && frames == 0)
+            if ((menuMode || modelMode) && game != "iii")
+            {
+                Console.Error.WriteLine("The interactive frontend/model preview currently supports only --game iii.");
+                return 2;
+            }
+            if (!menuMode && !modelMode && frames == 0)
             {
                 Console.Error.WriteLine("Triangle mode requires a positive --frames value.");
                 return 2;
             }
             if (!framesSpecified)
-                frames = menuMode && screenshot == null ? 0 : 1;
-            if (menuMode && screenshot != null && frames == 0)
+                frames = (menuMode || modelMode) && screenshot == null ? 0 : 1;
+            if ((menuMode || modelMode) && screenshot != null && frames == 0)
             {
                 Console.Error.WriteLine("--screenshot requires a finite positive --frames value.");
                 return 2;
             }
 
-            Console.WriteLine(Branding.Name + (menuMode ? " III frontend" : " D3D9 proof-of-concept"));
+            Console.WriteLine(Branding.Name + (modelMode ? " III model preview" : menuMode ? " III frontend" : " D3D9 proof-of-concept"));
             Win32Window window = new Win32Window();
             D3D9Device device = new D3D9Device();
             try
@@ -144,12 +155,15 @@ namespace SharpGTA.D3D9
                     initialSettings.VSync = false;
                 if (noFrameLimit)
                     initialSettings.FrameLimiter = false;
-                window.Create(Branding.Name + (menuMode ? " III" : " D3D9"),
-                    menuMode ? initialSettings.ResolutionWidth : 640,
-                    menuMode ? initialSettings.ResolutionHeight : 480, hidden);
-                device.VerticalSync = menuMode && initialSettings.VSync;
+                window.Create(Branding.Name + (modelMode ? " " + modelName : menuMode ? " III" : " D3D9"),
+                    (menuMode || modelMode) ? initialSettings.ResolutionWidth : 640,
+                    (menuMode || modelMode) ? initialSettings.ResolutionHeight : 480, hidden);
+                device.VerticalSync = (menuMode || modelMode) && initialSettings.VSync;
                 device.Create(window.Handle, window.ClientWidth, window.ClientHeight);
                 Console.WriteLine("Device: " + device.Description);
+                if (modelMode)
+                    return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
+                        modelName, frames, screenshot, exerciseReset);
                 if (menuMode)
                 {
                     PhysicalGameFileSystem files = new PhysicalGameFileSystem(root);
@@ -167,6 +181,8 @@ namespace SharpGTA.D3D9
                             Console.WriteLine("Settings exported: " + Path.GetFullPath(exportSettings));
                         }
                         Console.WriteLine("Frontend: shutdown completed.");
+                        if (frontend.Menu.ModelPreviewRequested)
+                            return RunModelViewer(window, device, files, "player", frames, screenshot, exerciseReset);
                         return result;
                     }
                 }
@@ -207,13 +223,24 @@ namespace SharpGTA.D3D9
             }
             catch (Exception exception)
             {
-                Console.Error.WriteLine((menuMode ? "Frontend" : "D3D9") + " failure: " + exception.Message);
+                Console.Error.WriteLine((modelMode ? "Model preview" : menuMode ? "Frontend" : "D3D9") + " failure: " + exception.Message);
                 return 1;
             }
             finally
             {
                 try { device.Dispose(); }
                 finally { window.Dispose(); }
+            }
+        }
+
+        private static int RunModelViewer(Win32Window window, D3D9Device device,
+            IGameFileSystem files, string modelName, int frames, string screenshot, bool exerciseReset)
+        {
+            using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
+            using (ModelViewerApplication viewer = new ModelViewerApplication(window, device, loader, modelName))
+            {
+                Console.WriteLine("Model preview, not gameplay. Drag to orbit, wheel zooms; arrows, PgUp/PgDn, Home, Esc.");
+                return viewer.Run(frames, screenshot, exerciseReset);
             }
         }
 
@@ -239,10 +266,11 @@ namespace SharpGTA.D3D9
 
         private static void PrintHelp()
         {
-            Console.WriteLine(Branding.Name + ".D3D9.exe [--menu --root PATH [--game iii]] [--hidden]");
+            Console.WriteLine(Branding.Name + ".D3D9.exe [--menu --root PATH [--game iii]] [--model NAME --root PATH] [--hidden]");
             Console.WriteLine("  [--frames N] [--screenshot PATH] [--exercise-reset] [--version]");
             Console.WriteLine("  Default: creates a real D3D9 device and draws a fixed-function triangle.");
             Console.WriteLine("  --menu: opens the interactive GTA III frontend using original TXD/GXT data.");
+            Console.WriteLine("  --model NAME: renders NAME.DFF/TXD from GTA3.IMG with an orbit camera; New Game opens player.");
             Console.WriteLine("  Menu controls: mouse, arrows, Enter, Esc; Left/Right changes settings.");
             Console.WriteLine("  --frames 0 keeps the menu open; screenshots require a finite positive count.");
             Console.WriteLine("  --language 0..4, --resolution WxH, --no-vsync, --no-frame-limit.");

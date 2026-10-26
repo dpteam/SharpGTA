@@ -26,6 +26,8 @@ namespace SharpGTA.Tests
             Assert.Equal(42, D3dVtableSlots.EndScene);
             Assert.Equal(43, D3dVtableSlots.Clear);
             Assert.Equal(44, D3dVtableSlots.SetTransform);
+            Assert.Equal(51, D3dVtableSlots.SetLight);
+            Assert.Equal(53, D3dVtableSlots.LightEnable);
             Assert.Equal(57, D3dVtableSlots.SetRenderState);
             Assert.Equal(65, D3dVtableSlots.SetTexture);
             Assert.Equal(67, D3dVtableSlots.SetTextureStageState);
@@ -38,6 +40,7 @@ namespace SharpGTA.Tests
             Assert.Equal(2u, D3dConstants.DeviceTypeRef);
             Assert.Equal(0x20u, D3dConstants.BehaviorSoftwareVertexProcessing);
             Assert.Equal(21u, D3dConstants.FormatA8R8G8B8);
+            Assert.Equal(75u, D3dConstants.FormatD24S8);
             Assert.Equal(1u, D3dConstants.SwapEffectDiscard);
             Assert.Equal(1u, D3dConstants.PresentFlagLockableBackBuffer);
             Assert.Equal(0u, D3dConstants.BackBufferTypeMono);
@@ -48,8 +51,10 @@ namespace SharpGTA.Tests
             Assert.Equal(0x044u, D3dConstants.FvfVertex);
             Assert.Equal(0x100u, D3dConstants.FvfTex1);
             Assert.Equal(0x144u, D3dConstants.FvfTexturedVertex);
+            Assert.Equal(0x152u, D3dConstants.FvfModelVertex);
             Assert.Equal(1u, D3dConstants.PoolManaged);
             Assert.Equal(1u, D3dConstants.ClearTarget);
+            Assert.Equal(2u, D3dConstants.ClearZBuffer);
             Assert.Equal(3u, D3dConstants.StateProjection);
             Assert.Equal(2u, D3dConstants.StateView);
             Assert.Equal(256u, D3dConstants.StateWorld);
@@ -60,14 +65,25 @@ namespace SharpGTA.Tests
             Assert.Equal(19u, D3dConstants.StateSourceBlend);
             Assert.Equal(20u, D3dConstants.StateDestinationBlend);
             Assert.Equal(27u, D3dConstants.StateAlphaBlendEnable);
+            Assert.Equal(139u, D3dConstants.StateAmbient);
+            Assert.Equal(141u, D3dConstants.StateColorVertex);
+            Assert.Equal(145u, D3dConstants.StateDiffuseMaterialSource);
+            Assert.Equal(147u, D3dConstants.StateAmbientMaterialSource);
+            Assert.Equal(3u, D3dConstants.LightDirectional);
             Assert.Equal(5u, D3dConstants.BlendSourceAlpha);
             Assert.Equal(6u, D3dConstants.BlendInverseSourceAlpha);
             Assert.Equal(1u, D3dConstants.TextureColorOp);
             Assert.Equal(4u, D3dConstants.TextureAlphaOp);
+            Assert.Equal(1u, D3dConstants.TextureOpDisable);
             Assert.Equal(4u, D3dConstants.TextureOpModulate);
             Assert.Equal(2u, D3dConstants.TextureOpSelectArg1);
             Assert.Equal(0u, D3dConstants.TextureArgumentDiffuse);
+            Assert.Equal(1u, D3dConstants.TextureArgumentCurrent);
             Assert.Equal(2u, D3dConstants.TextureArgumentTexture);
+            Assert.Equal(6u, D3dConstants.TextureArgumentConstant);
+            Assert.Equal(32u, D3dConstants.TextureStageConstant);
+            Assert.Equal(7u, D3dConstants.CompareGreater);
+            Assert.Equal(1u, D3dConstants.TextureAddressWrap);
             Assert.Equal(3u, D3dConstants.TextureAddressClamp);
             Assert.Equal(2u, D3dConstants.TextureFilterLinear);
             Assert.Equal(0, D3dConstants.D3DOk);
@@ -83,6 +99,7 @@ namespace SharpGTA.Tests
                 typeof(DeviceTestCooperativeLevelDelegate), typeof(DeviceBeginSceneDelegate),
                 typeof(DeviceEndSceneDelegate), typeof(DevicePresentDelegate),
                 typeof(DeviceClearDelegate), typeof(DeviceSetTransformDelegate),
+                typeof(DeviceSetLightDelegate), typeof(DeviceLightEnableDelegate),
                 typeof(DeviceSetRenderStateDelegate), typeof(DeviceSetFvfDelegate),
                 typeof(DeviceDrawPrimitiveUpDelegate), typeof(DeviceGetBackBufferDelegate),
                 typeof(DeviceCreateTextureDelegate), typeof(DeviceSetTextureDelegate),

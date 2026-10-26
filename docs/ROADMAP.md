@@ -56,9 +56,9 @@
 
 - [~] Win32 window/input host: Unicode окно, message loop и mouse/keyboard input работают в III frontend; общий presentation host ещё не завершён. Headless не использует window device.
 - [x] Managed mesh/material/texture DTO, DFF converter, lazy texture cache и NullRenderer с `--render-preview`; реальные PLAYER модели проходят без native APIs.
-- [~] D3D9 COM interop без D3DX/D3DCompiler: vtable/HRESULT/layout/import tests, fixed-function triangle, managed A8R8G8B8 textures и alpha-blended quads/glyphs; vertex buffers/shaders/state cache ещё нет.
+- [~] D3D9 COM interop без D3DX/D3DCompiler: vtable/HRESULT/layout/import tests, fixed-function triangle/3D meshes, managed A8R8G8B8 textures, alpha-blended quads/glyphs, directional light и D24S8; vertex buffers/shaders/state cache ещё нет.
 - [~] Explicit Reset, COM/surface ownership, managed x86/x64 ABI tests и живой D3D9 triangle/readback/present smoke проходят; автоматическое device-loss recovery и полный игровой renderer ещё впереди.
-- [~] GTA frontend: MSHTML Launcher + III start/options/exit, мышь/клавиатура, настройки, разрешение и 5 языков работают на оригинальных TXD/GXT; VC frontend, saves и gameplay bootstrap ещё не подключены. World/models/peds/vehicles/HUD render passes не реализованы.
+- [~] GTA frontend: MSHTML Launcher + III start/options/exit, мышь/клавиатура, настройки, разрешение и 5 языков работают на оригинальных TXD/GXT; VC frontend, saves и gameplay bootstrap ещё не подключены. Static DFF model preview с orbit camera работает для III, но world/peds/vehicles/HUD render passes не реализованы.
 - [ ] Audio decoding/mixing и XP-compatible backend, NullAudio для simulation tests.
 - [ ] Installer/packaging без сторонних DLL, оригинальные assets остаются у пользователя.
 
@@ -72,4 +72,4 @@
 
 ## Следующий конкретный шаг
 
-MSHTML Launcher и III frontend уже работают с оригинальными ресурсами, мышью/клавиатурой, настройками и D3D9 Reset. Следующий presentation-шаг — подключить managed mesh/texture DTO через vertex buffers и textures, затем первый реальный DFF render; отдельно добавить VC frontend profile и gameplay bootstrap. Параллельный content-шаг — полный path graph preparation.
+MSHTML Launcher, III frontend и static DFF model preview уже работают с оригинальными ресурсами, orbit camera и D3D9 Reset. Следующий presentation-шаг — vertex buffers и streamed static world placements с camera/ground queries, затем gameplay bootstrap; отдельно VC frontend profile. Параллельный content-шаг — полный path graph preparation.

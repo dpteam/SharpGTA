@@ -54,7 +54,7 @@ namespace SharpGTA.D3D9
                     if (!window.ProcessMessages())
                         break;
                     ProcessInput();
-                    if (menu.ExitRequested)
+                    if (menu.ExitRequested || menu.ModelPreviewRequested)
                         break;
                     ApplyPendingChanges();
                     if (exerciseReset && frame > 0)
