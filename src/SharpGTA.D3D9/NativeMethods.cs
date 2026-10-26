@@ -17,12 +17,18 @@ namespace SharpGTA.D3D9
         internal const uint WmClose = 0x0010;
         internal const uint WmQuit = 0x0012;
         internal const uint WmSize = 0x0005;
+        internal const uint WmKillFocus = 0x0008;
         internal const uint WmKeyDown = 0x0100;
+        internal const uint WmKeyUp = 0x0101;
         internal const uint WmSysKeyDown = 0x0104;
+        internal const uint WmSysKeyUp = 0x0105;
         internal const uint WmMouseMove = 0x0200;
         internal const uint WmLButtonDown = 0x0201;
         internal const uint WmLButtonUp = 0x0202;
+        internal const uint WmRButtonDown = 0x0204;
+        internal const uint WmRButtonUp = 0x0205;
         internal const uint WmMouseWheel = 0x020A;
+        internal const uint WmCaptureChanged = 0x0215;
         internal const uint SwpNoMove = 0x0002;
         internal const uint SwpNoZOrder = 0x0004;
         internal const uint SwpNoActivate = 0x0010;
@@ -127,6 +133,13 @@ namespace SharpGTA.D3D9
 
         [DllImport("user32.dll", ExactSpelling = true, EntryPoint = "ShowCursor")]
         internal static extern int ShowCursor([MarshalAs(UnmanagedType.Bool)] bool show);
+
+        [DllImport("user32.dll", ExactSpelling = true, EntryPoint = "SetCapture")]
+        internal static extern IntPtr SetCapture(IntPtr window);
+
+        [DllImport("user32.dll", ExactSpelling = true, EntryPoint = "ReleaseCapture")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool ReleaseCapture();
 
         [DllImport("user32.dll", EntryPoint = "LoadCursorW", CharSet = CharSet.Unicode, ExactSpelling = true)]
         internal static extern IntPtr LoadCursor(IntPtr instance, IntPtr cursorName);

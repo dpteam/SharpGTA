@@ -65,7 +65,7 @@ namespace SharpGTA.Tests
         }
 
         [Test]
-        public void ModelPreviewIsExplicitAndSavesAndExitStayHonest()
+        public void WorldPreviewIsExplicitAndSavesAndExitStayHonest()
         {
             FrontendMenuModel menu = new FrontendMenuModel();
             menu.Select(0);
@@ -76,7 +76,7 @@ namespace SharpGTA.Tests
             menu.Select(1);
             menu.Activate();
             Assert.Equal(FrontendPage.NewGameConfirm, menu.CurrentPage);
-            Assert.True(menu.ModelPreviewRequested);
+            Assert.True(menu.WorldPreviewRequested);
             Assert.Equal(null, menu.Notice);
             Assert.False(menu.ExitRequested);
 

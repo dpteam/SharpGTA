@@ -20,6 +20,7 @@ namespace SharpGTA.D3D9
             string root = null;
             string game = "iii";
             string modelName = null;
+            bool worldMode = false;
             string importSettings = null;
             string exportSettings = null;
             string languageText = null;
@@ -37,6 +38,8 @@ namespace SharpGTA.D3D9
                     menuMode = true;
                 else if (args[i] == "--model" && i + 1 < args.Length)
                     modelName = args[++i];
+                else if (args[i] == "--world")
+                    worldMode = true;
                 else if (args[i] == "--root" && i + 1 < args.Length)
                     root = args[++i];
                 else if (args[i] == "--game" && i + 1 < args.Length)
@@ -95,35 +98,35 @@ namespace SharpGTA.D3D9
                     game = imported.Game;
             }
             bool modelMode = modelName != null;
-            if (modelMode && menuMode)
+            if (modelMode && menuMode || worldMode && (menuMode || modelMode))
             {
-                Console.Error.WriteLine("--model and --menu cannot be used together.");
+                Console.Error.WriteLine("--world, --model and --menu are mutually exclusive.");
                 return 2;
             }
-            if ((menuMode || modelMode) && root == null)
+            if ((menuMode || modelMode || worldMode) && root == null)
             {
-                Console.Error.WriteLine("--menu/--model requires --root PATH to an original GTA III data tree.");
+                Console.Error.WriteLine("--menu/--model/--world requires --root PATH to an original GTA III data tree.");
                 return 2;
             }
-            if ((menuMode || modelMode) && game != "iii")
+            if ((menuMode || modelMode || worldMode) && game != "iii")
             {
-                Console.Error.WriteLine("The interactive frontend/model preview currently supports only --game iii.");
+                Console.Error.WriteLine("The interactive frontend/model/world preview currently supports only --game iii.");
                 return 2;
             }
-            if (!menuMode && !modelMode && frames == 0)
+            if (!menuMode && !modelMode && !worldMode && frames == 0)
             {
                 Console.Error.WriteLine("Triangle mode requires a positive --frames value.");
                 return 2;
             }
             if (!framesSpecified)
-                frames = (menuMode || modelMode) && screenshot == null ? 0 : 1;
-            if ((menuMode || modelMode) && screenshot != null && frames == 0)
+                frames = (menuMode || modelMode || worldMode) && screenshot == null ? 0 : 1;
+            if ((menuMode || modelMode || worldMode) && screenshot != null && frames == 0)
             {
                 Console.Error.WriteLine("--screenshot requires a finite positive --frames value.");
                 return 2;
             }
 
-            Console.WriteLine(Branding.Name + (modelMode ? " III model preview" : menuMode ? " III frontend" : " D3D9 proof-of-concept"));
+            Console.WriteLine(Branding.Name + (worldMode ? " III world preview" : modelMode ? " III model preview" : menuMode ? " III frontend" : " D3D9 proof-of-concept"));
             Win32Window window = new Win32Window();
             D3D9Device device = new D3D9Device();
             try
@@ -155,12 +158,15 @@ namespace SharpGTA.D3D9
                     initialSettings.VSync = false;
                 if (noFrameLimit)
                     initialSettings.FrameLimiter = false;
-                window.Create(Branding.Name + (modelMode ? " " + modelName : menuMode ? " III" : " D3D9"),
-                    (menuMode || modelMode) ? initialSettings.ResolutionWidth : 640,
-                    (menuMode || modelMode) ? initialSettings.ResolutionHeight : 480, hidden);
-                device.VerticalSync = (menuMode || modelMode) && initialSettings.VSync;
+                window.Create(Branding.Name + (worldMode ? " world" : modelMode ? " " + modelName : menuMode ? " III" : " D3D9"),
+                    (menuMode || modelMode || worldMode) ? initialSettings.ResolutionWidth : 640,
+                    (menuMode || modelMode || worldMode) ? initialSettings.ResolutionHeight : 480, hidden);
+                device.VerticalSync = (menuMode || modelMode || worldMode) && initialSettings.VSync;
                 device.Create(window.Handle, window.ClientWidth, window.ClientHeight);
                 Console.WriteLine("Device: " + device.Description);
+                if (worldMode)
+                    return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
+                        frames, screenshot, exerciseReset);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -181,8 +187,8 @@ namespace SharpGTA.D3D9
                             Console.WriteLine("Settings exported: " + Path.GetFullPath(exportSettings));
                         }
                         Console.WriteLine("Frontend: shutdown completed.");
-                        if (frontend.Menu.ModelPreviewRequested)
-                            return RunModelViewer(window, device, files, "player", frames, screenshot, exerciseReset);
+                        if (frontend.Menu.WorldPreviewRequested)
+                            return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset);
                         return result;
                     }
                 }
@@ -223,13 +229,24 @@ namespace SharpGTA.D3D9
             }
             catch (Exception exception)
             {
-                Console.Error.WriteLine((modelMode ? "Model preview" : menuMode ? "Frontend" : "D3D9") + " failure: " + exception.Message);
+                Console.Error.WriteLine((worldMode ? "World preview" : modelMode ? "Model preview" : menuMode ? "Frontend" : "D3D9") + " failure: " + exception.ToString());
                 return 1;
             }
             finally
             {
                 try { device.Dispose(); }
                 finally { window.Dispose(); }
+            }
+        }
+
+        private static int RunWorldViewer(Win32Window window, D3D9Device device,
+            IGameFileSystem files, int frames, string screenshot, bool exerciseReset)
+        {
+            using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
+            {
+                loader.LoadInitialImage();
+                using (WorldViewerApplication viewer = new WorldViewerApplication(window, device, loader))
+                    return viewer.Run(frames, screenshot, exerciseReset);
             }
         }
 
@@ -266,11 +283,12 @@ namespace SharpGTA.D3D9
 
         private static void PrintHelp()
         {
-            Console.WriteLine(Branding.Name + ".D3D9.exe [--menu --root PATH [--game iii]] [--model NAME --root PATH] [--hidden]");
+            Console.WriteLine(Branding.Name + ".D3D9.exe [--menu --root PATH [--game iii]] [--model NAME --root PATH] [--world --root PATH] [--hidden]");
             Console.WriteLine("  [--frames N] [--screenshot PATH] [--exercise-reset] [--version]");
             Console.WriteLine("  Default: creates a real D3D9 device and draws a fixed-function triangle.");
             Console.WriteLine("  --menu: opens the interactive GTA III frontend using original TXD/GXT data.");
-            Console.WriteLine("  --model NAME: renders NAME.DFF/TXD from GTA3.IMG with an orbit camera; New Game opens player.");
+            Console.WriteLine("  --model NAME: renders NAME.DFF/TXD from GTA3.IMG with an orbit camera.");
+            Console.WriteLine("  --world: loads real static IPL placements with free-fly camera; New Game opens it.");
             Console.WriteLine("  Menu controls: mouse, arrows, Enter, Esc; Left/Right changes settings.");
             Console.WriteLine("  --frames 0 keeps the menu open; screenshots require a finite positive count.");
             Console.WriteLine("  --language 0..4, --resolution WxH, --no-vsync, --no-frame-limit.");

@@ -27,6 +27,38 @@ namespace SharpGTA.Rendering
         public uint ColorRgba { get; private set; }
     }
 
+    public struct TextureResourceKey : IEquatable<TextureResourceKey>
+    {
+        private readonly string dictionary;
+        private readonly string texture;
+
+        public TextureResourceKey(string dictionary, string texture)
+        {
+            this.dictionary = dictionary ?? string.Empty;
+            this.texture = texture ?? string.Empty;
+        }
+
+        public string Dictionary { get { return dictionary ?? string.Empty; } }
+        public string Texture { get { return texture ?? string.Empty; } }
+
+        public bool Equals(TextureResourceKey other)
+        {
+            return StringComparer.OrdinalIgnoreCase.Equals(Dictionary, other.Dictionary) &&
+                StringComparer.OrdinalIgnoreCase.Equals(Texture, other.Texture);
+        }
+
+        public override bool Equals(object obj)
+        {
+            return obj is TextureResourceKey && Equals((TextureResourceKey)obj);
+        }
+
+        public override int GetHashCode()
+        {
+            return StringComparer.OrdinalIgnoreCase.GetHashCode(Dictionary) * 31 +
+                StringComparer.OrdinalIgnoreCase.GetHashCode(Texture);
+        }
+    }
+
     public sealed class TextureData
     {
         internal TextureData(string name, int width, int height, byte[] rgba)
@@ -98,6 +130,8 @@ namespace SharpGTA.Rendering
         public MaterialData[] Materials { get; private set; }
         public MeshData[] Meshes { get; private set; }
         public int AtomicFrameIndex { get; private set; }
+        /// <summary>IDE texture dictionary context; null for a standalone model preview.</summary>
+        public string TextureDictionary { get; internal set; }
     }
 
     public struct RenderDrawCall

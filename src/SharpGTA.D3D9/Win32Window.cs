@@ -9,8 +9,12 @@ namespace SharpGTA.D3D9
         MouseMove,
         LeftButtonDown,
         LeftButtonUp,
+        RightButtonDown,
+        RightButtonUp,
         MouseWheel,
-        KeyDown
+        KeyDown,
+        KeyUp,
+        InputReset
     }
 
     internal struct WindowInputEvent
@@ -30,11 +34,13 @@ namespace SharpGTA.D3D9
         private IntPtr window;
         private bool classRegistered;
         private bool disposed;
+        private bool releasingCapture;
 
         public IntPtr Handle { get { return window; } }
         public int ClientWidth { get; private set; }
         public int ClientHeight { get; private set; }
         public bool CloseRequested { get; private set; }
+        public bool RightMouseDown { get; private set; }
 
         public void Create(string title, int width, int height, bool hidden)
         {
@@ -190,6 +196,10 @@ namespace SharpGTA.D3D9
             }
             if (message == NativeMethods.WmSize)
                 UpdateClientSize(hWnd);
+            else if (message == NativeMethods.WmKillFocus)
+                ResetMouseCapture();
+            else if (message == NativeMethods.WmCaptureChanged && !releasingCapture)
+                ResetMouseCapture();
             else if (message == NativeMethods.WmMouseMove)
                 QueueInput(new WindowInputEvent { Type = WindowInputType.MouseMove,
                     X = SignedLowWord(lParam), Y = SignedHighWord(lParam) });
@@ -199,6 +209,19 @@ namespace SharpGTA.D3D9
             else if (message == NativeMethods.WmLButtonUp)
                 QueueInput(new WindowInputEvent { Type = WindowInputType.LeftButtonUp,
                     X = SignedLowWord(lParam), Y = SignedHighWord(lParam) });
+            else if (message == NativeMethods.WmRButtonDown)
+            {
+                NativeMethods.SetCapture(hWnd);
+                RightMouseDown = true;
+                QueueInput(new WindowInputEvent { Type = WindowInputType.RightButtonDown,
+                    X = SignedLowWord(lParam), Y = SignedHighWord(lParam) });
+            }
+            else if (message == NativeMethods.WmRButtonUp)
+            {
+                EndMouseLook(false);
+                QueueInput(new WindowInputEvent { Type = WindowInputType.RightButtonUp,
+                    X = SignedLowWord(lParam), Y = SignedHighWord(lParam) });
+            }
             else if (message == NativeMethods.WmMouseWheel)
                 QueueInput(new WindowInputEvent { Type = WindowInputType.MouseWheel,
                     X = SignedLowWord(lParam), Y = SignedHighWord(lParam),
@@ -206,7 +229,27 @@ namespace SharpGTA.D3D9
             else if ((message == NativeMethods.WmKeyDown || message == NativeMethods.WmSysKeyDown) &&
                 (lParam.ToInt64() & 0x40000000L) == 0)
                 QueueInput(new WindowInputEvent { Type = WindowInputType.KeyDown, Key = wParam.ToInt32() });
+            else if (message == NativeMethods.WmKeyUp || message == NativeMethods.WmSysKeyUp)
+                QueueInput(new WindowInputEvent { Type = WindowInputType.KeyUp, Key = wParam.ToInt32() });
             return NativeMethods.DefWindowProc(hWnd, message, wParam, lParam);
+        }
+
+        private void ResetMouseCapture()
+        {
+            EndMouseLook(true);
+        }
+
+        private void EndMouseLook(bool resetInput)
+        {
+            if (RightMouseDown)
+            {
+                releasingCapture = true;
+                try { NativeMethods.ReleaseCapture(); }
+                finally { releasingCapture = false; }
+            }
+            RightMouseDown = false;
+            if (resetInput)
+                QueueInput(new WindowInputEvent { Type = WindowInputType.InputReset });
         }
 
         private void QueueInput(WindowInputEvent value)

@@ -52,7 +52,7 @@ namespace SharpGTA.Frontend
         SetLanguage,
         RestoreDefaults,
         Unsupported,
-        StartModelPreview,
+        StartWorldPreview,
         ExitApplication
     }
 
@@ -309,7 +309,7 @@ namespace SharpGTA.Frontend
         public int SelectedIndex { get; private set; }
         public string Notice { get; private set; }
         public bool ExitRequested { get; private set; }
-        public bool ModelPreviewRequested { get; private set; }
+        public bool WorldPreviewRequested { get; private set; }
         public bool LanguageChanged { get; private set; }
         public bool ResolutionChanged { get; private set; }
         public bool PresentationChanged { get; private set; }
@@ -362,8 +362,8 @@ namespace SharpGTA.Frontend
                 case FrontendOptionAction.Unsupported:
                     Notice = option.UnavailableReason;
                     break;
-                case FrontendOptionAction.StartModelPreview:
-                    ModelPreviewRequested = true;
+                case FrontendOptionAction.StartWorldPreview:
+                    WorldPreviewRequested = true;
                     Notice = null;
                     break;
                 case FrontendOptionAction.ExitApplication:
@@ -450,7 +450,7 @@ namespace SharpGTA.Frontend
                 BackOption());
             Add(result, FrontendPage.NewGameConfirm, "FET_NG", "FESZ_QR", "singleplayer24",
                 BackOption("FEM_NO"),
-                new FrontendOption("FEM_YES", FrontendOptionAction.StartModelPreview,
+                new FrontendOption("FEM_YES", FrontendOptionAction.StartWorldPreview,
                     FrontendPage.NewGameConfirm, FrontendSetting.None, FrontendLanguage.English, null));
             Add(result, FrontendPage.LoadGame, "FET_LG", null, "singleplayer24",
                 Slots(false));

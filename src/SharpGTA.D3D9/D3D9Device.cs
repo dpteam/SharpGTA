@@ -201,7 +201,7 @@ namespace SharpGTA.D3D9
             SetTransformChecked(state, ref matrix);
         }
 
-        internal void SetDirectionalLight(D3dVector direction)
+        internal void SetDirectionalLight(D3dVector direction, uint ambient)
         {
             ThrowIfUnavailable();
             D3dLight light = new D3dLight();
@@ -213,10 +213,15 @@ namespace SharpGTA.D3D9
             Check(set(device, 0, ref light), "SetLight");
             DeviceLightEnableDelegate enable = ComVtable.GetMethod<DeviceLightEnableDelegate>(device, D3dVtableSlots.LightEnable);
             Check(enable(device, 0, true), "LightEnable");
-            SetRenderStateChecked(D3dConstants.StateAmbient, 0xFFA0A0A0);
+            SetRenderStateChecked(D3dConstants.StateAmbient, ambient);
             SetRenderStateChecked(D3dConstants.StateColorVertex, 1);
             SetRenderStateChecked(D3dConstants.StateDiffuseMaterialSource, D3dConstants.MaterialSourceVertexColor);
             SetRenderStateChecked(D3dConstants.StateAmbientMaterialSource, D3dConstants.MaterialSourceVertexColor);
+        }
+
+        internal void SetDirectionalLight(D3dVector direction)
+        {
+            SetDirectionalLight(direction, 0xFFA0A0A0);
         }
 
         internal void DrawModelMesh(D3D9Texture texture, uint materialColor, D3dModelVertex[] vertices)

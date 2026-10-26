@@ -137,7 +137,7 @@ namespace SharpGTA.Tests
                 Assert.Equal(readsLastError, import.SetLastError, method.Name + " SetLastError");
                 expected.Remove(method.Name);
             }
-            Assert.Equal(18, importCount);
+            Assert.Equal(20, importCount);
             Assert.Equal(0, expected.Count, "Missing P/Invoke declarations.");
         }
 
@@ -211,6 +211,8 @@ namespace SharpGTA.Tests
             expected.Add("AdjustWindowRect", "user32.dll!AdjustWindowRect");
             expected.Add("SetWindowPos", "user32.dll!SetWindowPos");
             expected.Add("ShowCursor", "user32.dll!ShowCursor");
+            expected.Add("SetCapture", "user32.dll!SetCapture");
+            expected.Add("ReleaseCapture", "user32.dll!ReleaseCapture");
             expected.Add("LoadCursor", "user32.dll!LoadCursorW");
             expected.Add("GetModuleHandle", "kernel32.dll!GetModuleHandleW");
             expected.Add("Direct3DCreate9", "d3d9.dll!Direct3DCreate9");

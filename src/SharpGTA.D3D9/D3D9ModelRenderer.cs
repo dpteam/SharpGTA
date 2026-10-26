@@ -11,8 +11,8 @@ namespace SharpGTA.D3D9
         private readonly RenderResourceManager resources;
         private readonly Dictionary<MeshData, D3dModelVertex[]> meshes =
             new Dictionary<MeshData, D3dModelVertex[]>();
-        private readonly Dictionary<string, D3D9Texture> textures =
-            new Dictionary<string, D3D9Texture>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<TextureResourceKey, D3D9Texture> textures =
+            new Dictionary<TextureResourceKey, D3D9Texture>();
         private bool disposed;
 
         internal D3D9ModelRenderer(D3D9Device device, RenderResourceManager resources)
@@ -49,11 +49,16 @@ namespace SharpGTA.D3D9
                 if (!meshes.ContainsKey(mesh))
                     meshes.Add(mesh, Expand(mesh));
                 if (call.Material != null)
-                    GetTexture(call.Material.TextureName);
+                    GetTexture(call.Geometry, call.Material);
             }
         }
 
         internal void Render(RenderSceneSnapshot snapshot, D3dMatrix view, D3dMatrix projection)
+        {
+            Render(snapshot, view, projection, 0xFFA0A0A0);
+        }
+
+        internal void Render(RenderSceneSnapshot snapshot, D3dMatrix view, D3dMatrix projection, uint ambient)
         {
             if (disposed)
                 throw new ObjectDisposedException("D3D9ModelRenderer");
@@ -65,7 +70,7 @@ namespace SharpGTA.D3D9
             {
                 device.SetTransform(D3dConstants.StateView, ref view);
                 device.SetTransform(D3dConstants.StateProjection, ref projection);
-                device.SetDirectionalLight(new D3dVector(-0.35f, -0.45f, -1.0f));
+                device.SetDirectionalLight(new D3dVector(-0.35f, -0.45f, -1.0f), ambient);
                 for (int i = 0; i < snapshot.DrawCalls.Count; i++)
                 {
                     RenderDrawCall call = snapshot.DrawCalls[i];
@@ -73,7 +78,7 @@ namespace SharpGTA.D3D9
                     device.SetTransform(D3dConstants.StateWorld, ref world);
                     MaterialData material = call.Material;
                     uint color = material == null ? 0xFFFFFFFFu : ToD3dColor(material.ColorRgba);
-                    D3D9Texture texture = material == null ? null : GetTexture(material.TextureName);
+                    D3D9Texture texture = material == null ? null : GetTexture(call.Geometry, material);
                     device.DrawModelMesh(texture, color, meshes[call.Mesh]);
                 }
                 device.EndFrame();
@@ -94,22 +99,29 @@ namespace SharpGTA.D3D9
                 return;
             disposed = true;
             foreach (D3D9Texture texture in textures.Values)
-                texture.Dispose();
+            {
+                if (texture != null)
+                    texture.Dispose();
+            }
             textures.Clear();
             meshes.Clear();
         }
 
-        private D3D9Texture GetTexture(string name)
+        private D3D9Texture GetTexture(GeometryRenderData geometry, MaterialData material)
         {
-            if (name == null)
+            if (material.TextureName == null)
                 return null;
+            TextureResourceKey key = new TextureResourceKey(
+                geometry.TextureDictionary, material.TextureName);
             D3D9Texture texture;
-            if (textures.TryGetValue(name, out texture))
+            if (textures.TryGetValue(key, out texture))
                 return texture;
-            TextureData data = resources.GetTexture(name);
+            TextureData data = string.IsNullOrEmpty(geometry.TextureDictionary)
+                ? resources.GetTexture(material.TextureName)
+                : resources.GetTexture(geometry.TextureDictionary, material.TextureName);
             if (data != null)
                 texture = device.CreateTextureRgba(data.Width, data.Height, data.Rgba);
-            textures.Add(name, texture);
+            textures.Add(key, texture);
             return texture;
         }
 

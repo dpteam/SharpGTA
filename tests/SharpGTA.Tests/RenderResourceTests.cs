@@ -43,6 +43,53 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void GenericFallbackDoesNotOverrideModelDictionaryTextures()
+        {
+            RenderResourceManager resources = new RenderResourceManager();
+            resources.AddFallbackDictionary(TxdReader.Read(TxdTestData.CreateArchive(
+                TxdTestData.CreateTexture("shared", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 9, 255 } }),
+                TxdTestData.CreateTexture("generic_only", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 7, 255 } }))));
+            Assert.Equal((byte)9, resources.GetTexture("shared").Rgba[0]);
+            resources.AddDictionary(TxdReader.Read(TxdTestData.CreateArchive(
+                TxdTestData.CreateTexture("shared", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 1, 255 } }))));
+
+            // Late model TXD registration must invalidate an already cached fallback.
+            Assert.Equal((byte)1, resources.GetTexture("shared").Rgba[0]);
+            Assert.Equal((byte)7, resources.GetTexture("generic_only").Rgba[0]);
+            Assert.Equal(0, resources.MissingTextureCount);
+        }
+
+        [Test]
+        public void ModelDictionaryContextSeparatesEqualNamesBeforeGenericFallback()
+        {
+            RenderResourceManager resources = new RenderResourceManager();
+            resources.AddFallbackDictionary(TxdReader.Read(TxdTestData.CreateArchive(
+                TxdTestData.CreateTexture("shared", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 9, 255 } }),
+                TxdTestData.CreateTexture("fallback", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 7, 255 } }))));
+            resources.AddDictionary("first", TxdReader.Read(TxdTestData.CreateArchive(
+                TxdTestData.CreateTexture("shared", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 1, 255 } }))));
+            resources.AddDictionary("second", TxdReader.Read(TxdTestData.CreateArchive(
+                TxdTestData.CreateTexture("shared", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 2, 255 } }))));
+
+            TextureData first = resources.GetTexture("first", "shared");
+            TextureData second = resources.GetTexture("second", "shared");
+            Assert.Equal((byte)1, first.Rgba[0]);
+            Assert.Equal((byte)2, second.Rgba[0]);
+            Assert.False(ReferenceEquals(first, second));
+            Assert.Equal((byte)9, resources.GetTexture("generic", "shared").Rgba[0]);
+            Assert.Equal((byte)7, resources.GetTexture("second", "fallback").Rgba[0]);
+            Assert.True(ReferenceEquals(first, resources.GetTexture("FIRST", "SHARED")));
+            Assert.Equal(4, resources.TextureCount);
+        }
+
+        [Test]
         public void NullRendererValidatesSceneAndDoesNotUseNativeApis()
         {
             DffGeometry geometry = DffReader.ReadClump(DffTestData.Create(0x34003u)).Geometries[0];

@@ -54,13 +54,23 @@ function Assert-ModelBmp([string]$name, [string]$path) {
     Write-Host "$name model pixels=$model bright=$bright bounds=$minX,$minY..$maxX,$maxY"
 }
 
+function Assert-ModelLog([string]$name, [string]$text) {
+    if (-not $text.Contains("Model: player atomics=16 drawCalls=16 triangles=1550 textures=1 missing=0")) {
+        throw "$name did not resolve the original PLAYER.DFF/TXD without substitutions."
+    }
+}
+
 function Invoke-Model([string]$name, [string]$command, [string[]]$arguments, [string]$screenshot) {
     Write-Host "=== D3D9 model $name ==="
     [string[]]$allArgs = @($arguments) + @(
         "--model", "player", "--game", "iii", "--root", $GameRoot,
         "--hidden", "--frames", "2", "--exercise-reset", "--screenshot", $screenshot)
-    & $command @allArgs
-    if ($LASTEXITCODE -ne 0) { throw "$name failed with exit code $LASTEXITCODE." }
+    [string[]]$lines = @(& $command @allArgs 2>&1 | ForEach-Object { $_.ToString() })
+    $exitCode = $LASTEXITCODE
+    $lines | ForEach-Object { Write-Host $_ }
+    [IO.File]::WriteAllLines($screenshot + ".log", $lines)
+    if ($exitCode -ne 0) { throw "$name failed with exit code $exitCode." }
+    Assert-ModelLog $name ([string]::Join("`n", $lines))
     Assert-ModelBmp $name $screenshot
 }
 
@@ -83,8 +93,11 @@ try {
     [IO.Directory]::CreateDirectory($output) | Out-Null
     $net40 = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
     $baseline = Join-Path $output "player-no-reset.bmp"
-    & $net40 --model player --game iii --root $GameRoot --hidden --frames 2 --screenshot $baseline
-    if ($LASTEXITCODE -ne 0) { throw "Baseline model smoke failed: $LASTEXITCODE" }
+    [string[]]$baselineLines = @(& $net40 --model player --game iii --root $GameRoot --hidden --frames 2 --screenshot $baseline 2>&1 | ForEach-Object { $_.ToString() })
+    $baselineExitCode = $LASTEXITCODE
+    $baselineLines | ForEach-Object { Write-Host $_ }
+    if ($baselineExitCode -ne 0) { throw "Baseline model smoke failed: $baselineExitCode" }
+    Assert-ModelLog "net40 baseline" ([string]::Join("`n", $baselineLines))
     Assert-ModelBmp "net40 baseline" $baseline
 
     $reset = Join-Path $output "player-reset.bmp"
