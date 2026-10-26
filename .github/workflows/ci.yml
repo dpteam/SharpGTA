@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.318
+
+      - name: Cache .NET Framework reference assemblies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.nuget/packages/microsoft.netframework.referenceassemblies
+            ~/.nuget/packages/microsoft.netframework.referenceassemblies.net40
+          key: net40-reference-assemblies-1.0.3
+
+      - name: Restore
+        run: dotnet restore SharpGTA.sln
+
+      - name: Build Release
+        run: dotnet build SharpGTA.sln -c Release --no-restore
+
+      - name: Unit and headless tests
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/test.ps1 -NoBuild
+
+      - name: Real-asset smoke tests (optional)
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/test-real-assets.ps1
+
+      - name: Standalone checks
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-standalone.ps1
+
+      - name: Windows XP static checks
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tools/check-xp.ps1
+
+      - name: Package net40 artifact
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force artifacts/package/docs | Out-Null
+          Copy-Item src/SharpGTA.Headless/bin/Release/net40/* artifacts/package/
+          Copy-Item README.md,NOTICE.md artifacts/package/
+          Copy-Item docs/REAL-ASSETS.md,docs/CI.md,docs/ROADMAP.md artifacts/package/docs/
+          if (Test-Path artifacts/package/SharpGTA.Headless.runtimeconfig.json) {
+            throw "Unexpected modern runtime config in net40 artifact."
+          }
+          powershell -NoProfile -ExecutionPolicy Bypass -File tools/package-artifact.ps1 -Directory artifacts/package -ExecutableName SharpGTA.Headless.exe
+          Compress-Archive -Path artifacts/package/* -DestinationPath artifacts/SharpGTA-net40-Windows.zip -Force
+
+      - name: Upload net40 Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SharpGTA-net40-Windows
+          path: |
+            artifacts/package/
+            artifacts/SharpGTA-net40-Windows.zip
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload source and test documentation
+        uses: actions/upload-artifact@v4
+        with:
+          name: SharpGTA-Source
+          path: |
+            README.md
+            PROMPT.md
+            AGENTS.md
+            NOTICE.md
+            docs/
+            tools/
+            global.json
+            NuGet.Config
+            Directory.Build.props
+            SharpGTA.sln
+          if-no-files-found: error
+          retention-days: 30

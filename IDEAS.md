@@ -1,5 +1,13 @@
 # Идеи и будущие направления
 
+## Межигровая загрузка ресурсов — Long Term
+
+Поддержать осмысленные комбинации ресурсов GTA III и Vice City: shared model/texture packs, перенос карты и варианты «III в VC» / «VC в III». Нельзя просто объединять папки, IMG или raw ID: профили, collision stores, scripts и saves различаются.
+
+Базовый безопасный дизайн — **явный target game context + versioned resource manifest + semantic IDs + compatibility adapters + staging transaction/rollback**. Cross-game SCM/save по умолчанию запрещены, malformed/unsupported required resource блокирует активацию, live world не остаётся частично загруженным. Полная map conversion выполняется offline в отдельный пакет, а не путём изменения оригинальных `refs/`.
+
+Подробная compatibility matrix, fault/security policy и этапы — в [docs/RESOURCE-COMPATIBILITY.md](docs/RESOURCE-COMPATIBILITY.md).
+
 ## Multiplayer — обязательное будущее направление
 
 Добавить multiplayer после того, как simulation, entity identity, streaming и script state станут управляемыми и воспроизводимыми. Учесть сетевой/headless/dedicated/master/relay опыт `../DPTDOOM2` и материалы `../reSA`, но не переносить Doom lockstep буквально.

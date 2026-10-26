@@ -1,5 +1,7 @@
 # SharpGTA
 
+[![CI](https://github.com/dpteam/SharpGTA/actions/workflows/ci.yml/badge.svg)](https://github.com/dpteam/SharpGTA/actions/workflows/ci.yml)
+
 Управляемый движок на C# для данных и игровой логики **GTA III** и **GTA Vice City**. Целевая поставка — **.NET Framework 4.0 / Windows XP SP3**, без сторонних runtime-библиотек. Исходные игровые ресурсы не входят в репозиторий и должны принадлежать пользователю.
 
 > **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, статические IPL-объекты и COLL-запросы. Skin/HAnim/MatFX, SCM, динамической физики, пешеходов, транспорта, рендера и звука пока нет. См. [дорожную карту](docs/ROADMAP.md).
@@ -16,6 +18,15 @@ powershell -NoProfile -File tools/test-real-assets.ps1
 ```
 
 Поставляемая конфигурация — `net40`. `net9.0` существует только для быстрого запуска тех же исходников и тестов на современном runtime. Зелёный `net9.0` не считается доказательством совместимости с XP.
+
+## GitHub Actions и артефакты
+
+CI на `windows-latest` собирает `net40` и `net9.0`, запускает все tests и static checks, а затем публикует артефакты на 30 дней:
+
+- **`SharpGTA-net40-Windows`** — готовый EXE/DLL/ZIP для скачивания через **Actions → run → Artifacts**;
+- **`SharpGTA-Source`** — исходники и документация.
+
+Оригинальные игровые ресурсы в артефакты не входят; на чистом CI real-asset suite корректно помечается `SKIP`. Подробности — в [docs/CI.md](docs/CI.md).
 
 ## Headless
 
@@ -55,7 +66,7 @@ SharpGTA.Headless.exe --root "D:\Games\GTA III" --dat DATA/CUSTOM.DAT --strict
 - `src/SharpGTA.Headless` — консольный host с null audio/presentation.
 - `tests/SharpGTA.Tests` — собственный dependency-free test runner; синтетические данные не требуют игровых ресурсов.
 
-Подробности границ и ограничений — в [ARCHITECTURE.md](docs/ARCHITECTURE.md), результаты чтения двух реальных деревьев — в [REAL-ASSETS.md](docs/REAL-ASSETS.md), источники — в [REFERENCE-SOURCES.md](docs/REFERENCE-SOURCES.md), будущий multiplayer — в [IDEAS.md](IDEAS.md).
+Подробности границ и ограничений — в [ARCHITECTURE.md](docs/ARCHITECTURE.md), результаты чтения двух реальных деревьев — в [REAL-ASSETS.md](docs/REAL-ASSETS.md), источники — в [REFERENCE-SOURCES.md](docs/REFERENCE-SOURCES.md), CI — в [CI.md](docs/CI.md), будущие multiplayer и межигровые ресурсы — в [IDEAS.md](IDEAS.md) и [RESOURCE-COMPATIBILITY.md](docs/RESOURCE-COMPATIBILITY.md).
 
 ## Брендинг
 

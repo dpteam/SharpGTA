@@ -65,6 +65,7 @@
 - [ ] Windows XP SP3 x86 + .NET Framework 4.0 live VM; текущие проверки выполняются на современной Windows/.NET 4.8 и не заменяют XP.
 - [ ] Real-asset long soak, malformed/truncated fuzz, low-memory и slow-I/O tests.
 - [ ] Multiplayer по [IDEAS.md](../IDEAS.md): snapshots/server authority/dedicated, затем late join/prediction/master/relay.
+- [ ] Межигровая загрузка ресурсов по [RESOURCE-COMPATIBILITY.md](RESOURCE-COMPATIBILITY.md): semantic manifests, shared packs, staging/rollback, offline map conversion и запрет слепого смешивания raw IDs/SCM/saves.
 - [ ] GTA SA только после стабильных III/VC и пересмотра готовности референсов; сейчас не начат.
 
 ## Следующий конкретный шаг
