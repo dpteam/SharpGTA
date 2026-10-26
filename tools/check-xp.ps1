@@ -1,7 +1,12 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
-$shipping = Join-Path $root "src/SharpGTA.Headless/bin/Release/net40"
-if (-not (Test-Path $shipping)) { throw "Missing net40 output: $shipping" }
+$shippingDirectories = @(
+    (Join-Path $root "src/SharpGTA.Headless/bin/Release/net40"),
+    (Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40")
+)
+foreach ($shipping in $shippingDirectories) {
+    if (-not (Test-Path $shipping)) { throw "Missing net40 output: $shipping" }
+}
 
 function Read-U16([byte[]]$bytes, [int]$offset) { return [BitConverter]::ToUInt16($bytes, $offset) }
 function Read-U32([byte[]]$bytes, [int]$offset) { return [BitConverter]::ToUInt32($bytes, $offset) }
@@ -102,9 +107,26 @@ function Test-PE([string]$path) {
 
 # Managed DllImport declarations do not appear in the PE import table. Keep an
 # explicit XP API allowlist so adding a newer API cannot silently pass this script.
-$xpManagedApiAllowlist = @{}
+$xpManagedApiAllowlist = @{
+    "user32.dll!RegisterClassExW" = $true
+    "user32.dll!UnregisterClassW" = $true
+    "user32.dll!CreateWindowExW" = $true
+    "user32.dll!DefWindowProcW" = $true
+    "user32.dll!DestroyWindow" = $true
+    "user32.dll!ShowWindow" = $true
+    "user32.dll!UpdateWindow" = $true
+    "user32.dll!PeekMessageW" = $true
+    "user32.dll!TranslateMessage" = $true
+    "user32.dll!DispatchMessageW" = $true
+    "user32.dll!PostQuitMessage" = $true
+    "user32.dll!GetClientRect" = $true
+    "user32.dll!AdjustWindowRect" = $true
+    "user32.dll!LoadCursorW" = $true
+    "kernel32.dll!GetModuleHandleW" = $true
+    "d3d9.dll!Direct3DCreate9" = $true
+}
 $managedAssemblies = @()
-$binaryFiles = Get-ChildItem $shipping -File | Where-Object { $_.Extension -in @(".exe", ".dll") } | Sort-Object Name
+$binaryFiles = Get-ChildItem $shippingDirectories -File | Where-Object { $_.Extension -in @(".exe", ".dll") } | Sort-Object Name
 foreach ($file in $binaryFiles) {
     Test-PE $file.FullName
     $managedAssemblies += [Reflection.Assembly]::LoadFrom($file.FullName)
@@ -115,7 +137,8 @@ $methodFlags = [Reflection.BindingFlags]"Public,NonPublic,Static,Instance,Declar
 foreach ($assembly in $managedAssemblies) {
     foreach ($type in $assembly.GetTypes()) {
         foreach ($method in $type.GetMethods($methodFlags)) {
-            if (-not $method.IsPInvokeImpl) { continue }
+            # MethodBase.IsPInvokeImpl is not exposed by every supported PowerShell runtime.
+            if (($method.Attributes -band [Reflection.MethodAttributes]::PinvokeImpl) -eq 0) { continue }
             $managedPInvokeCount++
             $attributes = $method.GetCustomAttributes([Runtime.InteropServices.DllImportAttribute], $false)
             if ($attributes.Count -ne 1) { throw "Cannot inspect DllImport metadata: $($method.DeclaringType.FullName).$($method.Name)" }

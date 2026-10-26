@@ -61,6 +61,7 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force artifacts/package/docs | Out-Null
           Copy-Item src/SharpGTA.Headless/bin/Release/net40/* artifacts/package/
+          Copy-Item src/SharpGTA.D3D9/bin/Release/net40/* artifacts/package/
           Copy-Item README.md,NOTICE.md artifacts/package/
           Copy-Item docs/REAL-ASSETS.md,docs/CI.md,docs/ROADMAP.md artifacts/package/docs/
           if (Test-Path artifacts/package/SharpGTA.Headless.runtimeconfig.json) {
@@ -88,8 +89,12 @@ jobs:
             PROMPT.md
             AGENTS.md
             NOTICE.md
+            src/
+            tests/
             docs/
             tools/
+            !**/bin/**
+            !**/obj/**
             global.json
             NuGet.Config
             Directory.Build.props

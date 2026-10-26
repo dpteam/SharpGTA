@@ -9,6 +9,9 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\SharpGTA.D3D9\SharpGTA.D3D9.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\..\src\SharpGTA.Core\SharpGTA.Core.csproj" />
     <ProjectReference Include="..\..\src\SharpGTA.Games.III\SharpGTA.Games.III.csproj" />
     <ProjectReference Include="..\..\src\SharpGTA.Games.VC\SharpGTA.Games.VC.csproj" />

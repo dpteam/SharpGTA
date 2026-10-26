@@ -6,7 +6,8 @@ try {
         "src/SharpGTA.Core/SharpGTA.Core.csproj",
         "src/SharpGTA.Games.III/SharpGTA.Games.III.csproj",
         "src/SharpGTA.Games.VC/SharpGTA.Games.VC.csproj",
-        "src/SharpGTA.Headless/SharpGTA.Headless.csproj"
+        "src/SharpGTA.Headless/SharpGTA.Headless.csproj",
+        "src/SharpGTA.D3D9/SharpGTA.D3D9.csproj"
     )
     foreach ($project in $projects) {
         [xml]$xml = Get-Content $project
@@ -53,11 +54,36 @@ try {
         $config -notmatch '\.NETFramework,Version=v4\.0') {
         throw "The executable config does not select .NET Framework 4.0."
     }
+
+    $d3d9Shipping = "src/SharpGTA.D3D9/bin/Release/net40"
+    if (-not (Test-Path "$d3d9Shipping/SharpGTA.D3D9.exe")) {
+        throw "Missing net40 D3D9 build. Run dotnet build SharpGTA.sln -c Release."
+    }
+    $d3d9Allowed = @(
+        "SharpGTA.D3D9.exe", "SharpGTA.D3D9.exe.config", "SharpGTA.D3D9.pdb",
+        "SharpGTA.Core.dll", "SharpGTA.Core.pdb"
+    )
+    Get-ChildItem $d3d9Shipping -File | ForEach-Object {
+        if ($d3d9Allowed -notcontains $_.Name) {
+            throw "Unexpected file in D3D9 output: $($_.Name)"
+        }
+    }
+    foreach ($required in @("SharpGTA.Core.dll", "SharpGTA.D3D9.exe.config")) {
+        if (-not (Test-Path "$d3d9Shipping/$required")) { throw "Missing D3D9 file: $required" }
+    }
+    $d3d9Config = Get-Content "$d3d9Shipping/SharpGTA.D3D9.exe.config" -Raw
+    if ($d3d9Config -notmatch 'supportedRuntime\s+version="v4\.0"' -or
+        $d3d9Config -notmatch '\.NETFramework,Version=v4\.0') {
+        throw "The D3D9 executable config does not select .NET Framework 4.0."
+    }
+
     [xml]$props = Get-Content "Directory.Build.props"
     $brand = $props.SelectNodes("//*[local-name()='BrandName']")[0].InnerText
-    $fileInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path "$shipping/SharpGTA.Headless.exe").Path)
-    if ($fileInfo.ProductName -cne $brand -or $fileInfo.CompanyName -cne $brand) {
-        throw "Assembly branding is not centralized: Product=$($fileInfo.ProductName), Company=$($fileInfo.CompanyName), expected $brand."
+    foreach ($executable in @("$shipping/SharpGTA.Headless.exe", "$d3d9Shipping/SharpGTA.D3D9.exe")) {
+        $fileInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $executable).Path)
+        if ($fileInfo.ProductName -cne $brand -or $fileInfo.CompanyName -cne $brand) {
+            throw "Assembly branding is not centralized: Product=$($fileInfo.ProductName), Company=$($fileInfo.CompanyName), expected $brand."
+        }
     }
 
     $ignoreRules = Get-Content ".gitignore" | ForEach-Object { $_.Trim() } |
@@ -72,7 +98,7 @@ try {
         $ignoredProbe = git check-ignore --no-index -q -- "refs/.sharpgta-ignore-probe"
         if ($LASTEXITCODE -ne 0) { throw "git check-ignore does not ignore refs/." }
     }
-    Write-Host "Standalone check passed: net40, project-only files, only compile-only targeting pack, centralized branding, refs/ ignored."
+    Write-Host "Standalone check passed: net40 Headless/D3D9, project-only files, only compile-only targeting pack, centralized branding, refs/ ignored."
 }
 finally {
     Pop-Location

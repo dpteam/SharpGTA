@@ -4,7 +4,7 @@
 
 Управляемый движок на C# для данных и игровой логики **GTA III** и **GTA Vice City**. Целевая поставка — **.NET Framework 4.0 / Windows XP SP3**, без сторонних runtime-библиотек. Исходные игровые ресурсы не входят в репозиторий и должны принадлежать пользователю.
 
-> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, рендера и звука пока нет. См. [дорожную карту](docs/ROADMAP.md).
+> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, игрового renderer и звука пока нет; отдельный D3D9 proof-of-concept уже рисует и считывает реальный треугольник. См. [дорожную карту](docs/ROADMAP.md).
 
 ## Сборка
 
@@ -13,6 +13,8 @@
 ```powershell
 dotnet build SharpGTA.sln -c Release
 powershell -NoProfile -File tools/test.ps1
+# На Windows с рабочим D3D9: managed x86/x64 ABI + живой GPU smoke.
+powershell -NoProfile -File tools/test-d3d9.ps1
 # Если оригинальные деревья лежат в refs/, дополнительно:
 powershell -NoProfile -File tools/test-real-assets.ps1
 ```
@@ -60,12 +62,25 @@ SharpGTA.Headless.exe --root "D:\Games\GTA III" --dat DATA/CUSTOM.DAT --strict
 
 `--rw`/`--rw-entry` показывают только проверенную по границам **инвентаризацию RenderWare chunks**. `--dff`/`--dff-entry` декодируют static non-native geometry/materials/BinMesh и HAnim/Skin/MatFX, а `--dff-scan` проверяет все DFF entries и отдельно считает empty/malformed и plugin counts. `--txd`/`--txd-entry` читают D3D8 dictionaries и декодируют все mip levels в RGBA; `--txd-scan` проверяет каждую TXD entry и все пиксели, отдельно считая unsupported PS2 rasters. `--render-preview` дополнительно проверяет managed mesh/material/texture pipeline через NullRenderer, по-прежнему без GPU/окна. `--state-at N` печатает диагностический FNV-1a-хеш состояния; это не криптографический хеш и не сетевой античит. Полный список опций: `--help`.
 
+## D3D9 proof-of-concept
+
+Отдельный `SharpGTA.D3D9.exe` создаёт Win32-окно и настоящий D3D9 device, рисует fixed-function треугольник и может сохранить back buffer до `Present` в BMP. Игровые ресурсы, D3DX, shaders и внешние DLL не нужны. Headless не ссылается на этот проект и не создаёт GPU/окно.
+
+```powershell
+src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --hidden --frames 2 --screenshot artifacts\d3d9-triangle.bmp
+# Дополнительно освобождает cached surface и вызывает Reset между кадрами:
+src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --hidden --frames 2 --exercise-reset --screenshot artifacts\d3d9-reset.bmp
+```
+
+`tools/test-d3d9.ps1` запускает этот сценарий на `net40` AnyCPU/x86 и `net9.0`, проверяет пиксели BMP и отдельно выполняет managed ABI/layout tests в x86/x64 процессах. Это проверка presentation ABI на текущей Windows, не полноценный GTA renderer и не Windows XP VM test.
+
 ## Проекты
 
 - `src/SharpGTA.Core` — math, bounded I/O, форматы, модели, статический мир, deterministic runtime. Не знает о Win32/D3D и не ссылается на игровые профили.
 - `src/SharpGTA.Games.III` — пути, лимиты и схемы GTA III.
 - `src/SharpGTA.Games.VC` — отдельные пути, лимиты и схемы Vice City.
-- `src/SharpGTA.Headless` — консольный host с null audio/presentation.
+- `src/SharpGTA.Headless` — консольный host с null audio/presentation, без зависимости от D3D9.
+- `src/SharpGTA.D3D9` — отдельный Win32/D3D9 triangle PoC, readback/BMP и explicit Reset.
 - `tests/SharpGTA.Tests` — собственный dependency-free test runner; синтетические данные не требуют игровых ресурсов.
 
 `--query-zone` читает navigation/info/map zones и cull flags, `--query-path GROUP NODE` выводит world position и next link. III paths читаются преимущественно из IDE, VC — из IPL; attached coords `/16` получают transform объекта, detached остаются мировыми. Это ещё не AI pathfinding.
@@ -83,7 +98,7 @@ SharpGTA.Headless.exe --root "D:\Games\GTA III" --dat DATA/CUSTOM.DAT --strict
 <BrandHomeUrl></BrandHomeUrl>
 ```
 
-При сборке Core генерирует `Branding.g.cs`, поэтому консоль, окна в будущем и свойства файлов используют одни значения. Технические имена проектов/namespace/EXE не участвуют в пользовательском брендинге и не входят в state hash. Для смены публичного названия не нужно искать строки по всему коду. Юридические notices и имена оригинальных игр брендингом не заменяются.
+При сборке Core генерирует `Branding.g.cs`, поэтому консоль, Win32-окно D3D9 PoC и свойства файлов используют одни значения. Технические имена проектов/namespace/EXE не участвуют в пользовательском брендинге и не входят в state hash. Для смены публичного названия не нужно искать строки по всему коду. Юридические notices и имена оригинальных игр брендингом не заменяются.
 
 ## Git и локальные материалы
 

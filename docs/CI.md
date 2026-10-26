@@ -14,8 +14,8 @@ Workflow: `.github/workflows/ci.yml`.
 6. `tools/test-real-assets.ps1`: проверки оригинальных деревьев, если они есть.
 7. `tools/check-standalone.ps1`.
 8. `tools/check-xp.ps1`.
-9. Создаётся `artifacts/package`, `tools/package-artifact.ps1` проверяет состав и запуск EXE, затем ZIP.
-10. `actions/upload-artifact` публикует готовый net40-билд и checkout/docs.
+9. Создаётся `artifacts/package` с Headless и D3D9 PoC; `tools/package-artifact.ps1` проверяет состав и запуск обоих EXE с `--version` без окна/GPU, затем ZIP.
+10. `actions/upload-artifact` публикует готовый net40-билд, исходники `src/`/`tests/` и документацию.
 
 Все проверки обязательны; ошибка любого шага ломает job. CI использует только `contents: read` и не требует secrets.
 
@@ -23,7 +23,7 @@ Workflow: `.github/workflows/ci.yml`.
 
 После успешного workflow: **Actions → выбранный run → Artifacts**.
 
-- **`SharpGTA-net40-Windows`** — ZIP и распакованная папка: `SharpGTA.Headless.exe`, managed DLL, configs/PDB, `README.md`, `NOTICE.md`, `docs/REAL-ASSETS.md`, `docs/CI.md`, `docs/ROADMAP.md`. Target — .NET Framework 4.0; на современной Windows можно запускать сразу. Для оригинальных данных передать `--root` локальной игровой папке.
+- **`SharpGTA-net40-Windows`** — ZIP и распакованная папка: `SharpGTA.Headless.exe`, `SharpGTA.D3D9.exe`, managed DLL, configs/PDB, `README.md`, `NOTICE.md`, `docs/REAL-ASSETS.md`, `docs/CI.md`, `docs/ROADMAP.md`. Target — .NET Framework 4.0; на современной Windows можно запускать сразу. Для оригинальных данных передать `--root` локальной игровой папке.
 - **`SharpGTA-Source`** — исходники решения и документация, без `bin/obj` и без игровых ресурсов. Git checkout также доступен через **Code → Download ZIP**.
 
 Срок хранения — 30 дней. `refs/`, GTA EXE/IMG/DFF/TXD/COL/GXT/SCM/save и сторонние runtime DLL в артефакты не входят. Build-time reference assemblies в пакет не копируются.
@@ -32,6 +32,6 @@ Workflow: `.github/workflows/ci.yml`.
 
 GitHub не скачивает GTA, IMG, EXE или другие игровые ресурсы. На чистом runner каталог `refs/` отсутствует, поэтому real-asset script печатает `SKIP` и завершается успешно. Это не считается real-asset pass. Полные локальные результаты обеих игр документируются отдельно в `docs/REAL-ASSETS.md`.
 
-`net40` собирается и запускается с помощью .NET Framework на Windows runner. `net9.0` используется для второго runtime. **GitHub CI не является проверкой Windows XP**: XP static checks дополняются обязательным будущим XP VM smoke test. D3D9/runtime graphics пока не проверяются.
+`net40` собирается и запускается с помощью .NET Framework на Windows runner. `net9.0` используется для второго runtime. Общие tests включают D3D9 vtable/HRESULT/layout/import/BMP checks, которые не создают окно или GPU. Живой `tools/test-d3d9.ps1` намеренно не входит в обязательный CI job: ему нужен доступный D3D9 device. Локально он проверяет managed x86/x64 ABI и реальный create/reset/draw/readback/present с pixel assertions на `net40` AnyCPU/x86 и `net9.0`.
 
-Те же команды доступны локально; см. `AGENTS.md` и `README.md`.
+**GitHub CI не является проверкой Windows XP**: XP static checks дополняются обязательным будущим XP VM smoke test. D3D9 smoke на современной Windows также не доказывает поведение на XP GPU/driver. Те же команды доступны локально; см. `AGENTS.md` и `README.md`.

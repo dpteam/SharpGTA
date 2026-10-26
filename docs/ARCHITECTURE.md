@@ -4,15 +4,15 @@
 
 ```text
 SharpGTA.Core
-  ↑             ↑
-Games.III     Games.VC
+  ↑             ↑             ↑
+Games.III     Games.VC    SharpGTA.D3D9
   ↑             ↑
      SharpGTA.Headless
              ↑
-       SharpGTA.Tests
+       SharpGTA.Tests ───────→ D3D9 ABI/BMP tests
 ```
 
-Core не знает конкретные игровые классы, Win32, Direct3D или RenderWare objects. Headless выбирает `IIIDefinition.Instance`/`VCDefinition.Instance` и собирает runtime. Собственные DLL проекта не являются сторонними зависимостями; shipping состоит только из этих сборок и .NET Framework/system API.
+Core не знает конкретные игровые классы, Win32, Direct3D или RenderWare objects. Headless выбирает `IIIDefinition.Instance`/`VCDefinition.Instance` и собирает runtime; Headless не ссылается на D3D9. D3D9 использует только общий Core/branding и существует как отдельный executable. Собственные DLL проекта не являются сторонними зависимостями; shipping состоит только из этих сборок и .NET Framework/system API.
 
 ## GameDefinition вместо общих numeric enums
 
@@ -70,13 +70,19 @@ GXT возвращает raw 16-bit code units и их прямое char-пре�
 
 `RenderDrawCall` содержит geometry/mesh/material refs и transform. `NullRenderDevice` только валидирует snapshot и считает статистику, без окна/GPU. `--render-preview` загружает DFF, разрешает `PLAYER.TXD` из IMG, строит snapshot и проверяет весь pipeline на настоящих моделях. Это подготовка к D3D9, ещё не изображение и не игровой renderer.
 
+## Отдельный D3D9 proof-of-concept
+
+`SharpGTA.D3D9` — executable вне Core и Headless. `Win32Window` владеет Unicode window class, reverse-P/Invoke delegate и client size. `D3D9Device` использует только system `Direct3DCreate9` и direct COM vtable delegates с явным `StdCall`: HAL + software vertex processing, явно сообщаемый REF fallback, fixed-function `DrawPrimitiveUP`. `XYZRHW` vertices задаются в screen-space pixels. Создаётся lockable back buffer; `ReadBackBufferBgra` учитывает pitch и вызывается до `Present`, затем `BmpWriter` сохраняет top-down 32-bit BMP. Cached surface освобождается до explicit `Reset`, COM interfaces — при `Dispose`.
+
+Synthetic D3D9 tests фиксируют slots, HRESULT, layouts, imports и BMP без GPU/окна. `tools/test-d3d9.ps1` отдельно выполняет живой create/reset/draw/readback/present и pixel assertions на `net40` AnyCPU/x86 и `net9.0`, плюс managed x86/x64 ABI tests. Это **не** подключение managed render DTO к GPU: textures/buffers/shaders/state cache, GTA passes и автоматический device-loss recovery ещё не реализованы.
+
 ## Что находится за границей текущего кода
 
 - Animation/skinning runtime, D3D8 pre-instanced geometry, PAL4/DXT2/DXT4 и PS2-specific asset decoders;
 - IFP/SCM, full paths/zones/timecycle/handling/weapons configs;
 - model request/refcount/streaming channels и async I/O;
 - entities/pools, full CPhysical/Collision/CWorld, peds/vehicles/weapons/AI;
-- camera/frontend/HUD/audio/render/saves;
-- Win32 host и D3D9 COM backend.
+- camera/frontend/HUD/audio/игровой renderer/saves;
+- Win32 input и подключение D3D9 к managed render resources.
 
 Эти функции не считаются реализованными из-за наличия DTO, chunk inventory или null interfaces.
