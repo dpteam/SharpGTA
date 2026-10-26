@@ -55,7 +55,7 @@
 ## Этап 4 — Windows XP presentation
 
 - [ ] Win32 window/input host через narrow interfaces, без участия window device в headless.
-- [ ] Managed render DTO/resources и NullRenderer перед D3D9.
+- [x] Managed mesh/material/texture DTO, DFF converter, lazy texture cache и NullRenderer с `--render-preview`; реальные PLAYER модели проходят без native APIs.
 - [ ] D3D9 COM interop без D3DX/D3DCompiler: vtable/HRESULT/layout tests, textures/buffers/shaders, state cache.
 - [ ] Device lost/reset и deterministic resource ownership; x86/x64 tests и живой D3D smoke.
 - [ ] GTA render passes, visibility/LOD/fade, world/models/peds/vehicles, HUD/frontend.
@@ -72,4 +72,4 @@
 
 ## Следующий конкретный шаг
 
-Реализовать renderer-independent DTO/NullRenderer и полный path graph preparation, затем D3D9 proof-of-concept. Typed zones/paths, DFF HAnim/Skin/MatFX и PC D3D8 TXD/mipmaps уже читаются; VC COLL из IMG подключена.
+Реализовать полный path graph preparation и D3D9 proof-of-concept с interop/layout tests, затем первый GPU draw. Managed DTO/NullRenderer и `--render-preview` уже работают.

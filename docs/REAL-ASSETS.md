@@ -44,6 +44,10 @@
 | DFF split Skin | 0 | 114 |
 | DFF HAnim | 360 | 23884 |
 | DFF MatFX materials | 10 | 2960 |
+| NullRenderer PLAYER atomics | 16 | 1 |
+| NullRenderer PLAYER triangles | 1550 | 1355 |
+| PLAYER resolved textures | 16 | 1 |
+| PLAYER texture RGBA bytes | 4194304 | 262144 |
 | TXD entries scanned | 718 | 1368 |
 | Failed TXD entries | 0 | 0 |
 | D3D8 textures decoded | 7686 | 12023 |

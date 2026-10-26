@@ -30,6 +30,7 @@
 - `StaticWorld` сейчас только IPL + COLL queries, не полный `CWorld`. Parsed IPL scale сохраняется, но не применяется — как в исходном loader. COLL lines сохраняются, но raycast по ним не ведётся. VC COLL из IMG грузится целиком до первого IPL; bounds-based streaming/eviction ещё не реализованы.
 - RenderWare inventory не является DFF/TXD decoder. Layouts брать из `reSA/refs/librw`, GTA integration — из re3/reVC; не выдумывать native formats. Static non-native DFF реализован (`DffReader`, `--dff[-entry]`, полный `--dff-scan`). PC D3D8 TXD/mipmaps и RGBA decode реализованы (`TxdReader`, `TxdPixelDecoder`, `--txd[-entry]`, `--txd-scan`). Skin/HAnim/MatFX binary readers реализованы (`DffPluginReader`, old/split Skin, texture effects); animation/skinning/render behavior ещё нет. NATIVE geometry, PAL4/DXT2/DXT4 и PS2-specific decoders остаются отдельными этапами.
 - `ZoneWorld`/`PathWorld` — typed data и queries, не полный `CTheZones` simulation или `CPathFind`. Path coords `/16`; attached groups требуют IPL transform, unresolved не выдумывать. VC detached/water paths остаются в исходном порядке.
+- `Rendering/` содержит только managed mesh/material/texture DTO и `NullRenderDevice`; никаких Win32/D3D imports в Core. `--render-preview` проверяет resources без GPU, но не является изображением или полным renderer.
 - Отсутствующие оригинальные ресурсы не должны ломать synthetic tests. Для real-asset checks честно сообщать `SKIP/NOT RUN`, не выдавать за успех.
 
 ## Проверки

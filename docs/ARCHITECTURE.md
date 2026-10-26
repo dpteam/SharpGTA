@@ -64,6 +64,12 @@ GXT возвращает raw 16-bit code units и их прямое char-пре�
 
 Оригинальный `CTimer` использует variable wall-clock delta и clamp. Compatibility timer должен быть добавлен отдельно, не подменяя deterministic test driver.
 
+## Renderer-independent resources
+
+`Rendering/` не знает Win32/D3D и не ссылается на native APIs. `DffRenderConverter` превращает static morph target + BinMesh в CPU vertices, triangle-list indices и material bindings. `RenderResourceManager` кэширует DFF models и декодирует TXD level 0 в RGBA8 по запросу; missing textures не подменяются молча.
+
+`RenderDrawCall` содержит geometry/mesh/material refs и transform. `NullRenderDevice` только валидирует snapshot и считает статистику, без окна/GPU. `--render-preview` загружает DFF, разрешает `PLAYER.TXD` из IMG, строит snapshot и проверяет весь pipeline на настоящих моделях. Это подготовка к D3D9, ещё не изображение и не игровой renderer.
+
 ## Что находится за границей текущего кода
 
 - Animation/skinning runtime, D3D8 pre-instanced geometry, PAL4/DXT2/DXT4 и PS2-specific asset decoders;

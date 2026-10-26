@@ -63,6 +63,8 @@ namespace SharpGTA.Headless
                     SimulationRuntime runtime = new SimulationRuntime(definition);
                     gameClock = new GameClock();
                     runtime.AddModule(gameClock);
+                    if (options.RenderPreview)
+                        RenderPreviewRunner.Run(loader, options, output);
                     if (options.HasStateAt && options.StateAt == 0 && options.Ticks != 0)
                         output.WriteLine("State@0: " + runtime.ComputeStateHash());
                     while (runtime.Clock.Tick < options.Ticks)
@@ -450,6 +452,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --txd PATH                Read D3D8 TXD and decode all its mip levels; repeatable.");
             output.WriteLine("  --txd-entry NAME          Read a named D3D8 TXD entry from loaded IMG files.");
             output.WriteLine("  --txd-scan                Decode every D3D8 TXD texture and mip level in IMG.");
+            output.WriteLine("  --render-preview          Validate DFF/TXD render resources through NullRenderer.");
             output.WriteLine("  --query-ground X Y Z0 Z1  Query static COLL ground between two Z values.");
             output.WriteLine("  --query-zone X Y Z        Query navigation/info/map zones and cull attributes.");
             output.WriteLine("  --query-path GROUP NODE   Print one resolved path node position and next link.");

@@ -35,6 +35,7 @@ namespace SharpGTA.Headless
         public bool Verbose { get; set; }
         public bool DffScan { get; set; }
         public bool TxdScan { get; set; }
+        public bool RenderPreview { get; set; }
         public List<string> TxdPaths { get; private set; }
         public List<string> TxdEntries { get; private set; }
         public bool Help { get; set; }
@@ -138,6 +139,10 @@ namespace SharpGTA.Headless
                         options.TxdScan = true;
                         options.HasExplicitAssetAction = true;
                         break;
+                    case "--render-preview":
+                        options.RenderPreview = true;
+                        options.HasExplicitAssetAction = true;
+                        break;
                     case "--ticks":
                         options.Ticks = ParseUInt64(Value(args, ref i, argument), argument);
                         break;
@@ -182,13 +187,15 @@ namespace SharpGTA.Headless
                     throw new CommandLineException("--state-at cannot be greater than --ticks.");
                 if (options.GxtKey != null && options.GxtPath == null)
                     throw new CommandLineException("--gxt-key requires --gxt.");
+                if (options.RenderPreview && options.DffPaths.Count + options.DffEntries.Count == 0)
+                    throw new CommandLineException("--render-preview requires at least one --dff or --dff-entry.");
                 if (options.HasGroundQuery)
                     options.HasExplicitAssetAction = true;
                 bool needsRoot = options.Standard || options.DatPaths.Count != 0 || options.ImagePaths.Count != 0 ||
                     options.GxtPath != null || options.RenderWarePaths.Count != 0 || options.RenderWareEntries.Count != 0 ||
                     options.DffPaths.Count != 0 || options.DffEntries.Count != 0 || options.DffScan ||
                     options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
-                    options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery;
+                    options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery || options.RenderPreview;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)

@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|World-Data:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|World-Data:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -66,6 +66,12 @@ try {
         $decoded = Invoke-Case "$game static DFF decode" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--dff-entry", "PLAYER.DFF", "--ticks", "0")) $false
         if ($decoded -notmatch "DFF: source=IMG:PLAYER\.DFF clumps=1 geometries=[1-9]") {
             throw "$game PLAYER.DFF static decode failed."
+        }
+        $preview = Invoke-Case "$game NullRenderer preview" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--dff-entry", "PLAYER.DFF", "--render-preview", "--ticks", "0")) $false
+        if ($preview -notmatch "Render-Preview: source=PLAYER\.DFF backend=null" -or
+            $preview -notmatch "triangles=[1-9]" -or $preview -notmatch "invalid=0" -or
+            $preview -notmatch "Render-Resources: dictionaries=1 textures=[1-9].*missing=0") {
+            throw "$game NullRenderer preview or player texture resolution failed."
         }
         $scan = Invoke-Case "$game full IMG DFF scan" $net40 ($common + @("--dff-scan", "--ticks", "0")) $false
         if ($scan -notmatch "DFF-Scan: files=[1-9][0-9]* failed=0" -or $scan -notmatch "geometries=[1-9]") {
