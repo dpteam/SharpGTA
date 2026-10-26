@@ -60,12 +60,17 @@ try {
         throw "Assembly branding is not centralized: Product=$($fileInfo.ProductName), Company=$($fileInfo.CompanyName), expected $brand."
     }
 
-    $ignore = Get-Content ".gitignore" -Raw
-    if ($ignore -notmatch '(?m)^refs/$') { throw "refs/ is not ignored." }
+    $ignoreRules = Get-Content ".gitignore" | ForEach-Object { $_.Trim() } |
+        Where-Object { $_ -ne "" -and -not $_.StartsWith("#") }
+    if ($ignoreRules -cnotcontains "refs/") {
+        throw "refs/ is not present in .gitignore."
+    }
     if (Get-Command git -ErrorAction SilentlyContinue) {
         $trackedRefs = git ls-files refs
         if ($LASTEXITCODE -ne 0) { throw "git ls-files failed." }
         if ($trackedRefs) { throw "Files under refs/ are tracked: $trackedRefs" }
+        $ignoredProbe = git check-ignore --no-index -q -- "refs/.sharpgta-ignore-probe"
+        if ($LASTEXITCODE -ne 0) { throw "git check-ignore does not ignore refs/." }
     }
     Write-Host "Standalone check passed: net40, project-only files, only compile-only targeting pack, centralized branding, refs/ ignored."
 }
