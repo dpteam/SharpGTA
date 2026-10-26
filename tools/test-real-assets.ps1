@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|World-Data:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -34,11 +34,24 @@ try {
         $gameRoot = $case.Root
         $common = @("--game", $game, "--root", $gameRoot)
         $ground = if ($game -eq "iii") { @("812", "-936") } else { @("-864", "-575") }
-        $standard = Invoke-Case "$game standard and ground net40" $net40 ($common + @("--standard", "--query-ground", $ground[0], $ground[1], "-50", "100", "--ticks", "1")) $false
+        $zoneZ = if ($game -eq "iii") { "36" } else { "10" }
+        $standard = Invoke-Case "$game standard and world queries net40" $net40 ($common + @("--standard", "--query-ground", $ground[0], $ground[1], "-50", "100", "--query-zone", $ground[0], $ground[1], $zoneZ, "--query-path", "0", "0", "--ticks", "1")) $false
         if ($standard -notmatch "dat=2" -or $standard -notmatch "models=[1-9]" -or $standard -notmatch "instances=[1-9]") {
             throw "$game standard output has no loaded models/instances."
         }
         if ($standard -notmatch "Ground: hit=true model=") { throw "$game real static ground query failed." }
+        if ($standard -notmatch "Zone: navigation=" -or $standard -notmatch "Path: group=0 node=0 resolved=true") {
+            throw "$game zone/path query failed."
+        }
+        if ($game -eq "iii" -and ($standard -notmatch "Asset-Issues: total=4" -or
+            $standard -notmatch "navigation=42 information=42 mapZones=21 cull=744 occl=0 pathGroups=870 pathNodes=10440" -or
+            $standard -notmatch "Zone: navigation=ROADBR1:Navig")) {
+            throw "III MAPZONE/path data changed or was not loaded."
+        }
+        if ($game -eq "vc" -and ($standard -notmatch "navigation=12 information=165 mapZones=33 cull=631 occl=344 pathGroups=1957 pathNodes=23484 detached=1957 water=108 unresolved=0" -or
+            $standard -notmatch "Zone: navigation=HAVANA:Default info=ICCREAM:Info")) {
+            throw "VC zone/path data changed or was not loaded."
+        }
         if ($game -eq "vc" -and $standard -notmatch "collisions=4[0-9][0-9][0-9]") {
             throw "VC embedded collision was not loaded; only a small loose collision subset is present."
         }

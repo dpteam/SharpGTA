@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using SharpGTA.Assets;
+using SharpGTA.Data;
 using SharpGTA.Games.III;
 using SharpGTA.Games.VC;
 using SharpGTA.IO;
+using SharpGTA.Mathematics;
 using SharpGTA.Runtime;
 using SharpGTA.World;
 
@@ -47,8 +49,15 @@ namespace SharpGTA.Headless
                         LoadAssets(loader, options, output);
                         if (options.HasGroundQuery)
                             WriteGroundQuery(loader.World, options, output);
+                        if (options.HasZoneQuery)
+                            WriteZoneQuery(loader.Zones, options, output);
+                        if (options.HasPathQuery)
+                            WritePathQuery(loader.Paths, options, output);
                         if (options.Verbose)
+                        {
                             WriteIssues(loader.Report, output);
+                            WriteUnresolvedPaths(loader.Paths, output);
+                        }
                     }
 
                     SimulationRuntime runtime = new SimulationRuntime(definition);
@@ -205,9 +214,55 @@ namespace SharpGTA.Headless
                 " models=" + loader.Models.Count.ToString(CultureInfo.InvariantCulture) +
                 " collisions=" + loader.Collisions.Count.ToString(CultureInfo.InvariantCulture) +
                 " instances=" + loader.World.Count.ToString(CultureInfo.InvariantCulture));
+            output.WriteLine("World-Data: navigation=" + (loader.Zones.Navigation.Count - 1).ToString(CultureInfo.InvariantCulture) +
+                " information=" + (loader.Zones.Information.Count - 1).ToString(CultureInfo.InvariantCulture) +
+                " mapZones=" + (loader.Zones.MapZones.Count - 1).ToString(CultureInfo.InvariantCulture) +
+                " cull=" + loader.Zones.CullZones.Count.ToString(CultureInfo.InvariantCulture) +
+                " occl=" + loader.Zones.OcclusionVolumes.Count.ToString(CultureInfo.InvariantCulture) +
+                " pathGroups=" + loader.Paths.GroupCount.ToString(CultureInfo.InvariantCulture) +
+                " pathNodes=" + loader.Paths.NodeCount.ToString(CultureInfo.InvariantCulture) +
+                " detached=" + loader.Paths.DetachedCount.ToString(CultureInfo.InvariantCulture) +
+                " water=" + loader.Paths.WaterCount.ToString(CultureInfo.InvariantCulture) +
+                " unresolved=" + loader.Paths.UnresolvedCount.ToString(CultureInfo.InvariantCulture));
             output.WriteLine("Asset-Issues: total=" + loader.Report.TotalIssueCount.ToString(CultureInfo.InvariantCulture) +
                 " retained=" + loader.Report.Count.ToString(CultureInfo.InvariantCulture) +
                 " dropped=" + loader.Report.DroppedIssueCount.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void WriteZoneQuery(ZoneWorld zones, HeadlessOptions options, TextWriter output)
+        {
+            Vector3 position = new Vector3(options.ZoneX, options.ZoneY, options.ZoneZ);
+            ZoneRecord navigation = zones.FindSmallestZone(position);
+            ZoneRecord information = zones.FindInformationZone(position);
+            int wanted;
+            int attributes = zones.FindCullAttributes(position, out wanted);
+            output.WriteLine("Zone: navigation=" + navigation.Name + ":" + navigation.Kind +
+                " info=" + information.Name + ":" + information.Kind +
+                " mapLevel=" + zones.GetRawLevelFromPosition(position).ToString(CultureInfo.InvariantCulture) +
+                " cullFlags=" + attributes.ToString(CultureInfo.InvariantCulture) +
+                " wantedDrop=" + wanted.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void WritePathQuery(PathWorld paths, HeadlessOptions options, TextWriter output)
+        {
+            if (options.PathGroupIndex >= paths.GroupCount)
+                throw new CommandLineException("Path group index is outside [0, " + paths.GroupCount + ").");
+            PathGroup group = paths.Groups[options.PathGroupIndex];
+            if (options.PathNodeIndex >= group.Nodes.Length)
+                throw new CommandLineException("Path node index is outside [0, " + group.Nodes.Length + ").");
+            PathNode node = group.Nodes[options.PathNodeIndex];
+            if (!group.IsDetached && !group.HasTransform)
+            {
+                output.WriteLine("Path: group=" + options.PathGroupIndex.ToString(CultureInfo.InvariantCulture) +
+                    " node=" + options.PathNodeIndex.ToString(CultureInfo.InvariantCulture) +
+                    " resolved=false model=" + group.ModelName);
+                return;
+            }
+            Vector3 position = paths.GetWorldPosition(group, node);
+            output.WriteLine("Path: group=" + options.PathGroupIndex.ToString(CultureInfo.InvariantCulture) +
+                " node=" + options.PathNodeIndex.ToString(CultureInfo.InvariantCulture) +
+                " resolved=true kind=" + group.Kind + " model=" + group.ModelName +
+                " position=" + Vector(position) + " next=" + node.NextNodeIndex.ToString(CultureInfo.InvariantCulture));
         }
 
         private static void WriteGroundQuery(StaticWorld world, HeadlessOptions options, TextWriter output)
@@ -351,6 +406,19 @@ namespace SharpGTA.Headless
             }
         }
 
+        private static void WriteUnresolvedPaths(PathWorld paths, TextWriter output)
+        {
+            for (int i = 0; i < paths.GroupCount; i++)
+            {
+                PathGroup group = paths.Groups[i];
+                if (group.IsDetached || group.HasTransform)
+                    continue;
+                output.WriteLine("Path-Unresolved: group=" + i.ToString(CultureInfo.InvariantCulture) +
+                    " model=" + group.ModelName + " id=" + group.ModelId.ToString(CultureInfo.InvariantCulture) +
+                    " source=" + group.SourceName);
+            }
+        }
+
         private static string Vector(SharpGTA.Mathematics.Vector3 value)
         {
             return "(" + value.X.ToString("R", CultureInfo.InvariantCulture) + "," +
@@ -383,6 +451,8 @@ namespace SharpGTA.Headless
             output.WriteLine("  --txd-entry NAME          Read a named D3D8 TXD entry from loaded IMG files.");
             output.WriteLine("  --txd-scan                Decode every D3D8 TXD texture and mip level in IMG.");
             output.WriteLine("  --query-ground X Y Z0 Z1  Query static COLL ground between two Z values.");
+            output.WriteLine("  --query-zone X Y Z        Query navigation/info/map zones and cull attributes.");
+            output.WriteLine("  --query-path GROUP NODE   Print one resolved path node position and next link.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");
             output.WriteLine("  --state-at N              Also print the diagnostic state hash at tick N.");
             output.WriteLine("  --verbose                 Print retained asset issues.");

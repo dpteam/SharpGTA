@@ -11,8 +11,12 @@ namespace SharpGTA.Data
         public const int DefaultMaxTokens = 128;
         public const int DefaultMaxRecords = 1000000;
 
-        private static readonly DataSchema Iii = new DataSchema(false, false, false, false, false);
-        private static readonly DataSchema ViceCity = new DataSchema(true, true, true, true, true);
+        private static readonly DataSchema Iii = new DataSchema(false, false, false, false, false,
+            DataSchema.DefaultMaxLineLength, DataSchema.DefaultMaxTokens, DataSchema.DefaultMaxRecords,
+            false, true, false);
+        private static readonly DataSchema ViceCity = new DataSchema(true, true, true, true, true,
+            DataSchema.DefaultMaxLineLength, DataSchema.DefaultMaxTokens, DataSchema.DefaultMaxRecords,
+            true, false, true);
 
         public DataSchema(
             bool vehicleHasAnimFile,
@@ -22,7 +26,10 @@ namespace SharpGTA.Data
             bool numericPathTypes,
             int maxLineLength = DefaultMaxLineLength,
             int maxTokens = DefaultMaxTokens,
-            int maxRecords = DefaultMaxRecords)
+            int maxRecords = DefaultMaxRecords,
+            bool supportsOcclusion = false,
+            bool supportsMapZoneDirective = false,
+            bool hasSeparateZoneArrays = false)
         {
             if (maxLineLength <= 0)
                 throw new ArgumentOutOfRangeException("maxLineLength");
@@ -39,6 +46,9 @@ namespace SharpGTA.Data
             MaxLineLength = maxLineLength;
             MaxTokens = maxTokens;
             MaxRecords = maxRecords;
+            SupportsOcclusion = supportsOcclusion;
+            SupportsMapZoneDirective = supportsMapZoneDirective;
+            HasSeparateZoneArrays = hasSeparateZoneArrays;
         }
 
         public static DataSchema III
@@ -59,5 +69,8 @@ namespace SharpGTA.Data
         public int MaxLineLength { get; private set; }
         public int MaxTokens { get; private set; }
         public int MaxRecords { get; private set; }
+        public bool SupportsOcclusion { get; private set; }
+        public bool SupportsMapZoneDirective { get; private set; }
+        public bool HasSeparateZoneArrays { get; private set; }
     }
 }

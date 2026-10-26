@@ -17,7 +17,7 @@
 
 - [x] IMG/DIR directory, multi-image catalog, streaming reads без загрузки всего IMG.
 - [x] III/VC GXT main TKEY/TDAT и VC TABL mission tables, raw code units.
-- [~] DAT/IDE/IPL: порядок и основные objs/tobj/cars/peds/weap/inst; остальные sections сохраняются raw, не bound.
+- [~] DAT/IDE/IPL: порядок и основные objs/tobj/cars/peds/weap/inst; zones/cull/occl/paths typed, 2dfx/pick пока raw.
 - [x] Legacy COLL reader, sphere/box/triangle local queries, vertical static ground query.
 - [x] Model registry + static IPL world + sector broad phase + bounded diagnostics.
 - [x] RenderWare chunk inventory и static non-native DFF: Clump/FrameList/GeometryList/Atomic, geometry/morph, materials/texture refs, BinMesh list/strip, multi-clump и stale parent lengths.
@@ -26,7 +26,8 @@
 - [x] Smoke `LoadStandard()` на двух локальных реальных III/VC trees, обоих runtimes; counts в `docs/REAL-ASSETS.md`.
 - [x] Начальная синхронная загрузка 30 VC COLL-ресурсов из IMG до первого IPL и реальные ground queries.
 - [ ] Расширенные golden manifests/запросы для retail variants; bounds-based streaming/eviction ещё впереди.
-- [ ] Typed paths/zones/cull/occl/2dfx, handling/object/surface/pedstats/weapon/timecycle/water configs.
+- [x] Typed zones/cull/occlusion и IDE/IPL path groups с III/VC layouts, world transforms и `--query-zone`/`--query-path`; полный CPathFind/AI не реализован.
+- [ ] Typed 2dfx/pick, handling/object/surface/pedstats/weapon/timecycle/water configs и полный path graph preparation.
 - [x] Полное чтение всех nonempty DFF из локальных IMG: III 3134 + 4 empty placeholders; VC 4617; ноль malformed entries.
 - [x] PC D3D8 TXD dictionaries, palettes, mip levels и RGBA decode реальных uncompressed/DXT1/DXT3 форматов; полный IMG scan обеих игр проходит. DXT5 покрыт synthetic tests.
 - [ ] Оставшиеся DFF plugins/native branches и специальные PAL4/DXT2/DXT4/PS2 asset decoders, если появятся соответствующие samples/потребность.
@@ -71,4 +72,4 @@
 
 ## Следующий конкретный шаг
 
-Реализовать typed zones/paths и renderer-independent DTO/NullRenderer, затем D3D9 proof-of-concept. DFF HAnim/Skin/MatFX и PC D3D8 TXD/mipmaps уже читаются; VC COLL из IMG подключена.
+Реализовать renderer-independent DTO/NullRenderer и полный path graph preparation, затем D3D9 proof-of-concept. Typed zones/paths, DFF HAnim/Skin/MatFX и PC D3D8 TXD/mipmaps уже читаются; VC COLL из IMG подключена.

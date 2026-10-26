@@ -55,6 +55,13 @@ namespace SharpGTA.Headless
         public float GroundY { get; set; }
         public float GroundMinZ { get; set; }
         public float GroundMaxZ { get; set; }
+        public bool HasZoneQuery { get; set; }
+        public float ZoneX { get; set; }
+        public float ZoneY { get; set; }
+        public float ZoneZ { get; set; }
+        public bool HasPathQuery { get; set; }
+        public int PathGroupIndex { get; set; }
+        public int PathNodeIndex { get; set; }
 
         public static HeadlessOptions Parse(string[] args)
         {
@@ -145,6 +152,19 @@ namespace SharpGTA.Headless
                         options.GroundMaxZ = ParseSingle(Value(args, ref i, argument), argument);
                         options.HasGroundQuery = true;
                         break;
+                    case "--query-zone":
+                        options.ZoneX = ParseSingle(Value(args, ref i, argument), argument);
+                        options.ZoneY = ParseSingle(Value(args, ref i, argument), argument);
+                        options.ZoneZ = ParseSingle(Value(args, ref i, argument), argument);
+                        options.HasZoneQuery = true;
+                        options.HasExplicitAssetAction = true;
+                        break;
+                    case "--query-path":
+                        options.PathGroupIndex = ParseNonNegativeInt32(Value(args, ref i, argument), argument);
+                        options.PathNodeIndex = ParseNonNegativeInt32(Value(args, ref i, argument), argument);
+                        options.HasPathQuery = true;
+                        options.HasExplicitAssetAction = true;
+                        break;
                     case "--strict":
                         options.Strict = true;
                         break;
@@ -167,7 +187,8 @@ namespace SharpGTA.Headless
                 bool needsRoot = options.Standard || options.DatPaths.Count != 0 || options.ImagePaths.Count != 0 ||
                     options.GxtPath != null || options.RenderWarePaths.Count != 0 || options.RenderWareEntries.Count != 0 ||
                     options.DffPaths.Count != 0 || options.DffEntries.Count != 0 || options.DffScan ||
-                    options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan || options.HasGroundQuery;
+                    options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
+                    options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)
@@ -188,6 +209,14 @@ namespace SharpGTA.Headless
         {
             ulong result;
             if (!ulong.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out result))
+                throw new CommandLineException("Invalid non-negative integer for " + option + ": " + value);
+            return result;
+        }
+
+        private static int ParseNonNegativeInt32(string value, string option)
+        {
+            int result;
+            if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out result) || result < 0)
                 throw new CommandLineException("Invalid non-negative integer for " + option + ": " + value);
             return result;
         }

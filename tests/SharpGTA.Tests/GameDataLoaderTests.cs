@@ -19,6 +19,7 @@ namespace SharpGTA.Tests
             files.AddBytes("DATA/A.COL", WorldTestAssets.CreateBoxCollision("ground", 2.0f, -1.0f, 0.0f));
             files.AddText("DATA/A.IPL",
                 "inst\n1, ground, 10, 20, 3, 5, 5, 5, 0, 0, 1, 1\nend\n");
+            files.AddText("DATA/A.ZON", "zone\nTESTZONE, 3, 0, 0, 0, 10, 10, 10, 7\nend\n");
 
             AddImage(files, "MODELS/EXTRA.IMG", "EXTRA");
             string imageDirectives = "CDIMAGE MODELS/EXTRA.IMG\nCDIMAGE models/extra.img\n";
@@ -49,13 +50,16 @@ namespace SharpGTA.Tests
                 Assert.Equal(1, loader.Stats.ImageCount);
                 Assert.Equal(1, loader.Stats.InstanceCount);
                 Assert.Equal(0, loader.Stats.SkippedInstanceCount);
-                Assert.Equal(8, loader.Stats.IgnoredDirectiveCount);
+                Assert.Equal(7, loader.Stats.IgnoredDirectiveCount);
                 Assert.Equal(1, loader.Models.Count);
                 Assert.Equal((byte)4, loader.Models.Find(1).Collision.Level);
                 Assert.Near(4.0f, loader.World.Instances[0].WorldBounds.Max.X -
                     loader.World.Instances[0].WorldBounds.Min.X);
-                Assert.Equal(7, loader.Report.Count);
-                Assert.Equal(7, loader.Report.TotalIssueCount);
+                Assert.Equal(6, loader.Report.Count);
+                Assert.Equal(6, loader.Report.TotalIssueCount);
+                Assert.Equal(1, loader.Stats.MapZoneFileCount);
+                Assert.Equal(1, loader.Stats.ZoneRecordCount);
+                Assert.Equal(7, loader.Zones.GetRawLevelFromPosition(new SharpGTA.Mathematics.Vector3(5.0f, 5.0f, 5.0f)));
                 Assert.Equal(0, loader.Report.DroppedIssueCount);
 
                 StaticWorldHit hit;
@@ -63,7 +67,7 @@ namespace SharpGTA.Tests
                 Assert.Near(3.0f, hit.Position.Z);
 
                 string[] expected = { "DATA/TEST.DAT", "DATA/A.IDE", "DATA/A.COL", "DATA/A.IPL",
-                    "MODELS/EXTRA.DIR", "MODELS/EXTRA.IMG" };
+                    "MODELS/EXTRA.DIR", "MODELS/EXTRA.IMG", "DATA/A.ZON" };
                 AssertReads(files, expected);
             }
         }
@@ -178,6 +182,47 @@ namespace SharpGTA.Tests
                 StaticWorldHit hit;
                 Assert.True(loader.World.QueryVertical(10.0f, 20.0f, -5.0f, 10.0f, out hit));
                 Assert.Near(3.0f, hit.Position.Z);
+            }
+        }
+
+        [Test]
+        public void ViceCityBindsTypedZonesOcclusionAndPaths()
+        {
+            MemoryGameFileSystem files = new MemoryGameFileSystem();
+            files.AddText("DATA/MAP.IDE", "objs\n1, ground, generic, 1, 100, 0\nend\n");
+            string nodes = "";
+            for (int i = 0; i < 12; i++)
+                nodes += "1, 0, 0, 16, 0, 0, 10, 1, 1, 0, 0, 1\n";
+            files.AddText("DATA/MAP.IPL",
+                "inst\n1, ground, 10, 20, 3, 1, 1, 1, 0, 0, 1, 1\nend\n" +
+                "zone\ndefaultArea, 0, -1, -1, -1, 1, 1, 1, 0\ninfoArea, 2, -2, -2, -2, 2, 2, 2, 0\nend\n" +
+                "cull\n0, 0, 0, -1, -1, -1, 1, 1, 1, 3, 2\nend\n" +
+                "occl\n0, 0, 0, 4, 6, 8, 90\nend\n" +
+                "path\n1, 1, ground\n" + nodes + "end\n");
+
+            using (GameDataLoader loader = new GameDataLoader(
+                new WorldTestDefinition(GameId.ViceCity, DataSchema.VC, 20), files))
+            {
+                loader.LoadIde("DATA/MAP.IDE");
+                loader.LoadIpl("DATA/MAP.IPL");
+                Assert.Equal(2, loader.Stats.ZoneRecordCount);
+                Assert.Equal(1, loader.Stats.CullZoneCount);
+                Assert.Equal(1, loader.Stats.OcclusionVolumeCount);
+                Assert.Equal(1, loader.Stats.PathGroupCount);
+                Assert.Equal(12, loader.Stats.PathNodeCount);
+                Assert.Equal(0, loader.Stats.UnresolvedPathGroupCount);
+                Assert.Equal(2, loader.Zones.Navigation.Count);
+                Assert.Equal(2, loader.Zones.Information.Count);
+                Assert.Equal(1, loader.Zones.CullZones.Count);
+                Assert.Equal(1, loader.Zones.OcclusionVolumes.Count);
+                Assert.Near(4.0f, loader.Zones.OcclusionVolumes[0].Center.Z);
+                int wanted;
+                Assert.Equal(3, loader.Zones.FindCullAttributes(SharpGTA.Mathematics.Vector3.Zero, out wanted));
+                Assert.Equal(2, wanted);
+                SharpGTA.Mathematics.Vector3 position = loader.Paths.GetWorldPosition(loader.Paths.Groups[0], loader.Paths.Groups[0].Nodes[0]);
+                Assert.Near(11.0f, position.X);
+                Assert.Near(20.0f, position.Y);
+                Assert.Near(3.0f, position.Z);
             }
         }
 

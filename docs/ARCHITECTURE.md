@@ -39,6 +39,14 @@ GXT возвращает raw 16-bit code units и их прямое char-пре�
 
 `TxdReader` читает PC D3D8 TextureDictionary, fixed names, palettes и все mip levels с проверкой фактических размеров. `TxdPixelDecoder` выдаёт tightly packed RGBA8 по требованию: uncompressed C8888/C888/C1555/C565/C4444/C555/LUM8/PAL8 и DXT1/DXT3, плюс synthetic-covered DXT5. Raw levels остаются доступны для будущего GPU upload. PS2, PAL4 и DXT2/DXT4 не маскируются под PC decode; scan пропускает PS2 по явной policy и сообщает counts. `--txd-scan` декодирует и освобождает каждый level, не удерживая все изображения.
 
+## Zones и path data
+
+`ZoneWorld` хранит III/VC roots и исходные raw level IDs внутри выбранного profile. III `MAPZONE` заполняет отдельный map-level array; normal/navigation zones строят иерархию по алгоритму `CTheZones`. VC info/navigation/map arrays раздельны. Cull query объединяет флаги всех подходящих zones и берёт maximum wanted drop. VC occlusion сохраняет center после `z + height/2`, angle и quantized angle; это ещё не render-culling runtime.
+
+`PathRecordParser` читает III text `ped|car` headers в IDE и VC numeric `0|1|2` headers в IPL. Каждая группа содержит ровно 12 nodes. `PathWorld` сохраняет порядок и привязывает attached groups к первому подходящему IPL instance; координаты вычисляются как `StoredPosition / 16` с object transform, detached groups используют world coordinates без instance. `--query-zone` и `--query-path GROUP NODE` проверяют результат на реальных данных.
+
+Это typed data + world queries, не полный `CPathFind.PreparePathData`, connections/groups или AI. III на текущем дереве имеет 34 attached groups без соответствующего IPL instance; они явно выводятся как unresolved и не получают выдуманный transform. VC detached/water groups разрешаются независимо от models.
+
 ## StaticWorld — осознанно узкий vertical slice
 
 - IDE model metadata не содержит mesh/RW handles.

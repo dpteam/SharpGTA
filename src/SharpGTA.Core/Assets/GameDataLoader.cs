@@ -20,6 +20,15 @@ namespace SharpGTA.Assets
         public int InstanceCount { get; internal set; }
         public int SkippedInstanceCount { get; internal set; }
         public int IgnoredDirectiveCount { get; internal set; }
+        public int ZoneRecordCount { get; internal set; }
+        public int MapZoneFileCount { get; internal set; }
+        public int CullZoneCount { get; internal set; }
+        public int OcclusionVolumeCount { get; internal set; }
+        public int PathGroupCount { get; internal set; }
+        public int PathNodeCount { get; internal set; }
+        public int UnresolvedPathGroupCount { get; internal set; }
+        public int DetachedPathGroupCount { get; internal set; }
+        public int WaterPathGroupCount { get; internal set; }
     }
 
     /// <summary>
@@ -30,7 +39,7 @@ namespace SharpGTA.Assets
     {
         private const int MaximumBinaryFileLength = 64 * 1024 * 1024;
         private static readonly string[] NotImplementedDirectives = {
-            "TEXDICTION", "MODELFILE", "HIERFILE", "IMAGEPATH", "MAPZONE", "SPLASH"
+            "TEXDICTION", "MODELFILE", "HIERFILE", "IMAGEPATH", "SPLASH"
         };
 
         private readonly IGameFileSystem fileSystem;
@@ -51,6 +60,8 @@ namespace SharpGTA.Assets
             Collisions = new CollisionRepository(Models);
             World = new StaticWorld();
             Images = new ImgCatalog();
+            Zones = new ZoneWorld(definition);
+            Paths = new PathWorld();
             Report = new LoadReport();
             Stats = new GameDataLoadStats();
         }
@@ -61,6 +72,8 @@ namespace SharpGTA.Assets
         public CollisionRepository Collisions { get; private set; }
         public StaticWorld World { get; private set; }
         public ImgCatalog Images { get; private set; }
+        public ZoneWorld Zones { get; private set; }
+        public PathWorld Paths { get; private set; }
         public LoadReport Report { get; private set; }
         public GameDataLoadStats Stats { get; private set; }
 
@@ -107,6 +120,12 @@ namespace SharpGTA.Assets
                     case "CDIMAGE":
                         LoadImage(RequireDirectivePath(directive, path));
                         break;
+                    case "MAPZONE":
+                        if (Definition.DataSchema.SupportsMapZoneDirective)
+                            LoadMapZones(RequireDirectivePath(directive, path));
+                        else
+                            Accumulate(unknown, directive);
+                        break;
                     default:
                         if (!directive.IsSupported)
                             Accumulate(unknown, directive);
@@ -137,6 +156,7 @@ namespace SharpGTA.Assets
                 throw WithPath(path, exception);
             }
             Stats.IdeFileCount++;
+            BindPathRecords(document.RawRecords, path);
         }
 
         public void LoadIpl(string path)
@@ -150,6 +170,78 @@ namespace SharpGTA.Assets
             Stats.IplFileCount++;
             Stats.InstanceCount += added;
             Stats.SkippedInstanceCount += document.Instances.Count - added;
+            BindZoneRecords(document.RawRecords, path, false);
+            BindPathRecords(document.RawRecords, path);
+        }
+
+        public void LoadMapZones(string path)
+        {
+            ThrowIfDisposed();
+            if (!Definition.DataSchema.SupportsMapZoneDirective)
+                throw new NotSupportedException("MAPZONE is not supported by this game data profile.");
+            string text = ReadRequiredText(path);
+            IplDocument document = new IplReader(Definition.DataSchema).Read(text, path);
+            BindZoneRecords(document.RawRecords, path, true);
+            Stats.MapZoneFileCount++;
+        }
+
+        private void BindZoneRecords(IList<RawDataRecord> records, string path, bool mapZoneOnly)
+        {
+            for (int i = 0; i < records.Count; i++)
+            {
+                RawDataRecord record = records[i];
+                if (record.Section == "zone")
+                {
+                    ZoneRecord zone = ZoneRecordParser.ParseZone(record);
+                    if (mapZoneOnly || zone.Kind == ZoneKind.MapZone)
+                        Zones.AddMapZone(zone);
+                    else
+                        Zones.AddZone(zone);
+                    Stats.ZoneRecordCount++;
+                }
+                else if (!mapZoneOnly && record.Section == "cull")
+                {
+                    Zones.AddCull(ZoneRecordParser.ParseCull(record));
+                    Stats.CullZoneCount++;
+                }
+                else if (!mapZoneOnly && record.Section == "occl")
+                {
+                    Zones.AddOcclusion(ZoneRecordParser.ParseOcclusion(record));
+                    Stats.OcclusionVolumeCount++;
+                }
+            }
+        }
+
+        private void BindPathRecords(IList<RawDataRecord> records, string path)
+        {
+            List<RawDataRecord> pathRecords = new List<RawDataRecord>();
+            for (int i = 0; i < records.Count; i++)
+            {
+                if (records[i].Section == "path")
+                    pathRecords.Add(records[i]);
+            }
+            if (pathRecords.Count == 0)
+            {
+                RefreshPathStats();
+                return;
+            }
+            PathGroup[] groups = PathRecordParser.ParseGroups(pathRecords, Definition.DataSchema, path);
+            Paths.AddGroups(groups);
+            Stats.PathGroupCount += groups.Length;
+            for (int i = 0; i < groups.Length; i++)
+            {
+                Stats.PathNodeCount += groups[i].Nodes.Length;
+                if (groups[i].IsDetached)
+                    Stats.DetachedPathGroupCount++;
+                if (groups[i].Kind == PathKind.Water)
+                    Stats.WaterPathGroupCount++;
+            }
+            RefreshPathStats();
+        }
+
+        private void RefreshPathStats()
+        {
+            Stats.UnresolvedPathGroupCount = Paths.BindInstances(World.Instances);
         }
 
         public void LoadCollision(string path, byte level)

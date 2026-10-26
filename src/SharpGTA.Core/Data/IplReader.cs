@@ -132,7 +132,7 @@ namespace SharpGTA.Data
             return new IplDocument(instances, rawRecords);
         }
 
-        private static string ReadSection(string sourceName, DataLine line)
+        private string ReadSection(string sourceName, DataLine line)
         {
             if (line.Tokens.Count != 1)
                 throw DataParsing.Error(sourceName, line, "Unknown section '" + line.Text.Trim() + "'.");
@@ -145,7 +145,10 @@ namespace SharpGTA.Data
                 case "cull":
                 case "pick":
                 case "path":
+                    return section;
                 case "occl":
+                    if (!schema.SupportsOcclusion)
+                        throw DataParsing.Error(sourceName, line, "Section 'occl' is not supported by this data schema.");
                     return section;
                 default:
                     throw DataParsing.Error(sourceName, line, "Unknown section '" + line.Tokens[0] + "'.");

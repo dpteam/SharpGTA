@@ -29,6 +29,7 @@
 - Бинарные структуры читать field-by-field little-endian с bounds checks, не через `Marshal`/C++ memory image. Текстовые числа — только `InvariantCulture`; asset names — ASCII case-insensitive, GXT keys — ordinal case-sensitive.
 - `StaticWorld` сейчас только IPL + COLL queries, не полный `CWorld`. Parsed IPL scale сохраняется, но не применяется — как в исходном loader. COLL lines сохраняются, но raycast по ним не ведётся. VC COLL из IMG грузится целиком до первого IPL; bounds-based streaming/eviction ещё не реализованы.
 - RenderWare inventory не является DFF/TXD decoder. Layouts брать из `reSA/refs/librw`, GTA integration — из re3/reVC; не выдумывать native formats. Static non-native DFF реализован (`DffReader`, `--dff[-entry]`, полный `--dff-scan`). PC D3D8 TXD/mipmaps и RGBA decode реализованы (`TxdReader`, `TxdPixelDecoder`, `--txd[-entry]`, `--txd-scan`). Skin/HAnim/MatFX binary readers реализованы (`DffPluginReader`, old/split Skin, texture effects); animation/skinning/render behavior ещё нет. NATIVE geometry, PAL4/DXT2/DXT4 и PS2-specific decoders остаются отдельными этапами.
+- `ZoneWorld`/`PathWorld` — typed data и queries, не полный `CTheZones` simulation или `CPathFind`. Path coords `/16`; attached groups требуют IPL transform, unresolved не выдумывать. VC detached/water paths остаются в исходном порядке.
 - Отсутствующие оригинальные ресурсы не должны ломать synthetic tests. Для real-asset checks честно сообщать `SKIP/NOT RUN`, не выдавать за успех.
 
 ## Проверки

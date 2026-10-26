@@ -20,6 +20,14 @@
 | IDE models | 3081 | 4418 |
 | COLL models loaded | 2982 | 4245 |
 | Static IPL instances | 8689 | 9114 |
+| Navigation zones (without root) | 42 | 12 |
+| Information zones (without root) | 42 (shared array) | 165 |
+| Map zones (without root) | 21 | 33 |
+| Cull zones | 744 | 631 |
+| Occlusion volumes | 0 | 344 |
+| Path groups / nodes | 870 / 10440 | 1957 / 23484 |
+| Detached / water path groups | 0 / 0 | 1957 / 108 |
+| Unresolved attached path groups | 34 | 0 |
 | GXT main keys | 2649 | 2449 |
 | GXT mission tables | 0 | 78 |
 | `PLAYER.DFF` RW chunks | 329 | 103 |
@@ -48,13 +56,15 @@
 
 `LoadStandard()` завершается успешно на обеих играх и на обоих runtimes. Отсутствующих моделей для прочитанных IPL нет. Полные `--dff-scan` и `--txd-scan` проходят на всех nonempty DFF/TXD. Проверены отдельно III `loplyguy.dff` (legacy `0x30200`), `peds.dff` (22 clumps) и VC `wheels.DFF` (20 geometries), VC `FIREMAN.DFF` (split Skin + HAnim), loose `particle.txd` обеих игр, III `PLAYER.TXD`, VC DXT1 `WMYBE.TXD` (9 levels), DXT3 `AIRPLAN.TXD` и uncompressed `DOCENTRANCE.TXD`. VC дополнительно читает 30 COLL-ресурсов из IMG до первого IPL. Реальные ground queries прошли:
 
-- III `(812, -936)` → `ind_customroad003`, `z=35.9520454`;
-- VC `(-864, -575)` → `lh_icecream01`, `z=10.0659924`.
+- III `(812, -936)` → `ind_customroad003`, `z=35.9520454`; zone `ROADBR1:Navig`, path group 0/node 0 `(447.332764,-628.411255,15.1032)`;
+- VC `(-864, -575)` → `lh_icecream01`, `z=10.0659924`; navigation `HAVANA:Default`, info `ICCREAM:Info`, detached path `(-866.6312,-652.45,10.067687)`.
 
 Полученные warnings относятся только к явно не реализованным directives:
 
-- III: `TEXDICTION`, `SPLASH`, `MODELFILE`, `MAPZONE`;
+- III: `TEXDICTION`, `SPLASH`, `MODELFILE`;
 - VC: `TEXDICTION`, `MODELFILE`, `SPLASH`.
+
+`MAPZONE` III теперь загружается. III unresolved paths — attached groups без соответствующего instance, выводятся через `--verbose`; это не ошибка parser. Полного `CPathFind.PreparePathData` ещё нет.
 
 ## Важные границы проверки
 

@@ -47,6 +47,7 @@ SharpGTA.Headless.exe --game vc --root "D:\Games\GTA Vice City" --verbose
 
 # Отдельные проверки.
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --standard --query-ground 10 20 -5 100
+SharpGTA.Headless.exe --root "D:\Games\GTA III" --standard --query-zone 812 -936 36 --query-path 0 0
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --gxt TEXT/AMERICAN.GXT --gxt-key MAIN
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --standard --rw-entry PLAYER.DFF
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --dff-entry PLAYER.DFF
@@ -65,6 +66,8 @@ SharpGTA.Headless.exe --root "D:\Games\GTA III" --dat DATA/CUSTOM.DAT --strict
 - `src/SharpGTA.Games.VC` — отдельные пути, лимиты и схемы Vice City.
 - `src/SharpGTA.Headless` — консольный host с null audio/presentation.
 - `tests/SharpGTA.Tests` — собственный dependency-free test runner; синтетические данные не требуют игровых ресурсов.
+
+`--query-zone` читает navigation/info/map zones и cull flags, `--query-path GROUP NODE` выводит world position и next link. III paths читаются преимущественно из IDE, VC — из IPL; attached coords `/16` получают transform объекта, detached остаются мировыми. Это ещё не AI pathfinding.
 
 Подробности границ и ограничений — в [ARCHITECTURE.md](docs/ARCHITECTURE.md), результаты чтения двух реальных деревьев — в [REAL-ASSETS.md](docs/REAL-ASSETS.md), источники — в [REFERENCE-SOURCES.md](docs/REFERENCE-SOURCES.md), CI — в [CI.md](docs/CI.md), будущие multiplayer и межигровые ресурсы — в [IDEAS.md](IDEAS.md) и [RESOURCE-COMPATIBILITY.md](docs/RESOURCE-COMPATIBILITY.md).
 
