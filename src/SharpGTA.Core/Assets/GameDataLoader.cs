@@ -336,6 +336,102 @@ namespace SharpGTA.Assets
             }
         }
 
+        public TxdArchive LoadTxd(string path)
+        {
+            ThrowIfDisposed();
+            RequireFile(path);
+            try
+            {
+                return TxdReader.Read(ReadRequiredBytes(path));
+            }
+            catch (AssetFormatException exception)
+            {
+                throw WithPath(path, exception);
+            }
+        }
+
+        public TxdArchive LoadTxdEntry(string name)
+        {
+            ThrowIfDisposed();
+            if (name == null)
+                throw new ArgumentNullException("name");
+            try
+            {
+                return TxdReader.Read(Images.Read(name));
+            }
+            catch (AssetFormatException exception)
+            {
+                throw WithPath("IMG:" + name, exception);
+            }
+        }
+
+        /// <summary>Reads every TXD entry once; decoded pixels are discarded after validation.</summary>
+        public TxdScanReport ScanTxd(bool decodePixels)
+        {
+            ThrowIfDisposed();
+            TxdScanReport report = new TxdScanReport();
+            for (int i = 0; i < Images.Entries.Count; i++)
+            {
+                ImgEntry entry = Images.Entries[i];
+                if (!string.Equals(Path.GetExtension(entry.Name), ".TXD", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                report.FileCount++;
+                if (entry.ByteLength == 0)
+                {
+                    report.EmptyFileCount++;
+                    continue;
+                }
+                try
+                {
+                    TxdArchive archive = TxdReader.Read(Images.Read(entry), true);
+                    report.DeclaredTextureCount += archive.DeclaredTextureCount;
+                    report.SkippedTextureCount += archive.SkippedTextureCount;
+                    for (int j = 0; j < archive.Textures.Length; j++)
+                    {
+                        TxdTexture texture = archive.Textures[j];
+                        report.TextureCount++;
+                        report.LevelCount += texture.LevelCount;
+                        switch (texture.Compression)
+                        {
+                            case TxdCompression.Uncompressed:
+                                report.UncompressedCount++;
+                                break;
+                            case TxdCompression.Dxt1:
+                                report.Dxt1Count++;
+                                break;
+                            case TxdCompression.Dxt3:
+                                report.Dxt3Count++;
+                                break;
+                            default:
+                                report.OtherCompressionCount++;
+                                break;
+                        }
+                        if (!decodePixels)
+                            continue;
+                        for (int level = 0; level < texture.LevelCount; level++)
+                        {
+                            TxdImage image = texture.DecodeLevel(level);
+                            report.DecodedLevelCount++;
+                            report.DecodedPixelCount += (long)image.Width * image.Height;
+                        }
+                    }
+                }
+                catch (AssetFormatException exception)
+                {
+                    report.AddFailure(entry.Name, exception.Message);
+                }
+                catch (NotSupportedException exception)
+                {
+                    report.AddFailure(entry.Name, exception.Message);
+                }
+                catch (OverflowException exception)
+                {
+                    report.AddFailure(entry.Name, exception.Message);
+                }
+            }
+            return report;
+        }
+
         public GxtArchive LoadGxt(string path)
         {
             ThrowIfDisposed();

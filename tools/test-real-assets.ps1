@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|GXT:|RW:|DFF:|DFF-Scan:|Ground:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -57,6 +57,29 @@ try {
         $scan = Invoke-Case "$game full IMG DFF scan" $net40 ($common + @("--dff-scan", "--ticks", "0")) $false
         if ($scan -notmatch "DFF-Scan: files=[1-9][0-9]* failed=0" -or $scan -notmatch "geometries=[1-9]") {
             throw "$game full DFF scan reported malformed nonempty entries."
+        }
+        $looseTxd = Invoke-Case "$game loose TXD" $net40 ($common + @("--txd", "MODELS/particle.txd", "--ticks", "0")) $false
+        if ($looseTxd -notmatch "TXD: source=MODELS/particle\.txd declared=[1-9]" -or $looseTxd -notmatch "pixels=[1-9]") {
+            throw "$game loose particle.txd decode failed."
+        }
+        if ($game -eq "iii") {
+            $textureProbe = Invoke-Case "III uncompressed TXD" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--txd-entry", "PLAYER.TXD", "--ticks", "0")) $false
+            if ($textureProbe -notmatch "textures=1 skipped=0 levels=1 pixels=65536 raw=1") {
+                throw "III PLAYER.TXD decode failed."
+            }
+        } else {
+            $textureProbe = Invoke-Case "VC DXT1 DXT3 raw TXD" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--txd-entry", "WMYBE.TXD", "--txd-entry", "AIRPLAN.TXD", "--txd-entry", "DOCENTRANCE.TXD", "--ticks", "0")) $false
+            if ($textureProbe -notmatch "WMYBE\.TXD declared=1 textures=1 skipped=0 levels=9" -or
+                $textureProbe -notmatch "AIRPLAN\.TXD declared=4 textures=4 skipped=0 levels=34" -or
+                $textureProbe -notmatch "DOCENTRANCE\.TXD declared=2 textures=2 skipped=0 levels=2 pixels=8192 raw=2") {
+                throw "VC texture format probes failed."
+            }
+        }
+        $txdScan = Invoke-Case "$game full IMG TXD decode" $net40 ($common + @("--txd-scan", "--ticks", "0")) $false
+        if ($txdScan -notmatch "TXD-Scan: files=[1-9][0-9]* failed=0" -or
+            $txdScan -notmatch "textures=[1-9]" -or $txdScan -notmatch "decodedLevels=[1-9]" -or
+            $txdScan -notmatch "pixels=[1-9]") {
+            throw "$game full TXD decode failed."
         }
         if ($game -eq "iii") {
             $legacy = Invoke-Case "III legacy and multi-clump DFF" $net40 ($common + @("--dff", "MODELS/Generic/loplyguy.dff", "--dff", "MODELS/Generic/peds.dff", "--ticks", "0")) $false

@@ -160,6 +160,30 @@ namespace SharpGTA.Headless
                 for (int i = 0; i < scan.Failures.Count; i++)
                     output.WriteLine("DFF-Error: " + scan.Failures[i].Name + " - " + scan.Failures[i].Message);
             }
+            if (options.TxdScan)
+            {
+                if (loader.Images.Count == 0)
+                    loader.LoadInitialImage();
+                TxdScanReport scan = loader.ScanTxd(true);
+                output.WriteLine("TXD-Scan: files=" + scan.FileCount.ToString(CultureInfo.InvariantCulture) +
+                    " failed=" + scan.FailedFileCount.ToString(CultureInfo.InvariantCulture) +
+                    " empty=" + scan.EmptyFileCount.ToString(CultureInfo.InvariantCulture) +
+                    " textures=" + scan.TextureCount.ToString(CultureInfo.InvariantCulture) +
+                    " skipped=" + scan.SkippedTextureCount.ToString(CultureInfo.InvariantCulture) +
+                    " levels=" + scan.LevelCount.ToString(CultureInfo.InvariantCulture) +
+                    " decodedLevels=" + scan.DecodedLevelCount.ToString(CultureInfo.InvariantCulture) +
+                    " pixels=" + scan.DecodedPixelCount.ToString(CultureInfo.InvariantCulture) +
+                    " raw=" + scan.UncompressedCount.ToString(CultureInfo.InvariantCulture) +
+                    " dxt1=" + scan.Dxt1Count.ToString(CultureInfo.InvariantCulture) +
+                    " dxt3=" + scan.Dxt3Count.ToString(CultureInfo.InvariantCulture) +
+                    " other=" + scan.OtherCompressionCount.ToString(CultureInfo.InvariantCulture));
+                for (int i = 0; i < scan.Failures.Count; i++)
+                    output.WriteLine("TXD-Error: " + scan.Failures[i].Name + " - " + scan.Failures[i].Message);
+            }
+            for (int i = 0; i < options.TxdPaths.Count; i++)
+                WriteTxd(options.TxdPaths[i], loader.LoadTxd(options.TxdPaths[i]), output);
+            for (int i = 0; i < options.TxdEntries.Count; i++)
+                WriteTxd("IMG:" + options.TxdEntries[i], loader.LoadTxdEntry(options.TxdEntries[i]), output);
             for (int i = 0; i < options.DffPaths.Count; i++)
                 WriteDff(options.DffPaths[i], loader.LoadDff(options.DffPaths[i]), output);
             for (int i = 0; i < options.DffEntries.Count; i++)
@@ -201,6 +225,39 @@ namespace SharpGTA.Headless
                 CountChunks(roots[i], 1, ref count, ref depth);
             output.WriteLine("RW: source=" + source + " roots=" + roots.Count.ToString(CultureInfo.InvariantCulture) +
                 " chunks=" + count.ToString(CultureInfo.InvariantCulture) + " depth=" + depth.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void WriteTxd(string source, TxdArchive archive, TextWriter output)
+        {
+            int levels = 0;
+            long pixels = 0;
+            int raw = 0;
+            int dxt1 = 0;
+            int dxt3 = 0;
+            for (int i = 0; i < archive.Textures.Length; i++)
+            {
+                TxdTexture texture = archive.Textures[i];
+                levels += texture.LevelCount;
+                if (texture.Compression == TxdCompression.Uncompressed)
+                    raw++;
+                else if (texture.Compression == TxdCompression.Dxt1)
+                    dxt1++;
+                else if (texture.Compression == TxdCompression.Dxt3)
+                    dxt3++;
+                for (int level = 0; level < texture.LevelCount; level++)
+                {
+                    TxdImage image = texture.DecodeLevel(level);
+                    pixels += (long)image.Width * image.Height;
+                }
+            }
+            output.WriteLine("TXD: source=" + source + " declared=" + archive.DeclaredTextureCount.ToString(CultureInfo.InvariantCulture) +
+                " textures=" + archive.Textures.Length.ToString(CultureInfo.InvariantCulture) +
+                " skipped=" + archive.SkippedTextureCount.ToString(CultureInfo.InvariantCulture) +
+                " levels=" + levels.ToString(CultureInfo.InvariantCulture) +
+                " pixels=" + pixels.ToString(CultureInfo.InvariantCulture) +
+                " raw=" + raw.ToString(CultureInfo.InvariantCulture) +
+                " dxt1=" + dxt1.ToString(CultureInfo.InvariantCulture) +
+                " dxt3=" + dxt3.ToString(CultureInfo.InvariantCulture));
         }
 
         private static void WriteDff(string source, DffDocument document, TextWriter output)
@@ -290,6 +347,9 @@ namespace SharpGTA.Headless
             output.WriteLine("  --dff PATH                Decode static non-native DFF data; repeatable.");
             output.WriteLine("  --dff-entry NAME          Decode a named DFF entry from loaded IMG files.");
             output.WriteLine("  --dff-scan                Decode every DFF entry and print aggregate diagnostics.");
+            output.WriteLine("  --txd PATH                Read D3D8 TXD and decode all its mip levels; repeatable.");
+            output.WriteLine("  --txd-entry NAME          Read a named D3D8 TXD entry from loaded IMG files.");
+            output.WriteLine("  --txd-scan                Decode every D3D8 TXD texture and mip level in IMG.");
             output.WriteLine("  --query-ground X Y Z0 Z1  Query static COLL ground between two Z values.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");
             output.WriteLine("  --state-at N              Also print the diagnostic state hash at tick N.");

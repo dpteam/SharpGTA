@@ -28,7 +28,7 @@
 - IMG — streaming с диска по секторам, не `ReadAllBytes` всего образа. Асинхронность позже допустима для I/O, но создание объектов и mutation мира — на simulation thread.
 - Бинарные структуры читать field-by-field little-endian с bounds checks, не через `Marshal`/C++ memory image. Текстовые числа — только `InvariantCulture`; asset names — ASCII case-insensitive, GXT keys — ordinal case-sensitive.
 - `StaticWorld` сейчас только IPL + COLL queries, не полный `CWorld`. Parsed IPL scale сохраняется, но не применяется — как в исходном loader. COLL lines сохраняются, но raycast по ним не ведётся. VC COLL из IMG грузится целиком до первого IPL; bounds-based streaming/eviction ещё не реализованы.
-- RenderWare inventory не является DFF/TXD decoder. Layouts брать из `reSA/refs/librw`, GTA integration — из re3/reVC; не выдумывать native formats. Static non-native DFF реализован (`DffReader`, `--dff[-entry]`, полный `--dff-scan`). NATIVE, Skin/HAnim/MatFX, TXD pixels и PS2 остаются отдельными этапами до явной реализации.
+- RenderWare inventory не является DFF/TXD decoder. Layouts брать из `reSA/refs/librw`, GTA integration — из re3/reVC; не выдумывать native formats. Static non-native DFF реализован (`DffReader`, `--dff[-entry]`, полный `--dff-scan`). PC D3D8 TXD/mipmaps и RGBA decode реализованы (`TxdReader`, `TxdPixelDecoder`, `--txd[-entry]`, `--txd-scan`). NATIVE geometry, Skin/HAnim/MatFX, PAL4/DXT2/DXT4 и PS2-specific decoders остаются отдельными этапами.
 - Отсутствующие оригинальные ресурсы не должны ломать synthetic tests. Для real-asset checks честно сообщать `SKIP/NOT RUN`, не выдавать за успех.
 
 ## Проверки

@@ -37,6 +37,8 @@ GXT возвращает raw 16-bit code units и их прямое char-пре�
 
 `DffReader` создаёт CPU-side DTO без GPU: Clump/frames/GeometryList/Atomics, platform-independent geometry, morph targets, materials и texture references, BinMesh list/strip. Поддержаны legacy embedded Atomic, multi-clump files и известные retail Clump parent-length mismatches через count-driven parsing. Unknown extensions пропускаются по declared length; native geometry не выдаётся за static mesh. `--dff-scan` декодирует каждый nonempty DFF entry без удержания всего набора в памяти.
 
+`TxdReader` читает PC D3D8 TextureDictionary, fixed names, palettes и все mip levels с проверкой фактических размеров. `TxdPixelDecoder` выдаёт tightly packed RGBA8 по требованию: uncompressed C8888/C888/C1555/C565/C4444/C555/LUM8/PAL8 и DXT1/DXT3, плюс synthetic-covered DXT5. Raw levels остаются доступны для будущего GPU upload. PS2, PAL4 и DXT2/DXT4 не маскируются под PC decode; scan пропускает PS2 по явной policy и сообщает counts. `--txd-scan` декодирует и освобождает каждый level, не удерживая все изображения.
+
 ## StaticWorld — осознанно узкий vertical slice
 
 - IDE model metadata не содержит mesh/RW handles.
@@ -56,7 +58,7 @@ GXT возвращает raw 16-bit code units и их прямое char-пре�
 
 ## Что находится за границей текущего кода
 
-- Skin/HAnim/MatFX, D3D8 pre-instanced geometry и TXD native pixels/mipmaps;
+- Skin/HAnim/MatFX, D3D8 pre-instanced geometry, PAL4/DXT2/DXT4 и PS2-specific asset decoders;
 - IFP/SCM, full paths/zones/timecycle/handling/weapons configs;
 - model request/refcount/streaming channels и async I/O;
 - entities/pools, full CPhysical/Collision/CWorld, peds/vehicles/weapons/AI;

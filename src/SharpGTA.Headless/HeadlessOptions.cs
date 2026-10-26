@@ -23,6 +23,8 @@ namespace SharpGTA.Headless
             RenderWareEntries = new List<string>();
             DffPaths = new List<string>();
             DffEntries = new List<string>();
+            TxdPaths = new List<string>();
+            TxdEntries = new List<string>();
         }
 
         public string Game { get; set; }
@@ -32,6 +34,9 @@ namespace SharpGTA.Headless
         public bool Strict { get; set; }
         public bool Verbose { get; set; }
         public bool DffScan { get; set; }
+        public bool TxdScan { get; set; }
+        public List<string> TxdPaths { get; private set; }
+        public List<string> TxdEntries { get; private set; }
         public bool Help { get; set; }
         public bool Version { get; set; }
         public string GxtPath { get; set; }
@@ -114,6 +119,18 @@ namespace SharpGTA.Headless
                         options.DffScan = true;
                         options.HasExplicitAssetAction = true;
                         break;
+                    case "--txd":
+                        options.TxdPaths.Add(Value(args, ref i, argument));
+                        options.HasExplicitAssetAction = true;
+                        break;
+                    case "--txd-entry":
+                        options.TxdEntries.Add(Value(args, ref i, argument));
+                        options.HasExplicitAssetAction = true;
+                        break;
+                    case "--txd-scan":
+                        options.TxdScan = true;
+                        options.HasExplicitAssetAction = true;
+                        break;
                     case "--ticks":
                         options.Ticks = ParseUInt64(Value(args, ref i, argument), argument);
                         break;
@@ -149,7 +166,8 @@ namespace SharpGTA.Headless
                     options.HasExplicitAssetAction = true;
                 bool needsRoot = options.Standard || options.DatPaths.Count != 0 || options.ImagePaths.Count != 0 ||
                     options.GxtPath != null || options.RenderWarePaths.Count != 0 || options.RenderWareEntries.Count != 0 ||
-                    options.DffPaths.Count != 0 || options.DffEntries.Count != 0 || options.DffScan || options.HasGroundQuery;
+                    options.DffPaths.Count != 0 || options.DffEntries.Count != 0 || options.DffScan ||
+                    options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan || options.HasGroundQuery;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)
