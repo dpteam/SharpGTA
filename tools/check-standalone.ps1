@@ -7,7 +7,9 @@ try {
         "src/SharpGTA.Games.III/SharpGTA.Games.III.csproj",
         "src/SharpGTA.Games.VC/SharpGTA.Games.VC.csproj",
         "src/SharpGTA.Headless/SharpGTA.Headless.csproj",
-        "src/SharpGTA.D3D9/SharpGTA.D3D9.csproj"
+        "src/SharpGTA.Presentation/SharpGTA.Presentation.csproj",
+        "src/SharpGTA.D3D9/SharpGTA.D3D9.csproj",
+        "src/SharpGTA.Launcher/SharpGTA.Launcher.csproj"
     )
     foreach ($project in $projects) {
         [xml]$xml = Get-Content $project
@@ -61,14 +63,15 @@ try {
     }
     $d3d9Allowed = @(
         "SharpGTA.D3D9.exe", "SharpGTA.D3D9.exe.config", "SharpGTA.D3D9.pdb",
-        "SharpGTA.Core.dll", "SharpGTA.Core.pdb"
+        "SharpGTA.Core.dll", "SharpGTA.Core.pdb",
+        "SharpGTA.Presentation.dll", "SharpGTA.Presentation.pdb"
     )
     Get-ChildItem $d3d9Shipping -File | ForEach-Object {
         if ($d3d9Allowed -notcontains $_.Name) {
             throw "Unexpected file in D3D9 output: $($_.Name)"
         }
     }
-    foreach ($required in @("SharpGTA.Core.dll", "SharpGTA.D3D9.exe.config")) {
+    foreach ($required in @("SharpGTA.Core.dll", "SharpGTA.Presentation.dll", "SharpGTA.D3D9.exe.config")) {
         if (-not (Test-Path "$d3d9Shipping/$required")) { throw "Missing D3D9 file: $required" }
     }
     $d3d9Config = Get-Content "$d3d9Shipping/SharpGTA.D3D9.exe.config" -Raw
@@ -77,9 +80,32 @@ try {
         throw "The D3D9 executable config does not select .NET Framework 4.0."
     }
 
+    $launcherShipping = "src/SharpGTA.Launcher/bin/Release/net40"
+    if (-not (Test-Path "$launcherShipping/SharpGTA.Launcher.exe")) {
+        throw "Missing net40 Launcher build. Run dotnet build SharpGTA.sln -c Release."
+    }
+    $launcherAllowed = @(
+        "SharpGTA.Launcher.exe", "SharpGTA.Launcher.exe.config", "SharpGTA.Launcher.pdb",
+        "SharpGTA.Core.dll", "SharpGTA.Core.pdb",
+        "SharpGTA.Presentation.dll", "SharpGTA.Presentation.pdb"
+    )
+    Get-ChildItem $launcherShipping -File | ForEach-Object {
+        if ($launcherAllowed -notcontains $_.Name) {
+            throw "Unexpected file in Launcher output: $($_.Name)"
+        }
+    }
+    foreach ($required in @("SharpGTA.Core.dll", "SharpGTA.Presentation.dll", "SharpGTA.Launcher.exe.config")) {
+        if (-not (Test-Path "$launcherShipping/$required")) { throw "Missing Launcher file: $required" }
+    }
+    $launcherConfig = Get-Content "$launcherShipping/SharpGTA.Launcher.exe.config" -Raw
+    if ($launcherConfig -notmatch 'supportedRuntime\s+version="v4\.0"' -or
+        $launcherConfig -notmatch '\.NETFramework,Version=v4\.0') {
+        throw "The Launcher executable config does not select .NET Framework 4.0."
+    }
+
     [xml]$props = Get-Content "Directory.Build.props"
     $brand = $props.SelectNodes("//*[local-name()='BrandName']")[0].InnerText
-    foreach ($executable in @("$shipping/SharpGTA.Headless.exe", "$d3d9Shipping/SharpGTA.D3D9.exe")) {
+    foreach ($executable in @("$shipping/SharpGTA.Headless.exe", "$d3d9Shipping/SharpGTA.D3D9.exe", "$launcherShipping/SharpGTA.Launcher.exe")) {
         $fileInfo = [Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $executable).Path)
         if ($fileInfo.ProductName -cne $brand -or $fileInfo.CompanyName -cne $brand) {
             throw "Assembly branding is not centralized: Product=$($fileInfo.ProductName), Company=$($fileInfo.CompanyName), expected $brand."
@@ -98,7 +124,7 @@ try {
         $ignoredProbe = git check-ignore --no-index -q -- "refs/.sharpgta-ignore-probe"
         if ($LASTEXITCODE -ne 0) { throw "git check-ignore does not ignore refs/." }
     }
-    Write-Host "Standalone check passed: net40 Headless/D3D9, project-only files, only compile-only targeting pack, centralized branding, refs/ ignored."
+    Write-Host "Standalone check passed: net40 Headless/D3D9/Launcher, project-only files, only compile-only targeting pack, centralized branding, refs/ ignored."
 }
 finally {
     Pop-Location

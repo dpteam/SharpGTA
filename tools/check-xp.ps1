@@ -2,7 +2,8 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 $shippingDirectories = @(
     (Join-Path $root "src/SharpGTA.Headless/bin/Release/net40"),
-    (Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40")
+    (Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40"),
+    (Join-Path $root "src/SharpGTA.Launcher/bin/Release/net40")
 )
 foreach ($shipping in $shippingDirectories) {
     if (-not (Test-Path $shipping)) { throw "Missing net40 output: $shipping" }
@@ -121,6 +122,8 @@ $xpManagedApiAllowlist = @{
     "user32.dll!PostQuitMessage" = $true
     "user32.dll!GetClientRect" = $true
     "user32.dll!AdjustWindowRect" = $true
+    "user32.dll!SetWindowPos" = $true
+    "user32.dll!ShowCursor" = $true
     "user32.dll!LoadCursorW" = $true
     "kernel32.dll!GetModuleHandleW" = $true
     "d3d9.dll!Direct3DCreate9" = $true

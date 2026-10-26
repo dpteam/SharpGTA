@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 namespace SharpGTA.D3D9
 {
     /// <summary>Zero-based slots from d3d9.h, including the three IUnknown methods.</summary>
-    /// <summary>Zero-based slots from d3d9.h, including the three IUnknown methods.</summary>
     internal static class D3dVtableSlots
     {
         internal const int ComRelease = 2;
@@ -12,16 +11,22 @@ namespace SharpGTA.D3D9
         internal const int Reset = 16;
         internal const int Present = 17;
         internal const int GetBackBuffer = 18;
+        internal const int CreateTexture = 23;
         internal const int TestCooperativeLevel = 3;
         internal const int BeginScene = 41;
         internal const int EndScene = 42;
         internal const int Clear = 43;
         internal const int SetTransform = 44;
         internal const int SetRenderState = 57;
+        internal const int SetTexture = 65;
+        internal const int SetTextureStageState = 67;
+        internal const int SetSamplerState = 69;
         internal const int DrawPrimitiveUp = 83;
         internal const int SetFvf = 89;
         internal const int SurfaceLockRect = 13;
         internal const int SurfaceUnlockRect = 14;
+        internal const int TextureLockRect = 19;
+        internal const int TextureUnlockRect = 20;
     }
 
     internal static class ComVtable
@@ -74,6 +79,28 @@ namespace SharpGTA.D3D9
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     internal delegate int DeviceDrawPrimitiveUpDelegate(IntPtr device, uint primitiveType,
         uint primitiveCount, IntPtr data, uint stride);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceCreateTextureDelegate(IntPtr device, uint width, uint height,
+        uint levels, uint usage, uint format, uint pool, out IntPtr texture, IntPtr sharedHandle);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceSetTextureDelegate(IntPtr device, uint stage, IntPtr texture);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceSetTextureStageStateDelegate(IntPtr device, uint stage,
+        uint type, uint value);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceSetSamplerStateDelegate(IntPtr device, uint sampler,
+        uint type, uint value);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int TextureLockRectDelegate(IntPtr texture, uint level,
+        ref D3dLockedRect lockedRect, IntPtr rectangle, uint flags);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int TextureUnlockRectDelegate(IntPtr texture, uint level);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     internal delegate int DeviceGetBackBufferDelegate(IntPtr device, uint swapChain,

@@ -1,0 +1,73 @@
+<!doctype html>
+<html class="dark">
+<head>
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta charset="utf-8">
+<title>__BRAND_TITLE__</title>
+<style>/*__STYLE__*/</style>
+</head>
+<body>
+<div class="app">
+  <div class="sidebar">
+    <div class="brand">__BRAND_MARKED__</div>
+    <div class="eyebrow">__BRAND_TAGLINE__ / launcher</div>
+    <div class="nav"><button id="playNav" type="button">&#9656; Играть</button></div>
+    <button id="themeToggle" class="theme-button" type="button">Светлая тема</button>
+    <div class="sidebar-foot">
+      <span class="dot"></span> Локальный MSHTML<br>
+      Windows XP &rarr; 11<br>
+      __BRAND_VERSION__ &#183; experimental
+    </div>
+  </div>
+  <div class="main">
+    <div class="top">
+      <div class="eyebrow">Два города. Один managed engine.</div>
+      <h1>Выбери свою GTA.</h1>
+    </div>
+    <div class="hero">
+      <div class="badge">ORIGINAL DATA / NEW PRESENTATION</div>
+      <h2>От Liberty City — к интерактивному frontend.</h2>
+      <p>Укажи папку с оригинальной игрой. Лаунчер запомнит настройки и запустит D3D9 frontend.
+         Игровые ресурсы не входят в комплект и не изменяются.</p>
+    </div>
+    <div class="panel">
+      <div class="section-head"><h2><span class="num">01</span>Игра и ресурсы</h2><small>Только локальные файлы</small></div>
+      <div class="games">
+        <button id="gameIii" data-game="iii" class="selected" type="button">GTA III</button>
+        <button id="gameVc" data-game="vc" type="button">Vice City</button>
+      </div>
+      <div class="row">
+        <label>Папка с игрой<input id="root" type="text" spellcheck="false" placeholder="C:\Games\Grand Theft Auto 3"></label>
+        <button id="browseRoot" type="button">Выбрать…</button>
+      </div>
+      <p id="profileHint" class="hint">GTA III: интерактивное меню на оригинальных MENU.TXD, FONTS.TXD и GXT.</p>
+      <p id="vcWarning" class="hint warn hidden">Ресурсы Vice City уже читаются, но её интерактивный frontend ещё не подключён. Запуск будет отклонён честно, без подмены меню III.</p>
+    </div>
+    <div class="columns">
+      <div class="panel col">
+        <div class="section-head"><h2><span class="num">02</span>Presentation</h2></div>
+        <label>Язык меню<select id="language"><option value="0">English</option><option value="1">Français</option><option value="2">Deutsch</option><option value="3">Italiano</option><option value="4">Español</option></select></label>
+        <label>Разрешение<select id="resolution"><option value="0">640 × 480</option><option value="1">800 × 600</option><option value="2">1024 × 768</option><option value="3">1280 × 960</option></select></label>
+      </div>
+      <div class="panel col checks">
+        <div class="section-head"><h2><span class="num">03</span>Поведение</h2></div>
+        <label><input id="vsync" type="checkbox" checked>Vertical sync</label>
+        <label><input id="frameLimit" type="checkbox" checked>Ограничение частоты кадров</label>
+        <p class="hint">Эти параметры применяются при запуске. Внутри меню можно менять и другие настройки; gameplay и saves ещё не подключены.</p>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="section-head"><h2><span class="num">04</span>Аргументы запуска</h2><small>без shell</small></div>
+      <pre id="preview">—</pre>
+    </div>
+    <div class="storage" id="storage"></div>
+    <div class="bottom">
+      <button class="launch primary" id="launch" type="button">Запустить frontend &nbsp;&#8599;</button>
+      <button class="save" id="save" type="button">Сохранить</button>
+      <div id="status" class="status">Подключение к лаунчеру…</div>
+    </div>
+  </div>
+</div>
+<script>/*__SCRIPT__*/</script>
+</body>
+</html>

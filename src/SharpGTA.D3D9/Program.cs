@@ -1,6 +1,8 @@
 using System;
 using System.Globalization;
 using System.IO;
+using SharpGTA.Frontend;
+using SharpGTA.IO;
 
 namespace SharpGTA.D3D9
 {
@@ -10,7 +12,17 @@ namespace SharpGTA.D3D9
         {
             bool hidden = false;
             bool exerciseReset = false;
+            bool menuMode = false;
+            bool framesSpecified = false;
             string screenshot = null;
+            string root = null;
+            string game = "iii";
+            string importSettings = null;
+            string exportSettings = null;
+            string languageText = null;
+            string resolutionText = null;
+            bool noVSync = false;
+            bool noFrameLimit = false;
             int frames = 1;
             for (int i = 0; i < args.Length; i++)
             {
@@ -18,6 +30,24 @@ namespace SharpGTA.D3D9
                     hidden = true;
                 else if (args[i] == "--exercise-reset")
                     exerciseReset = true;
+                else if (args[i] == "--menu")
+                    menuMode = true;
+                else if (args[i] == "--root" && i + 1 < args.Length)
+                    root = args[++i];
+                else if (args[i] == "--game" && i + 1 < args.Length)
+                    game = args[++i].ToLowerInvariant();
+                else if (args[i] == "--language" && i + 1 < args.Length)
+                    languageText = args[++i];
+                else if (args[i] == "--resolution" && i + 1 < args.Length)
+                    resolutionText = args[++i];
+                else if (args[i] == "--no-vsync")
+                    noVSync = true;
+                else if (args[i] == "--no-frame-limit")
+                    noFrameLimit = true;
+                else if (args[i] == "--import-settings" && i + 1 < args.Length)
+                    importSettings = args[++i];
+                else if (args[i] == "--export-settings" && i + 1 < args.Length)
+                    exportSettings = args[++i];
                 else if (args[i] == "--version")
                 {
                     Console.WriteLine(Branding.Title);
@@ -27,11 +57,12 @@ namespace SharpGTA.D3D9
                     screenshot = args[++i];
                 else if (args[i] == "--frames" && i + 1 < args.Length)
                 {
-                    if (!int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out frames) || frames <= 0)
+                    if (!int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture, out frames) || frames < 0)
                     {
                         Console.Error.WriteLine("Invalid --frames value.");
                         return 2;
                     }
+                    framesSpecified = true;
                 }
                 else if (args[i] == "--help" || args[i] == "-h")
                 {
@@ -45,36 +76,119 @@ namespace SharpGTA.D3D9
                 }
             }
 
-            Console.WriteLine(Branding.Name + " D3D9 proof-of-concept");
+            LauncherState imported = null;
+            if (importSettings != null)
+            {
+                if (!FrontendPreferences.TryImport(importSettings, out imported))
+                {
+                    Console.Error.WriteLine("Settings file does not contain a valid state: " + importSettings);
+                    return 2;
+                }
+                if (root == null)
+                    root = imported.Root;
+                if (game == "iii")
+                    game = imported.Game;
+            }
+            if (menuMode && root == null)
+            {
+                Console.Error.WriteLine("--menu requires --root PATH to an original GTA III data tree.");
+                return 2;
+            }
+            if (menuMode && game != "iii")
+            {
+                Console.Error.WriteLine("The interactive frontend currently supports only --game iii.");
+                return 2;
+            }
+            if (!menuMode && frames == 0)
+            {
+                Console.Error.WriteLine("Triangle mode requires a positive --frames value.");
+                return 2;
+            }
+            if (!framesSpecified)
+                frames = menuMode && screenshot == null ? 0 : 1;
+            if (menuMode && screenshot != null && frames == 0)
+            {
+                Console.Error.WriteLine("--screenshot requires a finite positive --frames value.");
+                return 2;
+            }
+
+            Console.WriteLine(Branding.Name + (menuMode ? " III frontend" : " D3D9 proof-of-concept"));
             Win32Window window = new Win32Window();
             D3D9Device device = new D3D9Device();
             try
             {
-                window.Create(Branding.Name + " D3D9", 640, 480, hidden);
-                device.Create(window.Handle, 640, 480);
+                FrontendSettings initialSettings = imported == null ? new FrontendSettings() :
+                    imported.Settings;
+                if (languageText != null)
+                {
+                    int language;
+                    if (!int.TryParse(languageText, NumberStyles.Integer, CultureInfo.InvariantCulture, out language) ||
+                        language < 0 || language > 4)
+                    {
+                        Console.Error.WriteLine("Invalid --language value; expected 0..4.");
+                        return 2;
+                    }
+                    initialSettings.Language = (SharpGTA.Frontend.FrontendLanguage)language;
+                }
+                if (resolutionText != null)
+                {
+                    int resolution = ResolutionIndex(resolutionText);
+                    if (resolution < 0)
+                    {
+                        Console.Error.WriteLine("Invalid --resolution; expected 640x480, 800x600, 1024x768 or 1280x960.");
+                        return 2;
+                    }
+                    initialSettings.ResolutionIndex = resolution;
+                }
+                if (noVSync)
+                    initialSettings.VSync = false;
+                if (noFrameLimit)
+                    initialSettings.FrameLimiter = false;
+                window.Create(Branding.Name + (menuMode ? " III" : " D3D9"),
+                    menuMode ? initialSettings.ResolutionWidth : 640,
+                    menuMode ? initialSettings.ResolutionHeight : 480, hidden);
+                device.VerticalSync = menuMode && initialSettings.VSync;
+                device.Create(window.Handle, window.ClientWidth, window.ClientHeight);
                 Console.WriteLine("Device: " + device.Description);
+                if (menuMode)
+                {
+                    PhysicalGameFileSystem files = new PhysicalGameFileSystem(root);
+                    using (FrontendApplication frontend = new FrontendApplication(window, device, files, initialSettings))
+                    {
+                        Console.WriteLine("Controls: mouse, arrows, Enter, Esc; Left/Right changes settings.");
+                        int result = frontend.Run(frames, screenshot, exerciseReset);
+                        if (exportSettings != null)
+                        {
+                            LauncherState exported = imported ?? new LauncherState();
+                            exported.Game = game;
+                            exported.Root = root;
+                            exported.ApplyFrontend(frontend.Menu.Settings);
+                            FrontendPreferences.Export(exportSettings, exported);
+                            Console.WriteLine("Settings exported: " + Path.GetFullPath(exportSettings));
+                        }
+                        Console.WriteLine("Frontend: shutdown completed.");
+                        return result;
+                    }
+                }
+
                 for (int frame = 0; frame < frames; frame++)
                 {
                     if (!window.ProcessMessages())
                         break;
-                    if (exerciseReset && frame > 0)
+                    if (window.ClientWidth > 0 && window.ClientHeight > 0 &&
+                        (window.ClientWidth != device.Width || window.ClientHeight != device.Height))
                         device.Reset(window.Handle, window.ClientWidth, window.ClientHeight);
+                    if (exerciseReset && frame > 0)
+                        device.Reset(window.Handle, device.Width, device.Height);
                     device.DrawTestTriangle();
                     // Read before Present: discard semantics do not guarantee the
                     // old back-buffer contents after presentation. Reset mode also
                     // acquires the surface in the first frame to test its release.
                     if (screenshot != null && (frame == frames - 1 || exerciseReset))
                     {
-                        byte[] pixels = device.ReadBackBufferBgra(640, 480);
+                        byte[] pixels = device.ReadBackBufferBgra(device.Width, device.Height);
                         if (frame == frames - 1)
-                        {
-                            string fullPath = Path.GetFullPath(screenshot);
-                            string directory = Path.GetDirectoryName(fullPath);
-                            if (!string.IsNullOrEmpty(directory))
-                                Directory.CreateDirectory(directory);
-                            BmpWriter.WriteBgra(fullPath, 640, 480, pixels);
-                            Console.WriteLine("Screenshot: " + fullPath);
-                        }
+                            SaveScreenshot(screenshot, device, pixels);
                     }
                     device.Present();
                 }
@@ -93,7 +207,7 @@ namespace SharpGTA.D3D9
             }
             catch (Exception exception)
             {
-                Console.Error.WriteLine("D3D9 failure: " + exception.Message);
+                Console.Error.WriteLine((menuMode ? "Frontend" : "D3D9") + " failure: " + exception.Message);
                 return 1;
             }
             finally
@@ -103,12 +217,38 @@ namespace SharpGTA.D3D9
             }
         }
 
+        private static void SaveScreenshot(string path, D3D9Device device, byte[] pixels)
+        {
+            string fullPath = Path.GetFullPath(path);
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+            BmpWriter.WriteBgra(fullPath, device.Width, device.Height, pixels);
+            Console.WriteLine("Screenshot: " + fullPath);
+        }
+
+        private static int ResolutionIndex(string value)
+        {
+            string normalized = (value ?? "").Trim().ToLowerInvariant().Replace(" ", "");
+            if (normalized == "640x480") return 0;
+            if (normalized == "800x600") return 1;
+            if (normalized == "1024x768") return 2;
+            if (normalized == "1280x960") return 3;
+            return -1;
+        }
+
         private static void PrintHelp()
         {
-            Console.WriteLine(Branding.Name + ".D3D9.exe [--hidden] [--frames N] [--screenshot PATH] [--exercise-reset] [--version]");
-            Console.WriteLine("  Creates a real D3D9 device and draws a fixed-function triangle.");
+            Console.WriteLine(Branding.Name + ".D3D9.exe [--menu --root PATH [--game iii]] [--hidden]");
+            Console.WriteLine("  [--frames N] [--screenshot PATH] [--exercise-reset] [--version]");
+            Console.WriteLine("  Default: creates a real D3D9 device and draws a fixed-function triangle.");
+            Console.WriteLine("  --menu: opens the interactive GTA III frontend using original TXD/GXT data.");
+            Console.WriteLine("  Menu controls: mouse, arrows, Enter, Esc; Left/Right changes settings.");
+            Console.WriteLine("  --frames 0 keeps the menu open; screenshots require a finite positive count.");
+            Console.WriteLine("  --language 0..4, --resolution WxH, --no-vsync, --no-frame-limit.");
+            Console.WriteLine("  --import-settings FILE and --export-settings FILE share launcher settings.");
             Console.WriteLine("  --exercise-reset releases cached surfaces and resets between frames.");
-            Console.WriteLine("  No D3DX, external DLL, model asset or game data is required.");
+            Console.WriteLine("  No D3DX, external DLL or game data is required for triangle mode.");
         }
     }
 }

@@ -5,14 +5,14 @@
 ```text
 SharpGTA.Core
   ↑             ↑             ↑
-Games.III     Games.VC    SharpGTA.D3D9
+Games.III     Games.VC    SharpGTA.D3D9 / Launcher
   ↑             ↑
      SharpGTA.Headless
              ↑
        SharpGTA.Tests ───────→ D3D9 ABI/BMP tests
 ```
 
-Core не знает конкретные игровые классы, Win32, Direct3D или RenderWare objects. Headless выбирает `IIIDefinition.Instance`/`VCDefinition.Instance` и собирает runtime; Headless не ссылается на D3D9. D3D9 использует только общий Core/branding и существует как отдельный executable. Собственные DLL проекта не являются сторонними зависимостями; shipping состоит только из этих сборок и .NET Framework/system API.
+Core не знает конкретные игровые классы, Win32, Direct3D или RenderWare objects. Headless выбирает `IIIDefinition.Instance`/`VCDefinition.Instance` и собирает runtime; Headless не ссылается на D3D9. D3D9 и Launcher используют общий Core/branding/frontend state и существуют как отдельные executables. Собственные DLL проекта не являются сторонними зависимостями; shipping состоит только из этих сборок и .NET Framework/system API.
 
 ## GameDefinition вместо общих numeric enums
 
@@ -72,9 +72,15 @@ GXT возвращает raw 16-bit code units и их прямое char-пре�
 
 ## Отдельный D3D9 proof-of-concept
 
-`SharpGTA.D3D9` — executable вне Core и Headless. `Win32Window` владеет Unicode window class, reverse-P/Invoke delegate и client size. `D3D9Device` использует только system `Direct3DCreate9` и direct COM vtable delegates с явным `StdCall`: HAL + software vertex processing, явно сообщаемый REF fallback, fixed-function `DrawPrimitiveUP`. `XYZRHW` vertices задаются в screen-space pixels. Создаётся lockable back buffer; `ReadBackBufferBgra` учитывает pitch и вызывается до `Present`, затем `BmpWriter` сохраняет top-down 32-bit BMP. Cached surface освобождается до explicit `Reset`, COM interfaces — при `Dispose`.
+`SharpGTA.D3D9` — executable вне Core и Headless. `Win32Window` владеет Unicode window class, reverse-P/Invoke delegate и client size; mouse/keyboard events попадают в ограниченную очередь. `D3D9Device` использует только system `Direct3DCreate9` и direct COM vtable delegates с явным `StdCall`: HAL + software vertex processing, явно сообщаемый REF fallback, fixed-function `DrawPrimitiveUP`. `XYZRHW` vertices задаются в screen-space pixels. Managed A8R8G8B8 textures создаются с pitch-aware upload, переживают Reset и рисуются alpha-blended quads. Создаётся lockable back buffer; `ReadBackBufferBgra` учитывает pitch и вызывается до `Present`, затем `BmpWriter` сохраняет top-down 32-bit BMP. Cached surface освобождается до explicit `Reset`, COM interfaces/textures — при `Dispose`.
 
-Synthetic D3D9 tests фиксируют slots, HRESULT, layouts, imports и BMP без GPU/окна. `tools/test-d3d9.ps1` отдельно выполняет живой create/reset/draw/readback/present и pixel assertions на `net40` AnyCPU/x86 и `net9.0`, плюс managed x86/x64 ABI tests. Это **не** подключение managed render DTO к GPU: textures/buffers/shaders/state cache, GTA passes и автоматический device-loss recovery ещё не реализованы.
+Synthetic D3D9 tests фиксируют slots, HRESULT, layouts, imports и BMP без GPU/окна. `tools/test-d3d9.ps1` отдельно выполняет живой create/reset/draw/readback/present и pixel assertions на `net40` AnyCPU/x86 и `net9.0-windows`, плюс managed x86/x64 ABI tests. Это **не** подключение managed 3D render DTO к GPU: vertex buffers/shaders/state cache, GTA passes и автоматический device-loss recovery ещё не реализованы.
+
+## Launcher и III frontend
+
+`src/SharpGTA.Core/Frontend` содержит независимые от GPU menu model, оригинальные III page layouts/hitboxes, GXT loader и таблицы CFont. `SharpGTA.Presentation/FrontendPreferencesState` — единый сериализованный state для launcher и menu; все настройки, включая brightness/volume/mouse, переживают round-trip. `D3D9FrontendRenderer` загружает MENU.TXD/FONTS.TXD в managed textures и рисует оригинальные backgrounds/logo/glyphs. `FrontendApplication` обрабатывает input, sliders, language/resolution/VSync и resize через Reset. New Game/load/save не имитируются: bootstrap игры и save profiles ещё отсутствуют, VC frontend не подменяется ресурсами III.
+
+`SharpGTA.Launcher` — отдельный WinForms `WebBrowser`/MSHTML host с embedded HTML/CSS/ES5. CSS не использует custom properties/grid/flex; никаких WebView2, CDN или внешних DLL. JS вызывает host через отменяемую `sharpgta://` навигацию, payload забирается `InvokeScript`, ответы приходят `sharpGtaReceive`. Launcher стартует D3D9 напрямую, сохраняет state в LocalAppData или portable `<EXE>/user`, а оригинальные ресурсы не меняет. `tools/test-launcher.ps1` проверяет реальный DOM/bridge, запуск frontend и settings reload; отладочный профиль изолирован.
 
 ## Что находится за границей текущего кода
 
@@ -83,6 +89,6 @@ Synthetic D3D9 tests фиксируют slots, HRESULT, layouts, imports и BMP 
 - model request/refcount/streaming channels и async I/O;
 - entities/pools, full CPhysical/Collision/CWorld, peds/vehicles/weapons/AI;
 - camera/frontend/HUD/audio/игровой renderer/saves;
-- Win32 input и подключение D3D9 к managed render resources.
+- VC frontend, gameplay bootstrap/save profiles и подключение D3D9 к managed 3D render resources.
 
 Эти функции не считаются реализованными из-за наличия DTO, chunk inventory или null interfaces.

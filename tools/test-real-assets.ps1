@@ -13,7 +13,7 @@ try {
     }
 
     $net40 = "src/SharpGTA.Headless/bin/Release/net40/SharpGTA.Headless.exe"
-    $net9 = "src/SharpGTA.Headless/bin/Release/net9.0/SharpGTA.Headless.dll"
+    $net9 = "src/SharpGTA.Headless/bin/Release/net9.0-windows/SharpGTA.Headless.dll"
     if (-not (Test-Path $net40) -or -not (Test-Path $net9)) {
         throw "Build Release first: dotnet build SharpGTA.sln -c Release"
     }

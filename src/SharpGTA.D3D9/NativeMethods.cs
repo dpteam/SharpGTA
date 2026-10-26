@@ -17,6 +17,13 @@ namespace SharpGTA.D3D9
         internal const uint WmClose = 0x0010;
         internal const uint WmQuit = 0x0012;
         internal const uint WmSize = 0x0005;
+        internal const uint WmKeyDown = 0x0100;
+        internal const uint WmSysKeyDown = 0x0104;
+        internal const uint WmMouseMove = 0x0200;
+        internal const uint WmLButtonDown = 0x0201;
+        internal const uint SwpNoMove = 0x0002;
+        internal const uint SwpNoZOrder = 0x0004;
+        internal const uint SwpNoActivate = 0x0010;
         internal const int SwShow = 5;
         internal const int IdcArrow = 32512;
 
@@ -110,6 +117,14 @@ namespace SharpGTA.D3D9
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool AdjustWindowRect(ref Rect rectangle, uint style,
             [MarshalAs(UnmanagedType.Bool)] bool menu);
+
+        [DllImport("user32.dll", ExactSpelling = true, EntryPoint = "SetWindowPos", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        internal static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
+            int x, int y, int width, int height, uint flags);
+
+        [DllImport("user32.dll", ExactSpelling = true, EntryPoint = "ShowCursor")]
+        internal static extern int ShowCursor([MarshalAs(UnmanagedType.Bool)] bool show);
 
         [DllImport("user32.dll", EntryPoint = "LoadCursorW", CharSet = CharSet.Unicode, ExactSpelling = true)]
         internal static extern IntPtr LoadCursor(IntPtr instance, IntPtr cursorName);

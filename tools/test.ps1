@@ -11,8 +11,8 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "dotnet build failed: $LASTEXITCODE" }
     }
 
-    Write-Host "=== Tests: net9.0 ==="
-    dotnet tests/SharpGTA.Tests/bin/Release/net9.0/SharpGTA.Tests.dll
+    Write-Host "=== Tests: net9.0-windows ==="
+    dotnet tests/SharpGTA.Tests/bin/Release/net9.0-windows/SharpGTA.Tests.dll
     if ($LASTEXITCODE -ne 0) { throw "net9.0 tests failed: $LASTEXITCODE" }
 
     Write-Host "=== Tests: net40 ==="

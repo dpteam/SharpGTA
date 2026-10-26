@@ -19,6 +19,10 @@ namespace SharpGTA.Tests
             Assert.Equal(20, Marshal.SizeOf(typeof(D3dVertex)));
             Assert.Equal(12, Offset<D3dVertex>("Rhw"));
             Assert.Equal(16, Offset<D3dVertex>("Color"));
+            Assert.Equal(28, Marshal.SizeOf(typeof(D3dTexturedVertex)));
+            Assert.Equal(16, Offset<D3dTexturedVertex>("Color"));
+            Assert.Equal(20, Offset<D3dTexturedVertex>("U"));
+            Assert.Equal(24, Offset<D3dTexturedVertex>("V"));
 
             Assert.Equal(x86 ? 56 : 64, Marshal.SizeOf(typeof(D3dPresentParameters)));
             Assert.Equal(x86 ? 28 : 32, Offset<D3dPresentParameters>("DeviceWindow"));

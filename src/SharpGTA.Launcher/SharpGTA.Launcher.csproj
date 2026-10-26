@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net40;net9.0-windows</TargetFrameworks>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>SharpGTA.Launcher</AssemblyName>
+    <RootNamespace>SharpGTA.Launcher</RootNamespace>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseSystemDrawing>true</UseSystemDrawing>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SharpGTA.Core\SharpGTA.Core.csproj" />
+    <ProjectReference Include="..\SharpGTA.Presentation\SharpGTA.Presentation.csproj" />
+    <InternalsVisibleTo Include="SharpGTA.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\ui.html" />
+    <EmbeddedResource Include="Assets\theme.css" />
+    <EmbeddedResource Include="Assets\app.js" />
+  </ItemGroup>
+</Project>

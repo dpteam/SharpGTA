@@ -10,11 +10,17 @@ namespace SharpGTA.D3D9
         private IntPtr backBuffer;
         private int backBufferWidth;
         private int backBufferHeight;
+        private bool sceneOpen;
+        private bool verticalSync;
         private bool disposed;
 
         public IntPtr Handle { get { return device; } }
         public string Description { get; private set; }
         public bool IsLost { get; private set; }
+        public int Width { get { return backBufferWidth; } }
+        public int Height { get { return backBufferHeight; } }
+        internal bool SceneOpen { get { return sceneOpen; } }
+        public bool VerticalSync { get { return verticalSync; } set { verticalSync = value; } }
 
         public void Create(IntPtr window, int width, int height)
         {
@@ -53,12 +59,9 @@ namespace SharpGTA.D3D9
 
         public void DrawTestTriangle()
         {
-            ThrowIfUnavailable();
-            BeginSceneChecked();
-            bool sceneOpen = true;
+            BeginFrame(0xFF202040);
             try
             {
-                ClearChecked(D3dConstants.ClearTarget, 0xFF202040, 1.0f, 0);
                 D3dMatrix identity = D3dMatrix.Identity();
                 SetTransformChecked(D3dConstants.StateWorld, ref identity);
                 SetTransformChecked(D3dConstants.StateView, ref identity);
@@ -73,29 +76,135 @@ namespace SharpGTA.D3D9
                     new D3dVertex { X = 480.0f, Y = 360.0f, Z = 0.0f, Rhw = 1.0f, Color = 0xFF00FF00 },
                     new D3dVertex { X = 160.0f, Y = 360.0f, Z = 0.0f, Rhw = 1.0f, Color = 0xFF0000FF }
                 };
-                int vertexSize = Marshal.SizeOf(typeof(D3dVertex));
-                IntPtr data = Marshal.AllocHGlobal(checked(vertexSize * vertices.Length));
+                GCHandle pin = GCHandle.Alloc(vertices, GCHandleType.Pinned);
                 try
                 {
-                    for (int i = 0; i < vertices.Length; i++)
-                        Marshal.StructureToPtr(vertices[i], new IntPtr(data.ToInt64() + (long)i * vertexSize), false);
-                    DrawPrimitiveUpChecked(1, data, (uint)vertexSize);
+                    DrawPrimitiveUpChecked(1, pin.AddrOfPinnedObject(), (uint)Marshal.SizeOf(typeof(D3dVertex)));
                 }
                 finally
                 {
-                    Marshal.FreeHGlobal(data);
+                    pin.Free();
                 }
-                EndSceneChecked();
-                sceneOpen = false;
+                EndFrame();
             }
             finally
             {
                 if (sceneOpen)
                 {
-                    try { EndSceneChecked(); }
+                    try { EndFrame(); }
                     catch { /* Preserve the original rendering failure. */ }
                 }
             }
+        }
+
+        public void BeginFrame(uint color)
+        {
+            ThrowIfUnavailable();
+            if (sceneOpen)
+                throw new InvalidOperationException("A D3D scene is already open.");
+            BeginSceneChecked();
+            sceneOpen = true;
+            try
+            {
+                ClearChecked(D3dConstants.ClearTarget, color, 1.0f, 0);
+            }
+            catch
+            {
+                try { EndFrame(); }
+                catch { /* Preserve the original Clear failure. */ }
+                throw;
+            }
+        }
+
+        public void EndFrame()
+        {
+            ThrowIfUnavailable();
+            if (!sceneOpen)
+                throw new InvalidOperationException("No D3D scene is open.");
+            try
+            {
+                EndSceneChecked();
+            }
+            finally
+            {
+                sceneOpen = false;
+            }
+        }
+
+        public void DrawSprite(D3D9Texture texture, float x, float y, float right, float bottom,
+            float u0, float v0, float u1, float v1, uint color)
+        {
+            if (texture == null)
+                throw new ArgumentNullException("texture");
+            DrawQuads(texture, CreateQuad(x, y, right, bottom, u0, v0, u1, v1, color));
+        }
+
+        public void DrawRectangle(float x, float y, float right, float bottom, uint color)
+        {
+            DrawQuads(null, CreateQuad(x, y, right, bottom, 0, 0, 1, 1, color));
+        }
+
+        public void DrawQuads(D3D9Texture texture, D3dTexturedVertex[] vertices)
+        {
+            ThrowIfUnavailable();
+            if (!sceneOpen)
+                throw new InvalidOperationException("DrawQuads requires an open frame.");
+            if (vertices == null)
+                throw new ArgumentNullException("vertices");
+            if (vertices.Length == 0 || vertices.Length % 6 != 0)
+                throw new ArgumentException("Quad batches must contain six vertices per quad.", "vertices");
+
+            SetFvfChecked(D3dConstants.FvfTexturedVertex);
+            SetTextureChecked(0, texture == null ? IntPtr.Zero : texture.Handle);
+            SetRenderStateChecked(D3dConstants.StateLighting, 0);
+            SetRenderStateChecked(D3dConstants.StateCullMode, D3dConstants.CullNone);
+            SetRenderStateChecked(D3dConstants.StateZEnable, 0);
+            SetRenderStateChecked(D3dConstants.StateZWriteEnable, 0);
+            SetRenderStateChecked(D3dConstants.StateAlphaTestEnable, 0);
+            SetRenderStateChecked(D3dConstants.StateAlphaBlendEnable, 1);
+            SetRenderStateChecked(D3dConstants.StateSourceBlend, D3dConstants.BlendSourceAlpha);
+            SetRenderStateChecked(D3dConstants.StateDestinationBlend, D3dConstants.BlendInverseSourceAlpha);
+            SetRenderStateChecked(D3dConstants.StateAlphaFunc, D3dConstants.CompareAlways);
+            SetRenderStateChecked(D3dConstants.StateAlphaRef, 0);
+            SetTextureStageStateChecked(0, D3dConstants.TextureColorOp,
+                texture == null ? D3dConstants.TextureOpSelectArg1 : D3dConstants.TextureOpModulate);
+            SetTextureStageStateChecked(0, D3dConstants.TextureColorArg1,
+                texture == null ? D3dConstants.TextureArgumentDiffuse : D3dConstants.TextureArgumentTexture);
+            SetTextureStageStateChecked(0, D3dConstants.TextureColorArg2, D3dConstants.TextureArgumentDiffuse);
+            SetTextureStageStateChecked(0, D3dConstants.TextureAlphaOp,
+                texture == null ? D3dConstants.TextureOpSelectArg1 : D3dConstants.TextureOpModulate);
+            SetTextureStageStateChecked(0, D3dConstants.TextureAlphaArg1,
+                texture == null ? D3dConstants.TextureArgumentDiffuse : D3dConstants.TextureArgumentTexture);
+            SetTextureStageStateChecked(0, D3dConstants.TextureAlphaArg2, D3dConstants.TextureArgumentDiffuse);
+            SetSamplerStateChecked(0, D3dConstants.SamplerAddressU, D3dConstants.TextureAddressClamp);
+            SetSamplerStateChecked(0, D3dConstants.SamplerAddressV, D3dConstants.TextureAddressClamp);
+            SetSamplerStateChecked(0, D3dConstants.SamplerMagFilter, D3dConstants.TextureFilterLinear);
+            SetSamplerStateChecked(0, D3dConstants.SamplerMinFilter, D3dConstants.TextureFilterLinear);
+            SetSamplerStateChecked(0, D3dConstants.SamplerMipFilter, D3dConstants.TextureFilterNone);
+
+            GCHandle pin = GCHandle.Alloc(vertices, GCHandleType.Pinned);
+            try
+            {
+                DrawPrimitiveUpChecked((uint)(vertices.Length / 3), pin.AddrOfPinnedObject(),
+                    (uint)Marshal.SizeOf(typeof(D3dTexturedVertex)));
+            }
+            finally
+            {
+                pin.Free();
+            }
+        }
+
+        private static D3dTexturedVertex[] CreateQuad(float x, float y, float right, float bottom,
+            float u0, float v0, float u1, float v1, uint color)
+        {
+            return new[] {
+                new D3dTexturedVertex(x, y, color, u0, v0),
+                new D3dTexturedVertex(right, y, color, u1, v0),
+                new D3dTexturedVertex(x, bottom, color, u0, v1),
+                new D3dTexturedVertex(right, y, color, u1, v0),
+                new D3dTexturedVertex(right, bottom, color, u1, v1),
+                new D3dTexturedVertex(x, bottom, color, u0, v1)
+            };
         }
 
         public void Present()
@@ -129,7 +238,10 @@ namespace SharpGTA.D3D9
             backBufferHeight = 0;
             D3dPresentParameters parameters = CreatePresentParameters(window, width, height);
             DeviceResetDelegate reset = ComVtable.GetMethod<DeviceResetDelegate>(device, D3dVtableSlots.Reset);
-            Check(reset(device, ref parameters), "Reset");
+            int result = reset(device, ref parameters);
+            if (result != D3dConstants.D3DOk)
+                IsLost = true;
+            Check(result, "Reset");
             backBufferWidth = width;
             backBufferHeight = height;
             IsLost = false;
@@ -173,6 +285,67 @@ namespace SharpGTA.D3D9
             }
         }
 
+        public D3D9Texture CreateTextureRgba(int width, int height, byte[] rgba)
+        {
+            ThrowIfUnavailable();
+            if (width <= 0)
+                throw new ArgumentOutOfRangeException("width");
+            if (height <= 0)
+                throw new ArgumentOutOfRangeException("height");
+            if (rgba == null)
+                throw new ArgumentNullException("rgba");
+            int byteLength = checked(width * height * 4);
+            if (rgba.Length != byteLength)
+                throw new ArgumentException("RGBA data length does not match the texture size.", "rgba");
+
+            IntPtr texture = IntPtr.Zero;
+            DeviceCreateTextureDelegate create = ComVtable.GetMethod<DeviceCreateTextureDelegate>(
+                device, D3dVtableSlots.CreateTexture);
+            Check(create(device, (uint)width, (uint)height, 1, 0, D3dConstants.FormatA8R8G8B8,
+                D3dConstants.PoolManaged, out texture, IntPtr.Zero), "CreateTexture");
+            try
+            {
+                if (texture == IntPtr.Zero)
+                    throw new InvalidOperationException("CreateTexture returned a null texture.");
+                byte[] bgra = new byte[byteLength];
+                for (int i = 0; i < byteLength; i += 4)
+                {
+                    bgra[i] = rgba[i + 2];
+                    bgra[i + 1] = rgba[i + 1];
+                    bgra[i + 2] = rgba[i];
+                    bgra[i + 3] = rgba[i + 3];
+                }
+                D3dLockedRect locked = new D3dLockedRect();
+                TextureLockRectDelegate lockRect = ComVtable.GetMethod<TextureLockRectDelegate>(
+                    texture, D3dVtableSlots.TextureLockRect);
+                Check(lockRect(texture, 0, ref locked, IntPtr.Zero, 0), "Texture LockRect");
+                try
+                {
+                    if (locked.Bits == IntPtr.Zero || locked.Pitch < width * 4)
+                        throw new InvalidOperationException("Invalid texture lock result: pitch=" + locked.Pitch);
+                    for (int y = 0; y < height; y++)
+                    {
+                        IntPtr row = new IntPtr(locked.Bits.ToInt64() + (long)y * locked.Pitch);
+                        Marshal.Copy(bgra, y * width * 4, row, width * 4);
+                    }
+                }
+                finally
+                {
+                    TextureUnlockRectDelegate unlock = ComVtable.GetMethod<TextureUnlockRectDelegate>(
+                        texture, D3dVtableSlots.TextureUnlockRect);
+                    Check(unlock(texture, 0), "Texture UnlockRect");
+                }
+                D3D9Texture result = new D3D9Texture(texture, width, height);
+                texture = IntPtr.Zero;
+                return result;
+            }
+            finally
+            {
+                if (texture != IntPtr.Zero)
+                    Release(ref texture);
+            }
+        }
+
         public void Dispose()
         {
             if (disposed)
@@ -195,7 +368,7 @@ namespace SharpGTA.D3D9
                 ref parameters, out device);
         }
 
-        private static D3dPresentParameters CreatePresentParameters(IntPtr window, int width, int height)
+        private D3dPresentParameters CreatePresentParameters(IntPtr window, int width, int height)
         {
             return new D3dPresentParameters
             {
@@ -212,7 +385,7 @@ namespace SharpGTA.D3D9
                 AutoDepthStencilFormat = 0,
                 Flags = D3dConstants.PresentFlagLockableBackBuffer,
                 FullScreenRefreshRateInHz = 0,
-                PresentationInterval = 0
+                PresentationInterval = verticalSync ? 1u : 0u
             };
         }
 
@@ -254,6 +427,26 @@ namespace SharpGTA.D3D9
         {
             DeviceSetFvfDelegate set = ComVtable.GetMethod<DeviceSetFvfDelegate>(device, D3dVtableSlots.SetFvf);
             Check(set(device, fvf), "SetFVF");
+        }
+
+        private void SetTextureChecked(uint stage, IntPtr texture)
+        {
+            DeviceSetTextureDelegate set = ComVtable.GetMethod<DeviceSetTextureDelegate>(device, D3dVtableSlots.SetTexture);
+            Check(set(device, stage, texture), "SetTexture");
+        }
+
+        private void SetTextureStageStateChecked(uint stage, uint type, uint value)
+        {
+            DeviceSetTextureStageStateDelegate set = ComVtable.GetMethod<DeviceSetTextureStageStateDelegate>(
+                device, D3dVtableSlots.SetTextureStageState);
+            Check(set(device, stage, type, value), "SetTextureStageState");
+        }
+
+        private void SetSamplerStateChecked(uint sampler, uint type, uint value)
+        {
+            DeviceSetSamplerStateDelegate set = ComVtable.GetMethod<DeviceSetSamplerStateDelegate>(
+                device, D3dVtableSlots.SetSamplerState);
+            Check(set(device, sampler, type, value), "SetSamplerState");
         }
 
         private void DrawPrimitiveUpChecked(uint primitiveCount, IntPtr data, uint stride)

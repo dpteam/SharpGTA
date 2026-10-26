@@ -1,0 +1,77 @@
+/* SharpGTA launcher: flat surfaces, restrained accent, dark/light themes.
+   MSHTML-compatible: no custom properties, grid, flex, gap or HTML5-only tags. */
+* { box-sizing: border-box; }
+div { display: block; }
+html, body { margin: 0; padding: 0; }
+body { font-family: Tahoma, Verdana, Arial, sans-serif; font-size: 13px; background: #e6e6e6; color: #28313b; }
+html.dark body { background: #13151d; color: #edf1fa; }
+h1, h2, p { margin: 0; padding: 0; }
+.sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: 205px; padding: 24px 18px; background: #f7f7f7; border-right: 1px solid #d4d4d4; overflow-y: auto; }
+html.dark .sidebar { background: #1b1f2b; border-right-color: #424958; }
+.brand { font-size: 25px; font-weight: bold; letter-spacing: -1px; color: #28313b; }
+html.dark .brand { color: #edf1fa; }
+.brand em { font-style: normal; color: __BRAND_PRIMARY__; }
+.eyebrow { margin-top: 7px; font-size: 10px; line-height: 1.5; letter-spacing: 1px; text-transform: uppercase; color: #58636f; }
+html.dark .eyebrow { color: #b2bed2; }
+.nav { margin-top: 28px; }
+.nav button { display: block; width: 100%; margin-bottom: 6px; padding: 11px 12px; border: 1px solid #b6d7f7; border-radius: 5px; background: #e8f3ff; color: #064a85; text-align: left; font-weight: bold; }
+html.dark .nav button { border-color: #4a5680; background: #2b3356; color: #e3eaff; }
+.theme-button { width: 100%; margin-top: 18px; font-size: 12px; text-align: left; }
+.sidebar-foot { margin-top: 26px; font-size: 11px; line-height: 1.8; color: #58636f; }
+html.dark .sidebar-foot { color: #b2bed2; }
+.dot { display: inline-block; width: 6px; height: 6px; margin-right: 6px; border-radius: 50%; background: __BRAND_PRIMARY__; }
+.main { margin-left: 205px; padding: 22px 26px 112px 26px; }
+.top { margin-bottom: 16px; }
+.top h1 { margin-top: 4px; font-size: 24px; letter-spacing: -0.5px; }
+.hero { margin-bottom: 14px; padding: 16px 20px; border: 1px solid #a9d4f5; border-radius: 7px; background: #eaf5ff; }
+html.dark .hero { border-color: #3b4a6e; background: #1d2436; }
+.hero .badge { font-family: Consolas, monospace; font-size: 10px; letter-spacing: 1px; color: #005dba; }
+html.dark .hero .badge { color: #9fceff; }
+.hero h2 { margin-top: 8px; margin-bottom: 6px; font-size: 19px; }
+.hero p { font-size: 12px; line-height: 1.6; color: #3d4a57; }
+html.dark .hero p { color: #c3cede; }
+.panel { margin-bottom: 14px; padding: 16px 18px; border: 1px solid #d4d4d4; border-radius: 7px; background: #ffffff; }
+html.dark .panel { border-color: #424958; background: #212430; }
+.panel h2 { margin-bottom: 14px; font-size: 15px; }
+.panel h2 .num { margin-right: 8px; font-family: Consolas, monospace; font-size: 11px; color: __BRAND_PRIMARY__; }
+.section-head:after, .row:after, .columns:after { content: ""; display: block; clear: both; }
+.section-head small { float: right; font-size: 11px; font-weight: normal; color: #58636f; }
+html.dark .section-head small { color: #b2bed2; }
+.columns .col { float: left; width: 49%; }
+.columns .col + .col { margin-left: 2%; }
+label { display: block; margin-bottom: 10px; font-size: 11px; color: #58636f; }
+html.dark label { color: #b2bed2; }
+label input, label select { display: block; margin-top: 5px; }
+input[type=text], select { width: 100%; padding: 7px 9px; border: 1px solid #9ca8b4; border-radius: 4px; background: #ffffff; color: #28313b; font: inherit; }
+html.dark input[type=text], html.dark select { border-color: #6c7d99; background: #171c28; color: #edf1fa; }
+input:focus, select:focus { border-color: __BRAND_PRIMARY__; }
+.row label { float: left; width: 78%; }
+.row button { float: right; margin-top: 16px; }
+button { padding: 7px 13px; border: 1px solid #999999; border-radius: 4px; background: #f6f7f8; color: #28313b; font: inherit; cursor: pointer; }
+html.dark button { border-color: #6a7790; background: #42495b; color: #edf1fa; }
+button:hover:not(:disabled) { border-color: #005dba; }
+button:disabled { opacity: 0.5; cursor: default; }
+button.primary { border-color: __BRAND_DARK__; background: __BRAND_PRIMARY__; color: __BRAND_ONDARK__; font-weight: bold; }
+html.dark button.primary { border-color: #7272eb; background: #3b52c8; }
+.games button { margin-right: 7px; }
+.games button.selected { border-color: __BRAND_DARK__; background: #d9ecff; color: #064a85; font-weight: bold; }
+html.dark .games button.selected { border-color: #7272eb; background: #2b3356; color: #e3eaff; }
+.hint { margin-top: 9px; font-size: 11px; line-height: 1.6; color: #58636f; }
+html.dark .hint { color: #b2bed2; }
+.hint.warn { border-left: 3px solid #d08b2c; padding-left: 10px; color: #7a4f10; }
+html.dark .hint.warn { color: #e8bd77; }
+.checks label { margin-bottom: 7px; }
+input[type=checkbox] { margin-right: 6px; vertical-align: -2px; }
+pre#preview { margin: 0; padding: 10px; overflow-x: auto; border: 1px solid #d4d4d4; border-radius: 4px; background: #f4f4f4; font-family: Consolas, monospace; font-size: 11px; color: #064a85; white-space: pre-wrap; word-wrap: break-word; }
+html.dark pre#preview { border-color: #424958; background: #171c28; color: #e3eaff; }
+.bottom { position: fixed; left: 205px; right: 0; bottom: 0; padding: 10px 26px 12px 26px; border-top: 1px solid #d4d4d4; background: #e6e6e6; }
+html.dark .bottom { border-top-color: #424958; background: #13151d; }
+.bottom .launch { float: left; padding: 10px 24px; font-size: 14px; }
+.bottom .save { float: right; margin-top: 3px; }
+.status { margin: 0 120px 0 260px; padding-top: 9px; font-size: 11px; color: #58636f; }
+html.dark .status { color: #b2bed2; }
+.status.error { color: #9e3318; }
+html.dark .status.error { color: #ffbb9e; }
+.storage { margin-top: 4px; font-family: Consolas, monospace; font-size: 10px; color: #58636f; word-wrap: break-word; }
+html.dark .storage { color: #b2bed2; }
+.hidden { display: none; }

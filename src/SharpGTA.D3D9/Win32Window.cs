@@ -1,11 +1,28 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 
 namespace SharpGTA.D3D9
 {
+    internal enum WindowInputType
+    {
+        MouseMove,
+        LeftButtonDown,
+        KeyDown
+    }
+
+    internal struct WindowInputEvent
+    {
+        internal WindowInputType Type;
+        internal int X;
+        internal int Y;
+        internal int Key;
+    }
+
     internal sealed class Win32Window : IDisposable
     {
         private readonly string className = "SharpGTA.D3D9.Window." + Guid.NewGuid().ToString("N");
+        private readonly Queue<WindowInputEvent> input = new Queue<WindowInputEvent>();
         private NativeMethods.WndProc wndProcDelegate;
         private IntPtr instance;
         private IntPtr window;
@@ -89,6 +106,39 @@ namespace SharpGTA.D3D9
             return !CloseRequested;
         }
 
+        public bool TryReadInput(out WindowInputEvent value)
+        {
+            if (input.Count == 0)
+            {
+                value = new WindowInputEvent();
+                return false;
+            }
+            value = input.Dequeue();
+            return true;
+        }
+
+        public void ResizeClient(int width, int height)
+        {
+            if (disposed)
+                throw new ObjectDisposedException("Win32Window");
+            if (window == IntPtr.Zero)
+                throw new InvalidOperationException("Window has not been created.");
+            if (width <= 0)
+                throw new ArgumentOutOfRangeException("width");
+            if (height <= 0)
+                throw new ArgumentOutOfRangeException("height");
+            NativeMethods.Rect bounds = new NativeMethods.Rect { Right = width, Bottom = height };
+            if (!NativeMethods.AdjustWindowRect(ref bounds, NativeMethods.WsOverlappedWindow, false))
+                throw Error("AdjustWindowRect");
+            if (!NativeMethods.SetWindowPos(window, IntPtr.Zero, 0, 0,
+                bounds.Right - bounds.Left, bounds.Bottom - bounds.Top,
+                NativeMethods.SwpNoMove | NativeMethods.SwpNoZOrder | NativeMethods.SwpNoActivate))
+                throw Error("SetWindowPos");
+            UpdateClientSize();
+            if (ClientWidth != width || ClientHeight != height)
+                throw new InvalidOperationException("Win32 client resize did not reach the requested size.");
+        }
+
         public void UpdateClientSize()
         {
             UpdateClientSize(window);
@@ -138,7 +188,33 @@ namespace SharpGTA.D3D9
             }
             if (message == NativeMethods.WmSize)
                 UpdateClientSize(hWnd);
+            else if (message == NativeMethods.WmMouseMove)
+                QueueInput(new WindowInputEvent { Type = WindowInputType.MouseMove,
+                    X = SignedLowWord(lParam), Y = SignedHighWord(lParam) });
+            else if (message == NativeMethods.WmLButtonDown)
+                QueueInput(new WindowInputEvent { Type = WindowInputType.LeftButtonDown,
+                    X = SignedLowWord(lParam), Y = SignedHighWord(lParam) });
+            else if ((message == NativeMethods.WmKeyDown || message == NativeMethods.WmSysKeyDown) &&
+                (lParam.ToInt64() & 0x40000000L) == 0)
+                QueueInput(new WindowInputEvent { Type = WindowInputType.KeyDown, Key = wParam.ToInt32() });
             return NativeMethods.DefWindowProc(hWnd, message, wParam, lParam);
+        }
+
+        private void QueueInput(WindowInputEvent value)
+        {
+            if (input.Count >= 256)
+                input.Dequeue();
+            input.Enqueue(value);
+        }
+
+        private static int SignedLowWord(IntPtr value)
+        {
+            return unchecked((short)(value.ToInt64() & 0xFFFF));
+        }
+
+        private static int SignedHighWord(IntPtr value)
+        {
+            return unchecked((short)((value.ToInt64() >> 16) & 0xFFFF));
         }
 
         private static InvalidOperationException Error(string operation)

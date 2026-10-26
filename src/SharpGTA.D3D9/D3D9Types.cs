@@ -60,12 +60,36 @@ namespace SharpGTA.D3D9
         internal uint Color;
     }
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct D3dTexturedVertex
+    {
+        internal float X;
+        internal float Y;
+        internal float Z;
+        internal float Rhw;
+        internal uint Color;
+        internal float U;
+        internal float V;
+
+        internal D3dTexturedVertex(float x, float y, uint color, float u, float v)
+        {
+            X = x;
+            Y = y;
+            Z = 0.0f;
+            Rhw = 1.0f;
+            Color = color;
+            U = u;
+            V = v;
+        }
+    }
+
     internal static class D3dConstants
     {
         internal const uint SdkVersion = 32;
         internal const uint DeviceTypeHal = 1;
         internal const uint DeviceTypeRef = 2;
         internal const uint BehaviorSoftwareVertexProcessing = 0x20;
+        internal const uint PoolManaged = 1;
         internal const uint FormatA8R8G8B8 = 21;
         internal const uint SwapEffectDiscard = 1;
         internal const uint PresentFlagLockableBackBuffer = 1;
@@ -75,12 +99,44 @@ namespace SharpGTA.D3D9
         internal const uint FvfXyzRhw = 0x004;
         internal const uint FvfDiffuse = 0x040;
         internal const uint FvfVertex = FvfXyzRhw | FvfDiffuse;
+        internal const uint FvfTex1 = 0x100;
+        internal const uint FvfTexturedVertex = FvfVertex | FvfTex1;
         internal const uint ClearTarget = 1;
         internal const uint StateProjection = 3;
         internal const uint StateView = 2;
         internal const uint StateWorld = 256;
         internal const uint StateLighting = 137;
         internal const uint StateCullMode = 22;
+        internal const uint StateZEnable = 7;
+        internal const uint StateZWriteEnable = 14;
+        internal const uint StateAlphaTestEnable = 15;
+        internal const uint StateSourceBlend = 19;
+        internal const uint StateDestinationBlend = 20;
+        internal const uint StateAlphaRef = 24;
+        internal const uint StateAlphaFunc = 25;
+        internal const uint StateAlphaBlendEnable = 27;
+        internal const uint BlendSourceAlpha = 5;
+        internal const uint BlendInverseSourceAlpha = 6;
+        internal const uint CompareAlways = 8;
+        internal const uint TextureColorOp = 1;
+        internal const uint TextureColorArg1 = 2;
+        internal const uint TextureColorArg2 = 3;
+        internal const uint TextureAlphaOp = 4;
+        internal const uint TextureAlphaArg1 = 5;
+        internal const uint TextureAlphaArg2 = 6;
+        internal const uint TextureOpSelectArg1 = 2;
+        internal const uint TextureOpModulate = 4;
+        internal const uint TextureArgumentDiffuse = 0;
+        internal const uint TextureArgumentTexture = 2;
+        internal const uint SamplerAddressU = 1;
+        internal const uint SamplerAddressV = 2;
+        internal const uint SamplerMagFilter = 5;
+        internal const uint SamplerMinFilter = 6;
+        internal const uint SamplerMipFilter = 7;
+        internal const uint TextureAddressClamp = 3;
+        internal const uint TextureFilterPoint = 1;
+        internal const uint TextureFilterLinear = 2;
+        internal const uint TextureFilterNone = 0;
         internal const int D3DOk = 0;
         internal const int D3DErrorDeviceLost = unchecked((int)0x88760868);
         internal const int D3DErrorDeviceNotReset = unchecked((int)0x88760869);

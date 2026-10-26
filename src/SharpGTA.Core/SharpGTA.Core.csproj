@@ -21,6 +21,10 @@
       <BrandingLine Include="        public const string Title = Name + &quot; v&quot; + Version%3B" />
       <BrandingLine Include="        public const string Tagline = &quot;$(BrandTagline)&quot;%3B" />
       <BrandingLine Include="        public const string HomeUrl = &quot;$(BrandHomeUrl)&quot;%3B" />
+      <BrandingLine Include="        public const string PrimaryColor = &quot;$(BrandPrimaryColor)&quot;%3B" />
+      <BrandingLine Include="        public const string SecondaryColor = &quot;$(BrandSecondaryColor)&quot;%3B" />
+      <BrandingLine Include="        public const string DarkColor = &quot;$(BrandDarkColor)&quot;%3B" />
+      <BrandingLine Include="        public const string OnDarkColor = &quot;$(BrandOnDarkColor)&quot;%3B" />
       <BrandingLine Include="    }" />
       <BrandingLine Include="}" />
     </ItemGroup>
@@ -30,4 +34,10 @@
       <FileWrites Include="$(BrandingSource)" />
     </ItemGroup>
   </Target>
+  <ItemGroup>
+    <InternalsVisibleTo Include="SharpGTA.Presentation" />
+    <InternalsVisibleTo Include="SharpGTA.D3D9" />
+    <InternalsVisibleTo Include="SharpGTA.Launcher" />
+    <InternalsVisibleTo Include="SharpGTA.Tests" />
+  </ItemGroup>
 </Project>

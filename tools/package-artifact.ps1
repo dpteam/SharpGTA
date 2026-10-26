@@ -22,9 +22,13 @@ if (Get-ChildItem $target -Recurse -Directory | Where-Object { $_.Name -ieq "ref
 if (-not (Test-Path (Join-Path $target "SharpGTA.Core.dll"))) { throw "Missing SharpGTA.Core.dll in package." }
 if (-not (Test-Path (Join-Path $target "SharpGTA.Games.III.dll"))) { throw "Missing III profile in package." }
 if (-not (Test-Path (Join-Path $target "SharpGTA.Games.VC.dll"))) { throw "Missing VC profile in package." }
+if (-not (Test-Path (Join-Path $target "SharpGTA.Presentation.dll"))) { throw "Missing Presentation assembly in package." }
 $d3d9Executable = Join-Path $target "SharpGTA.D3D9.exe"
 if (-not (Test-Path $d3d9Executable)) { throw "Missing D3D9 executable in package." }
 if (-not (Test-Path (Join-Path $target "SharpGTA.D3D9.exe.config"))) { throw "Missing D3D9 executable config in package." }
+$launcherExecutable = Join-Path $target "SharpGTA.Launcher.exe"
+if (-not (Test-Path $launcherExecutable)) { throw "Missing Launcher executable in package." }
+if (-not (Test-Path (Join-Path $target "SharpGTA.Launcher.exe.config"))) { throw "Missing Launcher executable config in package." }
 
 $version = & $executable --version
 if ($LASTEXITCODE -ne 0) { throw "Packaged executable failed to start: $LASTEXITCODE" }
@@ -32,4 +36,7 @@ Write-Host $version
 $d3d9Version = & $d3d9Executable --version
 if ($LASTEXITCODE -ne 0) { throw "Packaged D3D9 executable failed to start: $LASTEXITCODE" }
 Write-Host $d3d9Version
+$launcherVersion = & $launcherExecutable --check
+if ($LASTEXITCODE -ne 0) { throw "Packaged Launcher executable failed to start: $LASTEXITCODE" }
+Write-Host $launcherVersion
 Write-Host "Package check passed: $target"

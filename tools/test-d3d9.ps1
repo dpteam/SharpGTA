@@ -89,7 +89,7 @@ try {
         (Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe") `
         @() (Join-Path $output "triangle-net40.bmp")
     Invoke-Smoke "net9.0" "dotnet" `
-        @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0/SharpGTA.D3D9.dll")) `
+        @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `
         (Join-Path $output "triangle-net9.bmp")
 
     $x86Output = Join-Path $output "x86"

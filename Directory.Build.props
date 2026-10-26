@@ -4,6 +4,10 @@
     <BrandVersion>0.1.0</BrandVersion>
     <BrandTagline>A managed engine for GTA III and Vice City</BrandTagline>
     <BrandHomeUrl></BrandHomeUrl>
+    <BrandPrimaryColor>#0088FF</BrandPrimaryColor>
+    <BrandSecondaryColor>#0080FF</BrandSecondaryColor>
+    <BrandDarkColor>#000088</BrandDarkColor>
+    <BrandOnDarkColor>#FFFFFF</BrandOnDarkColor>
     <Company>$(BrandName)</Company>
     <Product>$(BrandName)</Product>
     <AssemblyTitle>$(BrandName)</AssemblyTitle>

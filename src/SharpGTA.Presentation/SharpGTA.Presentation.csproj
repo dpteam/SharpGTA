@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net40;net9.0</TargetFrameworks>
+    <AssemblyName>SharpGTA.Presentation</AssemblyName>
+    <RootNamespace>SharpGTA.Presentation</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\SharpGTA.Core\SharpGTA.Core.csproj" />
+    <InternalsVisibleTo Include="SharpGTA.Launcher" />
+    <InternalsVisibleTo Include="SharpGTA.D3D9" />
+    <InternalsVisibleTo Include="SharpGTA.Tests" />
+  </ItemGroup>
+</Project>

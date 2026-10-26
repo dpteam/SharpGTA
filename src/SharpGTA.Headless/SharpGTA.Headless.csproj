@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFrameworks>net40;net9.0</TargetFrameworks>
+    <TargetFrameworks>net40;net9.0-windows</TargetFrameworks>
     <OutputType>Exe</OutputType>
     <AssemblyName>SharpGTA.Headless</AssemblyName>
     <RootNamespace>SharpGTA.Headless</RootNamespace>

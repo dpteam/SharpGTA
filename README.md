@@ -4,7 +4,7 @@
 
 Управляемый движок на C# для данных и игровой логики **GTA III** и **GTA Vice City**. Целевая поставка — **.NET Framework 4.0 / Windows XP SP3**, без сторонних runtime-библиотек. Исходные игровые ресурсы не входят в репозиторий и должны принадлежать пользователю.
 
-> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, игрового renderer и звука пока нет; отдельный D3D9 proof-of-concept уже рисует и считывает реальный треугольник. См. [дорожную карту](docs/ROADMAP.md).
+> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, игрового renderer и звука пока нет; уже есть MSHTML Launcher и интерактивное меню GTA III на оригинальных TXD/GXT. См. [дорожную карту](docs/ROADMAP.md).
 
 ## Сборка
 
@@ -19,7 +19,7 @@ powershell -NoProfile -File tools/test-d3d9.ps1
 powershell -NoProfile -File tools/test-real-assets.ps1
 ```
 
-Поставляемая конфигурация — `net40`. `net9.0` существует только для быстрого запуска тех же исходников и тестов на современном runtime. Зелёный `net9.0` не считается доказательством совместимости с XP.
+Поставляемая конфигурация — `net40`. `net9.0` / `net9.0-windows` существуют только для быстрого запуска тех же исходников и тестов на современном runtime. Зелёный `net9.0` не считается доказательством совместимости с XP.
 
 ## GitHub Actions и артефакты
 
@@ -62,17 +62,39 @@ SharpGTA.Headless.exe --root "D:\Games\GTA III" --dat DATA/CUSTOM.DAT --strict
 
 `--rw`/`--rw-entry` показывают только проверенную по границам **инвентаризацию RenderWare chunks**. `--dff`/`--dff-entry` декодируют static non-native geometry/materials/BinMesh и HAnim/Skin/MatFX, а `--dff-scan` проверяет все DFF entries и отдельно считает empty/malformed и plugin counts. `--txd`/`--txd-entry` читают D3D8 dictionaries и декодируют все mip levels в RGBA; `--txd-scan` проверяет каждую TXD entry и все пиксели, отдельно считая unsupported PS2 rasters. `--render-preview` дополнительно проверяет managed mesh/material/texture pipeline через NullRenderer, по-прежнему без GPU/окна. `--state-at N` печатает диагностический FNV-1a-хеш состояния; это не криптографический хеш и не сетевой античит. Полный список опций: `--help`.
 
-## D3D9 proof-of-concept
+## Launcher и меню GTA III
 
-Отдельный `SharpGTA.D3D9.exe` создаёт Win32-окно и настоящий D3D9 device, рисует fixed-function треугольник и может сохранить back buffer до `Present` в BMP. Игровые ресурсы, D3DX, shaders и внешние DLL не нужны. Headless не ссылается на этот проект и не создаёт GPU/окно.
+Самый простой запуск:
 
 ```powershell
-src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --hidden --frames 2 --screenshot artifacts\d3d9-triangle.bmp
-# Дополнительно освобождает cached surface и вызывает Reset между кадрами:
+src\SharpGTA.Launcher\bin\Release\net40\SharpGTA.Launcher.exe
+```
+
+Launcher использует системный **MSHTML** (`WebBrowser`), embedded HTML/CSS/ES5 и `sharpgta://` bridge — без WebView2, CDN, HTTP server и внешних DLL. В нём можно выбрать папку игры, язык, разрешение, VSync/frame limiter и тему. Кнопка запуска открывает D3D9 frontend; состояние сохраняется в `%LOCALAPPDATA%\SharpGTA\launcher.ini` либо в `<EXE>/user/`, если рядом есть `portable.txt`.
+
+Внутри меню работают мышь, стрелки, Enter, Esc и Left/Right для настроек. Используются оригинальные `MENU.TXD`, `FONTS.TXD` и GXT. Доступны Start Game/Options/Exit, подтверждения, слайдеры, переключатели, пять языков и смена разрешения. **Gameplay и save profiles ещё не подключены**: соответствующие действия сообщают об этом честно. Vice City выбирается в Launcher как профиль данных, но её интерактивное меню ещё не реализовано и не подменяется III.
+
+Прямой запуск без Launcher:
+
+```powershell
+src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --menu --game iii --root "D:\Games\GTA III"
+# Стартовые настройки и экспорт общего профиля:
+src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --menu --game iii --root "D:\Games\GTA III" --language 1 --resolution 800x600 --export-settings "%LOCALAPPDATA%\SharpGTA\launcher.ini"
+# В следующий раз можно загрузить сохранённый state:
+src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --menu --import-settings "%LOCALAPPDATA%\SharpGTA\launcher.ini"
+```
+
+`tools/test-launcher.ps1` проверяет настоящий MSHTML DOM/bridge, темы, preview, запуск D3D9 и сохранение профиля. `tools/test-d3d9.ps1` отдельно проверяет triangle, textures-related ABI, reset/readback/present и x86/x64 layouts.
+
+## D3D9 proof-of-concept
+
+`SharpGTA.D3D9.exe` также сохраняет прежний triangle smoke без игровых ресурсов:
+
+```powershell
 src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --hidden --frames 2 --exercise-reset --screenshot artifacts\d3d9-reset.bmp
 ```
 
-`tools/test-d3d9.ps1` запускает этот сценарий на `net40` AnyCPU/x86 и `net9.0`, проверяет пиксели BMP и отдельно выполняет managed ABI/layout tests в x86/x64 процессах. Это проверка presentation ABI на текущей Windows, не полноценный GTA renderer и не Windows XP VM test.
+D3D9 textures используют managed pool, A8R8G8B8 и alpha-blended quads. Menu/glyph rendering, frontend state/layout и hitboxes разделены; Headless по-прежнему не создаёт GPU/окно. Это не полноценный GTA renderer и не Windows XP VM test.
 
 ## Проекты
 
@@ -80,7 +102,9 @@ src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --hidden --frames 2 --exer
 - `src/SharpGTA.Games.III` — пути, лимиты и схемы GTA III.
 - `src/SharpGTA.Games.VC` — отдельные пути, лимиты и схемы Vice City.
 - `src/SharpGTA.Headless` — консольный host с null audio/presentation, без зависимости от D3D9.
-- `src/SharpGTA.D3D9` — отдельный Win32/D3D9 triangle PoC, readback/BMP и explicit Reset.
+- `src/SharpGTA.Presentation` — общий serializer launcher/frontend settings, без native UI и зависимостей от игровых профилей.
+- `src/SharpGTA.D3D9` — Win32/D3D9 triangle PoC, textures/glyphs, интерактивный III frontend, readback/BMP и Reset.
+- `src/SharpGTA.Launcher` — standalone MSHTML launcher с общими frontend settings и прямым запуском D3D9.
 - `tests/SharpGTA.Tests` — собственный dependency-free test runner; синтетические данные не требуют игровых ресурсов.
 
 `--query-zone` читает navigation/info/map zones и cull flags, `--query-path GROUP NODE` выводит world position и next link. III paths читаются преимущественно из IDE, VC — из IPL; attached coords `/16` получают transform объекта, detached остаются мировыми. Это ещё не AI pathfinding.
