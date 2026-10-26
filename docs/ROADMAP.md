@@ -21,7 +21,8 @@
 - [x] Legacy COLL reader, sphere/box/triangle local queries, vertical static ground query.
 - [x] Model registry + static IPL world + sector broad phase + bounded diagnostics.
 - [x] RenderWare chunk inventory и static non-native DFF: Clump/FrameList/GeometryList/Atomic, geometry/morph, materials/texture refs, BinMesh list/strip, multi-clump и stale parent lengths.
-- [~] DFF plugins и native formats: Skin/HAnim/MatFX и D3D8 pre-instanced geometry ещё не перенесены.
+- [x] DFF HAnim, old/split Skin и MatFX (включая embedded textures) читаются на всех реальных DFF; counters в `--dff[-entry]/scan`.
+- [~] Animation/skinning/render behavior и D3D8 pre-instanced geometry ещё не перенесены.
 - [x] Smoke `LoadStandard()` на двух локальных реальных III/VC trees, обоих runtimes; counts в `docs/REAL-ASSETS.md`.
 - [x] Начальная синхронная загрузка 30 VC COLL-ресурсов из IMG до первого IPL и реальные ground queries.
 - [ ] Расширенные golden manifests/запросы для retail variants; bounds-based streaming/eviction ещё впереди.
@@ -70,4 +71,4 @@
 
 ## Следующий конкретный шаг
 
-Реализовать DFF HAnim/Skin/MatFX и typed zones/paths, затем render DTO/NullRenderer и D3D9 proof-of-concept. PC D3D8 TXD/mipmaps уже декодируются; VC COLL из IMG подключена.
+Реализовать typed zones/paths и renderer-independent DTO/NullRenderer, затем D3D9 proof-of-concept. DFF HAnim/Skin/MatFX и PC D3D8 TXD/mipmaps уже читаются; VC COLL из IMG подключена.

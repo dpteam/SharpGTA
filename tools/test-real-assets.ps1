@@ -58,6 +58,22 @@ try {
         if ($scan -notmatch "DFF-Scan: files=[1-9][0-9]* failed=0" -or $scan -notmatch "geometries=[1-9]") {
             throw "$game full DFF scan reported malformed nonempty entries."
         }
+        if ($scan -notmatch "skins=[1-9]" -or $scan -notmatch "hanim=[1-9]" -or $scan -notmatch "matfx=[1-9]") {
+            throw "$game DFF HAnim/Skin/MatFX counters were not populated."
+        }
+        if ($game -eq "vc") {
+            $fireman = Invoke-Case "VC split Skin" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--dff-entry", "FIREMAN.DFF", "--ticks", "0")) $false
+            if ($fireman -notmatch "FIREMAN\.DFF clumps=1 geometries=1.*skins=1 hanim=25") {
+                throw "VC FIREMAN.DFF split-skin probe failed."
+            }
+            if ($scan -notmatch "oldSkins=161 splitSkins=114" -or $scan -notmatch "matfx=2960") {
+                throw "VC DFF plugin counts changed or were not decoded."
+            }
+        } else {
+            if ($scan -notmatch "skins=18 oldSkins=18 splitSkins=0" -or $scan -notmatch "hanim=360 matfx=10") {
+                throw "III DFF plugin counts changed or were not decoded."
+            }
+        }
         $looseTxd = Invoke-Case "$game loose TXD" $net40 ($common + @("--txd", "MODELS/particle.txd", "--ticks", "0")) $false
         if ($looseTxd -notmatch "TXD: source=MODELS/particle\.txd declared=[1-9]" -or $looseTxd -notmatch "pixels=[1-9]") {
             throw "$game loose particle.txd decode failed."

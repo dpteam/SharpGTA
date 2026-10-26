@@ -19,6 +19,9 @@ namespace SharpGTA.Assets
         public const uint TextureDictionary = 0x16;
         public const uint GeometryList = 0x1A;
         public const uint NodeName = 0x0253F2FE;
+        public const uint Skin = 0x0116;
+        public const uint HAnim = 0x011E;
+        public const uint MatFx = 0x0120;
         public const uint BinMesh = 0x050E;
 
         internal static bool IsKnownContainer(uint id)

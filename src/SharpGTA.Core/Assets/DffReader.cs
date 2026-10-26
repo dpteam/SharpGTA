@@ -42,7 +42,7 @@ namespace SharpGTA.Assets
             return document.Clumps[0];
         }
 
-        private sealed class Parser
+        internal sealed class Parser
         {
             private readonly byte[] data;
             private readonly int offset;
@@ -124,6 +124,73 @@ namespace SharpGTA.Assets
                 };
             }
 
+            private static DffHAnim ReadHAnim(RenderWareStreamChunk plugin)
+            {
+                return DffPluginReader.ReadHAnim(plugin);
+            }
+
+            private static DffSkin ReadSkin(RenderWareStreamChunk plugin, int vertexCount)
+            {
+                return DffPluginReader.ReadSkin(plugin, vertexCount);
+            }
+
+            private static DffSkin ReadLegacyAtomicSkin(RenderWareStreamChunk plugin,
+                DffGeometry geometry)
+            {
+                return DffPluginReader.ReadLegacyAtomicSkin(plugin, geometry);
+            }
+
+            private DffSkin ReadAtomicExtension(RenderWareChunkReader children,
+                DffGeometry geometry, out bool hasMatFx, out bool matFxEnabled)
+            {
+                RenderWareStreamChunk extension = children.ReadExpected(RenderWareChunkTypes.Extension, "atomic.extension");
+                RenderWareChunkReader content = Content(extension, "atomic.extension");
+                DffSkin legacySkin = null;
+                hasMatFx = false;
+                matFxEnabled = false;
+                while (content.Remaining != 0)
+                {
+                    RenderWareStreamChunk plugin = content.Read("atomic plugin");
+                    if (plugin.Id == RenderWareChunkTypes.MatFx)
+                    {
+                        if (plugin.Payload.Remaining != 4)
+                            throw Error("Atomic MatFX payload must contain one int32.", plugin.ChunkOffset);
+                        hasMatFx = true;
+                        matFxEnabled = plugin.Payload.ReadInt32() != 0;
+                    }
+                    else if (plugin.Id == RenderWareChunkTypes.Skin)
+                    {
+                        legacySkin = ReadLegacyAtomicSkin(plugin, geometry);
+                    }
+                }
+                content.Finish("atomic.extension");
+                return legacySkin;
+            }
+
+            private DffMatFx ReadMaterialExtension(RenderWareChunkReader children)
+            {
+                RenderWareStreamChunk extension = children.ReadExpected(RenderWareChunkTypes.Extension, "material.extension");
+                RenderWareChunkReader content = Content(extension, "material.extension");
+                DffMatFx result = null;
+                while (content.Remaining != 0)
+                {
+                    RenderWareStreamChunk plugin = content.Read("material plugin");
+                    if (plugin.Id == RenderWareChunkTypes.MatFx)
+                    {
+                        if (result != null)
+                            throw Error("Material contains more than one MatFX plugin.", plugin.ChunkOffset);
+                        result = DffPluginReader.ReadMatFx(plugin, this);
+                    }
+                }
+                content.Finish("material.extension");
+                return result;
+            }
+
+            internal DffTextureReference ReadTextureForPlugin(RenderWareChunkReader content)
+            {
+                return ReadTexture(content);
+            }
+
             private static void SkipLightsAndCameras(RenderWareChunkReader children,
                 int frameCount, int lightCount, int cameraCount)
             {
@@ -173,6 +240,8 @@ namespace SharpGTA.Assets
                         RenderWareStreamChunk plugin = extensions.Read("frame plugin");
                         if (plugin.Id == RenderWareChunkTypes.NodeName)
                             frames[i].Name = plugin.Payload.ReadFixedAscii(plugin.PayloadLength);
+                        else if (plugin.Id == RenderWareChunkTypes.HAnim)
+                            frames[i].HAnim = ReadHAnim(plugin);
                     }
                 }
                 content.Finish("frame list");
@@ -229,7 +298,9 @@ namespace SharpGTA.Assets
                         throw Error("Atomic geometry index is outside the geometry list.", header.ChunkOffset);
                     geometry = geometries[geometryIndex];
                 }
-                SkipExtension(content, "atomic.extension");
+                bool hasMatFx;
+                bool matFxEnabled;
+                DffSkin legacySkin = ReadAtomicExtension(content, geometry, out hasMatFx, out matFxEnabled);
                 content.Finish("atomic");
                 return new DffAtomic
                 {
@@ -237,7 +308,10 @@ namespace SharpGTA.Assets
                     GeometryIndex = geometryIndex,
                     Flags = flags,
                     Unused = unused,
-                    Geometry = geometry
+                    Geometry = geometry,
+                    LegacySkin = legacySkin,
+                    HasMatFx = hasMatFx,
+                    MatFxEnabled = matFxEnabled
                 };
             }
 
@@ -322,7 +396,8 @@ namespace SharpGTA.Assets
                     if (triangles[i].MaterialIndex < -1 || triangles[i].MaterialIndex >= materials.Length)
                         throw Error("DFF triangle material index is outside the material list.", geometry.ChunkOffset);
                 }
-                DffMesh[] meshes = ReadGeometryExtension(content, materials.Length, vertexCount);
+                DffSkin skin;
+                DffMesh[] meshes = ReadGeometryExtension(content, materials.Length, vertexCount, out skin);
                 content.Finish("geometry");
                 return new DffGeometry
                 {
@@ -333,6 +408,7 @@ namespace SharpGTA.Assets
                     MorphTargets = morphTargets,
                     Materials = materials,
                     Meshes = meshes,
+                    Skin = skin,
                     HasLegacySurfaceProperties = hasLegacySurface,
                     LegacySurfaceProperties = legacySurface
                 };
@@ -377,7 +453,7 @@ namespace SharpGTA.Assets
                 DffSurfaceProperties surface = header.Version >= 0x30400 ? ReadSurface(reader) : legacySurface;
                 header.FinishPayload("material.struct");
                 DffTextureReference texture = textured != 0 ? ReadTexture(content) : null;
-                SkipExtension(content, "material.extension");
+                DffMatFx matFx = ReadMaterialExtension(content);
                 content.Finish("material");
                 return new DffMaterial
                 {
@@ -386,7 +462,8 @@ namespace SharpGTA.Assets
                     Textured = textured,
                     Color = color,
                     SurfaceProperties = surface,
-                    Texture = texture
+                    Texture = texture,
+                    MatFx = matFx
                 };
             }
 
@@ -405,15 +482,22 @@ namespace SharpGTA.Assets
             }
 
             private DffMesh[] ReadGeometryExtension(RenderWareChunkReader children,
-                int materialCount, int vertexCount)
+                int materialCount, int vertexCount, out DffSkin skin)
             {
                 RenderWareStreamChunk extension = children.ReadExpected(RenderWareChunkTypes.Extension, "geometry.extension");
                 RenderWareChunkReader content = Content(extension, "geometry.extension");
                 DffMesh[] meshes = null;
+                skin = null;
                 while (content.Remaining != 0)
                 {
                     RenderWareStreamChunk plugin = content.Read("geometry plugin");
-                    if (plugin.Id == RenderWareChunkTypes.BinMesh)
+                    if (plugin.Id == RenderWareChunkTypes.Skin)
+                    {
+                        if (skin != null)
+                            throw Error("Geometry contains more than one Skin plugin.", plugin.ChunkOffset);
+                        skin = ReadSkin(plugin, vertexCount);
+                    }
+                    else if (plugin.Id == RenderWareChunkTypes.BinMesh)
                     {
                         if (meshes != null)
                             throw Error("Geometry contains more than one BinMesh plugin.", plugin.ChunkOffset);

@@ -31,6 +31,11 @@
 | Decoded geometries | 6845 | 6510 |
 | Decoded triangles | 1012392 | 2211176 |
 | Clump length mismatches handled | 575 | 0 |
+| DFF Skin | 18 | 275 |
+| DFF old Skin | 18 | 161 |
+| DFF split Skin | 0 | 114 |
+| DFF HAnim | 360 | 23884 |
+| DFF MatFX materials | 10 | 2960 |
 | TXD entries scanned | 718 | 1368 |
 | Failed TXD entries | 0 | 0 |
 | D3D8 textures decoded | 7686 | 12023 |
@@ -41,7 +46,7 @@
 | DXT1 textures | 0 | 10846 |
 | DXT3 textures | 0 | 1149 |
 
-`LoadStandard()` завершается успешно на обеих играх и на обоих runtimes. Отсутствующих моделей для прочитанных IPL нет. Полные `--dff-scan` и `--txd-scan` проходят на всех nonempty DFF/TXD. Проверены отдельно III `loplyguy.dff` (legacy `0x30200`), `peds.dff` (22 clumps) и VC `wheels.DFF` (20 geometries), loose `particle.txd` обеих игр, III `PLAYER.TXD`, VC DXT1 `WMYBE.TXD` (9 levels), DXT3 `AIRPLAN.TXD` и uncompressed `DOCENTRANCE.TXD`. VC дополнительно читает 30 COLL-ресурсов из IMG до первого IPL. Реальные ground queries прошли:
+`LoadStandard()` завершается успешно на обеих играх и на обоих runtimes. Отсутствующих моделей для прочитанных IPL нет. Полные `--dff-scan` и `--txd-scan` проходят на всех nonempty DFF/TXD. Проверены отдельно III `loplyguy.dff` (legacy `0x30200`), `peds.dff` (22 clumps) и VC `wheels.DFF` (20 geometries), VC `FIREMAN.DFF` (split Skin + HAnim), loose `particle.txd` обеих игр, III `PLAYER.TXD`, VC DXT1 `WMYBE.TXD` (9 levels), DXT3 `AIRPLAN.TXD` и uncompressed `DOCENTRANCE.TXD`. VC дополнительно читает 30 COLL-ресурсов из IMG до первого IPL. Реальные ground queries прошли:
 
 - III `(812, -936)` → `ind_customroad003`, `z=35.9520454`;
 - VC `(-864, -575)` → `lh_icecream01`, `z=10.0659924`.

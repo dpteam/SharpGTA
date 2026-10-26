@@ -156,7 +156,14 @@ namespace SharpGTA.Headless
                     " atomics=" + scan.AtomicCount.ToString(CultureInfo.InvariantCulture) +
                     " triangles=" + scan.TriangleCount.ToString(CultureInfo.InvariantCulture) +
                     " materials=" + scan.MaterialCount.ToString(CultureInfo.InvariantCulture) +
-                    " lengthMismatches=" + scan.LengthMismatchCount.ToString(CultureInfo.InvariantCulture));
+                    " lengthMismatches=" + scan.LengthMismatchCount.ToString(CultureInfo.InvariantCulture) +
+                    " skins=" + scan.SkinCount.ToString(CultureInfo.InvariantCulture) +
+                    " oldSkins=" + scan.OldSkinCount.ToString(CultureInfo.InvariantCulture) +
+                    " splitSkins=" + scan.SplitSkinCount.ToString(CultureInfo.InvariantCulture) +
+                    " legacySkins=" + scan.LegacyAtomicSkinCount.ToString(CultureInfo.InvariantCulture) +
+                    " hanim=" + scan.HAnimCount.ToString(CultureInfo.InvariantCulture) +
+                    " matfx=" + scan.MatFxMaterialCount.ToString(CultureInfo.InvariantCulture) +
+                    " atomicMatfx=" + scan.AtomicMatFxCount.ToString(CultureInfo.InvariantCulture));
                 for (int i = 0; i < scan.Failures.Count; i++)
                     output.WriteLine("DFF-Error: " + scan.Failures[i].Name + " - " + scan.Failures[i].Message);
             }
@@ -270,12 +277,26 @@ namespace SharpGTA.Headless
             int meshes = 0;
             int vertices = 0;
             int mismatches = 0;
+            int skins = 0;
+            int hierarchies = 0;
+            int matFx = 0;
+            int atomicMatFx = 0;
             for (int i = 0; i < document.Clumps.Length; i++)
             {
                 DffClump clump = document.Clumps[i];
                 frames += clump.Frames.Length;
                 atomics += clump.Atomics.Length;
                 geometries += clump.Geometries.Length;
+                for (int frame = 0; frame < clump.Frames.Length; frame++)
+                {
+                    if (clump.Frames[frame].HAnim != null)
+                        hierarchies++;
+                }
+                for (int atomic = 0; atomic < clump.Atomics.Length; atomic++)
+                {
+                    if (clump.Atomics[atomic].HasMatFx)
+                        atomicMatFx++;
+                }
                 if (clump.HasDeclaredLengthMismatch)
                     mismatches++;
                 for (int j = 0; j < clump.Geometries.Length; j++)
@@ -284,6 +305,13 @@ namespace SharpGTA.Headless
                     triangles += geometry.Triangles.Length;
                     materials += geometry.Materials.Length;
                     meshes += geometry.Meshes.Length;
+                    if (geometry.Skin != null)
+                        skins++;
+                    for (int material = 0; material < geometry.Materials.Length; material++)
+                    {
+                        if (geometry.Materials[material].MatFx != null)
+                            matFx++;
+                    }
                     if (geometry.MorphTargets.Length != 0 && geometry.MorphTargets[0].Vertices != null)
                         vertices += geometry.MorphTargets[0].Vertices.Length;
                 }
@@ -296,7 +324,11 @@ namespace SharpGTA.Headless
                 " triangles=" + triangles.ToString(CultureInfo.InvariantCulture) +
                 " materials=" + materials.ToString(CultureInfo.InvariantCulture) +
                 " meshes=" + meshes.ToString(CultureInfo.InvariantCulture) +
-                " lengthMismatches=" + mismatches.ToString(CultureInfo.InvariantCulture));
+                " lengthMismatches=" + mismatches.ToString(CultureInfo.InvariantCulture) +
+                " skins=" + skins.ToString(CultureInfo.InvariantCulture) +
+                " hanim=" + hierarchies.ToString(CultureInfo.InvariantCulture) +
+                " matfx=" + matFx.ToString(CultureInfo.InvariantCulture) +
+                " atomicMatfx=" + atomicMatFx.ToString(CultureInfo.InvariantCulture));
         }
 
         private static void CountChunks(RenderWareChunk chunk, int level, ref int count, ref int depth)

@@ -290,12 +290,38 @@ namespace SharpGTA.Assets
                         report.GeometryCount += clump.Geometries.Length;
                         report.FrameCount += clump.Frames.Length;
                         report.AtomicCount += clump.Atomics.Length;
+                        for (int frame = 0; frame < clump.Frames.Length; frame++)
+                        {
+                            if (clump.Frames[frame].HAnim != null)
+                                report.HAnimCount++;
+                        }
+                        for (int atomic = 0; atomic < clump.Atomics.Length; atomic++)
+                        {
+                            if (clump.Atomics[atomic].HasMatFx)
+                                report.AtomicMatFxCount++;
+                            if (clump.Atomics[atomic].LegacySkin != null)
+                                report.LegacyAtomicSkinCount++;
+                        }
                         if (clump.HasDeclaredLengthMismatch)
                             report.LengthMismatchCount++;
                         for (int k = 0; k < clump.Geometries.Length; k++)
                         {
                             report.TriangleCount += clump.Geometries[k].Triangles.Length;
                             report.MaterialCount += clump.Geometries[k].Materials.Length;
+                            DffGeometry geometry = clump.Geometries[k];
+                            if (geometry.Skin != null)
+                            {
+                                report.SkinCount++;
+                                if (geometry.Skin.IsOldFormat)
+                                    report.OldSkinCount++;
+                                else
+                                    report.SplitSkinCount++;
+                            }
+                            for (int material = 0; material < geometry.Materials.Length; material++)
+                            {
+                                if (geometry.Materials[material].MatFx != null)
+                                    report.MatFxMaterialCount++;
+                            }
                         }
                     }
                 }

@@ -134,6 +134,13 @@ namespace SharpGTA.IO
             position += count;
         }
 
+        public void Seek(int relativePosition)
+        {
+            if (relativePosition < 0 || relativePosition > end - start)
+                throw new ArgumentOutOfRangeException("relativePosition");
+            position = start + relativePosition;
+        }
+
         public void Require(int count)
         {
             if (count < 0 || count > end - position)

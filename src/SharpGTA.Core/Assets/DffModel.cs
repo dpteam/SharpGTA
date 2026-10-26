@@ -27,6 +27,7 @@ namespace SharpGTA.Assets
         public int ParentIndex { get; internal set; }
         public int CreationFlags { get; internal set; }
         public string Name { get; internal set; }
+        public DffHAnim HAnim { get; internal set; }
     }
 
     public sealed class DffAtomic
@@ -36,6 +37,9 @@ namespace SharpGTA.Assets
         public int Flags { get; internal set; }
         public int Unused { get; internal set; }
         public DffGeometry Geometry { get; internal set; }
+        public DffSkin LegacySkin { get; internal set; }
+        public bool MatFxEnabled { get; internal set; }
+        public bool HasMatFx { get; internal set; }
     }
 
     public sealed class DffGeometry
@@ -49,6 +53,7 @@ namespace SharpGTA.Assets
         public DffMesh[] Meshes { get; internal set; }
         public bool HasLegacySurfaceProperties { get; internal set; }
         public DffSurfaceProperties LegacySurfaceProperties { get; internal set; }
+        public DffSkin Skin { get; internal set; }
     }
 
     public sealed class DffMorphTarget
@@ -112,6 +117,7 @@ namespace SharpGTA.Assets
         public DffColor Color { get; internal set; }
         public DffSurfaceProperties SurfaceProperties { get; internal set; }
         public DffTextureReference Texture { get; internal set; }
+        public DffMatFx MatFx { get; internal set; }
     }
 
     public sealed class DffTextureReference

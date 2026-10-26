@@ -35,6 +35,13 @@ namespace SharpGTA.Assets
         public int TriangleCount { get; internal set; }
         public int MaterialCount { get; internal set; }
         public int LengthMismatchCount { get; internal set; }
+        public int SkinCount { get; internal set; }
+        public int OldSkinCount { get; internal set; }
+        public int SplitSkinCount { get; internal set; }
+        public int LegacyAtomicSkinCount { get; internal set; }
+        public int HAnimCount { get; internal set; }
+        public int MatFxMaterialCount { get; internal set; }
+        public int AtomicMatFxCount { get; internal set; }
         public ReadOnlyCollection<DffScanFailure> Failures { get { return readOnlyFailures; } }
 
         internal void AddFailure(string name, string message)

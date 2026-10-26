@@ -4,7 +4,7 @@
 
 Управляемый движок на C# для данных и игровой логики **GTA III** и **GTA Vice City**. Целевая поставка — **.NET Framework 4.0 / Windows XP SP3**, без сторонних runtime-библиотек. Исходные игровые ресурсы не входят в репозиторий и должны принадлежать пользователю.
 
-> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, статические IPL-объекты и COLL-запросы. Skin/HAnim/MatFX, SCM, динамической физики, пешеходов, транспорта, рендера и звука пока нет. См. [дорожную карту](docs/ROADMAP.md).
+> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, рендера и звука пока нет. См. [дорожную карту](docs/ROADMAP.md).
 
 ## Сборка
 
@@ -56,7 +56,7 @@ SharpGTA.Headless.exe --root "D:\Games\GTA III" --txd-scan
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --dat DATA/CUSTOM.DAT --strict
 ```
 
-`--rw`/`--rw-entry` показывают только проверенную по границам **инвентаризацию RenderWare chunks**. `--dff`/`--dff-entry` декодируют static non-native geometry/materials/BinMesh, а `--dff-scan` проверяет все DFF entries и отдельно считает empty/malformed. `--txd`/`--txd-entry` читают D3D8 dictionaries и декодируют все mip levels в RGBA; `--txd-scan` проверяет каждую TXD entry и все пиксели, отдельно считая unsupported PS2 rasters. Это ещё не GPU rendering. `--state-at N` печатает диагностический FNV-1a-хеш состояния; это не криптографический хеш и не сетевой античит. Полный список опций: `--help`.
+`--rw`/`--rw-entry` показывают только проверенную по границам **инвентаризацию RenderWare chunks**. `--dff`/`--dff-entry` декодируют static non-native geometry/materials/BinMesh и HAnim/Skin/MatFX, а `--dff-scan` проверяет все DFF entries и отдельно считает empty/malformed и plugin counts. `--txd`/`--txd-entry` читают D3D8 dictionaries и декодируют все mip levels в RGBA; `--txd-scan` проверяет каждую TXD entry и все пиксели, отдельно считая unsupported PS2 rasters. Это ещё не GPU rendering. `--state-at N` печатает диагностический FNV-1a-хеш состояния; это не криптографический хеш и не сетевой античит. Полный список опций: `--help`.
 
 ## Проекты
 

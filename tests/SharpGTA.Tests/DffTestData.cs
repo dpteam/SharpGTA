@@ -9,9 +9,32 @@ namespace SharpGTA.Tests
     {
         private const uint NodeNameChunk = 0x0253F2FEu;
         private const uint BinMeshChunk = 0x0000050Eu;
+        private const uint SkinChunk = 0x00000116u;
+        private const uint HAnimChunk = 0x0000011Eu;
+        private const uint MatFxChunk = 0x00000120u;
         private const uint GeometryFormat = 0x0002009Au;
 
         internal static byte[] Create(uint version)
+        {
+            return Create(version, null, null, null, null);
+        }
+
+        internal static byte[] CreateWithPlugins(uint version, bool oldSkin)
+        {
+            return Create(
+                version,
+                Chunk(HAnimChunk, version, DffPluginTestData.CreateHAnimPayload()),
+                Chunk(SkinChunk, version, DffPluginTestData.CreateGeometrySkinPayload(3, oldSkin)),
+                Chunk(MatFxChunk, version, DffPluginTestData.CreateMaterialMatFxPayload(version)),
+                Chunk(MatFxChunk, version, DffPluginTestData.CreateAtomicMatFxPayload()));
+        }
+
+        private static byte[] Create(
+            uint version,
+            byte[] hAnimPlugin,
+            byte[] skinPlugin,
+            byte[] materialMatFxPlugin,
+            byte[] atomicMatFxPlugin)
         {
             if (version != 0x34003u && version != 0x33002u && version != 0x30200u)
                 throw new ArgumentOutOfRangeException("version");
@@ -20,8 +43,8 @@ namespace SharpGTA.Tests
                 RenderWareChunkTypes.Struct,
                 version,
                 version >= 0x33000u ? Int32Payload(1, 0, 0) : Int32Payload(1));
-            byte[] frameList = CreateFrameList(version);
-            byte[] geometry = CreateGeometry(version);
+            byte[] frameList = CreateFrameList(version, hAnimPlugin);
+            byte[] geometry = CreateGeometry(version, skinPlugin, materialMatFxPlugin);
             byte[] geometryAndAtomics;
             if (version >= 0x30400u)
             {
@@ -34,7 +57,9 @@ namespace SharpGTA.Tests
                     version,
                     Concat(
                         Chunk(RenderWareChunkTypes.Struct, version, Int32Payload(1, 0, 5, 9)),
-                        EmptyExtension(version)));
+                        atomicMatFxPlugin == null
+                            ? EmptyExtension(version)
+                            : Chunk(RenderWareChunkTypes.Extension, version, atomicMatFxPlugin)));
                 geometryAndAtomics = Concat(geometryList, atomic);
             }
             else
@@ -46,7 +71,9 @@ namespace SharpGTA.Tests
                     Concat(
                         Chunk(RenderWareChunkTypes.Struct, version, Int32Payload(1, 5, 9)),
                         geometry,
-                        EmptyExtension(version)));
+                        atomicMatFxPlugin == null
+                            ? EmptyExtension(version)
+                            : Chunk(RenderWareChunkTypes.Extension, version, atomicMatFxPlugin)));
                 geometryAndAtomics = atomic;
             }
 
@@ -56,7 +83,7 @@ namespace SharpGTA.Tests
                 Concat(clumpStruct, frameList, geometryAndAtomics, EmptyExtension(version)));
         }
 
-        private static byte[] CreateFrameList(uint version)
+        private static byte[] CreateFrameList(uint version, byte[] hAnimPlugin)
         {
             byte[] frameStruct;
             using (MemoryStream stream = new MemoryStream())
@@ -75,8 +102,8 @@ namespace SharpGTA.Tests
                 version,
                 Concat(
                     Chunk(RenderWareChunkTypes.Struct, version, frameStruct),
-                    CreateFrameExtension(version, "root"),
-                    CreateFrameExtension(version, "child")));
+                    CreateFrameExtension(version, "root", hAnimPlugin),
+                    CreateFrameExtension(version, "child", null)));
         }
 
         private static void WriteFrame(BinaryWriter writer, float x, float y, float z, int parentIndex)
@@ -90,22 +117,25 @@ namespace SharpGTA.Tests
             writer.Write(0);
         }
 
-        private static byte[] CreateFrameExtension(uint version, string name)
+        private static byte[] CreateFrameExtension(uint version, string name, byte[] hAnimPlugin)
         {
-            return Chunk(
-                RenderWareChunkTypes.Extension,
-                version,
-                Chunk(NodeNameChunk, version, Ascii.GetBytes(name)));
+            byte[] plugins = Chunk(NodeNameChunk, version, Ascii.GetBytes(name));
+            if (hAnimPlugin != null)
+                plugins = Concat(plugins, hAnimPlugin);
+            return Chunk(RenderWareChunkTypes.Extension, version, plugins);
         }
 
-        private static byte[] CreateGeometry(uint version)
+        private static byte[] CreateGeometry(
+            uint version,
+            byte[] skinPlugin,
+            byte[] materialMatFxPlugin)
         {
             byte[] geometryStruct = CreateGeometryStruct(version);
-            byte[] materialList = CreateMaterialList(version);
-            byte[] extension = Chunk(
-                RenderWareChunkTypes.Extension,
-                version,
-                Chunk(BinMeshChunk, version, CreateBinMeshPayload()));
+            byte[] materialList = CreateMaterialList(version, materialMatFxPlugin);
+            byte[] extensionPlugins = Chunk(BinMeshChunk, version, CreateBinMeshPayload());
+            if (skinPlugin != null)
+                extensionPlugins = Concat(extensionPlugins, skinPlugin);
+            byte[] extension = Chunk(RenderWareChunkTypes.Extension, version, extensionPlugins);
             return Chunk(
                 RenderWareChunkTypes.Geometry,
                 version,
@@ -176,17 +206,17 @@ namespace SharpGTA.Tests
             }
         }
 
-        private static byte[] CreateMaterialList(uint version)
+        private static byte[] CreateMaterialList(uint version, byte[] matFxPlugin)
         {
             return Chunk(
                 RenderWareChunkTypes.MaterialList,
                 version,
                 Concat(
                     Chunk(RenderWareChunkTypes.Struct, version, Int32Payload(2, -1, 0)),
-                    CreateMaterial(version)));
+                    CreateMaterial(version, matFxPlugin)));
         }
 
-        private static byte[] CreateMaterial(uint version)
+        private static byte[] CreateMaterial(uint version, byte[] matFxPlugin)
         {
             byte[] materialStruct;
             using (MemoryStream stream = new MemoryStream())
@@ -209,7 +239,9 @@ namespace SharpGTA.Tests
                 Concat(
                     Chunk(RenderWareChunkTypes.Struct, version, materialStruct),
                     CreateTexture(version),
-                    EmptyExtension(version)));
+                    matFxPlugin == null
+                        ? EmptyExtension(version)
+                        : Chunk(RenderWareChunkTypes.Extension, version, matFxPlugin)));
         }
 
         private static byte[] CreateTexture(uint version)
@@ -254,7 +286,7 @@ namespace SharpGTA.Tests
             }
         }
 
-        private static byte[] OddStringPayload(string value)
+        internal static byte[] OddStringPayload(string value)
         {
             byte[] text = Ascii.GetBytes(value);
             int length = text.Length + 1;
@@ -302,7 +334,7 @@ namespace SharpGTA.Tests
             writer.Write(z);
         }
 
-        private static byte[] Int32Payload(params int[] values)
+        internal static byte[] Int32Payload(params int[] values)
         {
             using (MemoryStream stream = new MemoryStream())
             {
@@ -315,7 +347,7 @@ namespace SharpGTA.Tests
             }
         }
 
-        private static byte[] Chunk(uint id, uint version, byte[] payload)
+        internal static byte[] Chunk(uint id, uint version, byte[] payload)
         {
             if (payload == null)
                 throw new ArgumentNullException("payload");
@@ -341,7 +373,7 @@ namespace SharpGTA.Tests
                 (version & 0x3Fu) << 16;
         }
 
-        private static byte[] Concat(params byte[][] chunks)
+        internal static byte[] Concat(params byte[][] chunks)
         {
             using (MemoryStream stream = new MemoryStream())
             {
