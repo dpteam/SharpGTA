@@ -12,6 +12,8 @@ namespace SharpGTA.D3D9
         internal const int Present = 17;
         internal const int GetBackBuffer = 18;
         internal const int CreateTexture = 23;
+        internal const int CreateVertexBuffer = 26;
+        internal const int CreateIndexBuffer = 27;
         internal const int TestCooperativeLevel = 3;
         internal const int BeginScene = 41;
         internal const int EndScene = 42;
@@ -23,8 +25,13 @@ namespace SharpGTA.D3D9
         internal const int SetTexture = 65;
         internal const int SetTextureStageState = 67;
         internal const int SetSamplerState = 69;
+        internal const int DrawIndexedPrimitive = 82;
         internal const int DrawPrimitiveUp = 83;
         internal const int SetFvf = 89;
+        internal const int SetStreamSource = 100;
+        internal const int SetIndices = 104;
+        internal const int BufferLock = 11;
+        internal const int BufferUnlock = 12;
         internal const int SurfaceLockRect = 13;
         internal const int SurfaceUnlockRect = 14;
         internal const int TextureLockRect = 19;
@@ -88,6 +95,33 @@ namespace SharpGTA.D3D9
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     internal delegate int DeviceDrawPrimitiveUpDelegate(IntPtr device, uint primitiveType,
         uint primitiveCount, IntPtr data, uint stride);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceDrawIndexedPrimitiveDelegate(IntPtr device, uint primitiveType,
+        int baseVertexIndex, uint minimumVertexIndex, uint vertexCount,
+        uint startIndex, uint primitiveCount);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceSetStreamSourceDelegate(IntPtr device, uint streamNumber,
+        IntPtr vertexBuffer, uint offsetInBytes, uint stride);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceSetIndicesDelegate(IntPtr device, IntPtr indexBuffer);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceCreateVertexBufferDelegate(IntPtr device, uint length,
+        uint usage, uint fvf, uint pool, out IntPtr vertexBuffer, IntPtr sharedHandle);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int DeviceCreateIndexBufferDelegate(IntPtr device, uint length,
+        uint usage, uint format, uint pool, out IntPtr indexBuffer, IntPtr sharedHandle);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int BufferLockDelegate(IntPtr buffer, uint offsetToLock,
+        uint sizeToLock, out IntPtr data, uint flags);
+
+    [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+    internal delegate int BufferUnlockDelegate(IntPtr buffer);
 
     [UnmanagedFunctionPointer(CallingConvention.StdCall)]
     internal delegate int DeviceCreateTextureDelegate(IntPtr device, uint width, uint height,

@@ -76,7 +76,9 @@ namespace SharpGTA.D3D9
                     diagnosticsPrinted = true;
                     Console.WriteLine("World-Render: models=" + resources.ModelCount + " txd=" + resources.TextureDictionaryCount +
                         " drawCalls=" + snapshot.DrawCalls.Count + " textures=" + renderer.TextureCount +
-                        " failedModels=" + resources.FailedModelCount + " missingTextures=" + resources.MissingTextureCount);
+                        " failedModels=" + resources.FailedModelCount + " missingTextures=" + resources.MissingTextureCount +
+                        " gpuMeshes=" + renderer.MeshCount + " gpuVertices=" + renderer.VertexCount +
+                        " gpuIndices=" + renderer.IndexCount + " backend=indexed-managed");
                     if (resources.FirstFailure != null)
                         Console.WriteLine("World-Render-First-Failure: " + resources.FirstFailure);
                     string[] missingTextures = resources.MissingTextureDetails;

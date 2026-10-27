@@ -9,8 +9,8 @@ namespace SharpGTA.D3D9
     {
         private readonly D3D9Device device;
         private readonly RenderResourceManager resources;
-        private readonly Dictionary<MeshData, D3dModelVertex[]> meshes =
-            new Dictionary<MeshData, D3dModelVertex[]>();
+        private readonly Dictionary<MeshData, D3D9ModelMesh> meshes =
+            new Dictionary<MeshData, D3D9ModelMesh>();
         private readonly Dictionary<TextureResourceKey, D3D9Texture> textures =
             new Dictionary<TextureResourceKey, D3D9Texture>();
         private bool disposed;
@@ -37,6 +37,8 @@ namespace SharpGTA.D3D9
             }
         }
         public int MeshCount { get { return meshes.Count; } }
+        public long VertexCount { get; private set; }
+        public long IndexCount { get; private set; }
 
         internal void Prepare(RenderSceneSnapshot snapshot)
         {
@@ -47,7 +49,11 @@ namespace SharpGTA.D3D9
                 RenderDrawCall call = snapshot.DrawCalls[i];
                 MeshData mesh = call.Mesh;
                 if (!meshes.ContainsKey(mesh))
-                    meshes.Add(mesh, Expand(mesh));
+                {
+                    meshes.Add(mesh, device.CreateModelMesh(ConvertVertices(mesh), mesh.Indices));
+                    VertexCount += mesh.Vertices.Length;
+                    IndexCount += mesh.Indices.Length;
+                }
                 if (call.Material != null)
                     GetTexture(call.Geometry, call.Material);
             }
@@ -104,6 +110,8 @@ namespace SharpGTA.D3D9
                     texture.Dispose();
             }
             textures.Clear();
+            foreach (D3D9ModelMesh mesh in meshes.Values)
+                mesh.Dispose();
             meshes.Clear();
         }
 
@@ -125,12 +133,14 @@ namespace SharpGTA.D3D9
             return texture;
         }
 
-        private static D3dModelVertex[] Expand(MeshData mesh)
+        internal static D3dModelVertex[] ConvertVertices(MeshData mesh)
         {
-            D3dModelVertex[] result = new D3dModelVertex[mesh.Indices.Length];
-            for (int i = 0; i < mesh.Indices.Length; i++)
+            if (mesh == null)
+                throw new ArgumentNullException("mesh");
+            D3dModelVertex[] result = new D3dModelVertex[mesh.Vertices.Length];
+            for (int i = 0; i < mesh.Vertices.Length; i++)
             {
-                RenderVertex source = mesh.Vertices[mesh.Indices[i]];
+                RenderVertex source = mesh.Vertices[i];
                 result[i].X = source.Position.X;
                 result[i].Y = source.Position.Y;
                 result[i].Z = source.Position.Z;

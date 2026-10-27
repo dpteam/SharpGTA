@@ -22,6 +22,10 @@ namespace SharpGTA.Tests
             Assert.Equal(19, D3dVtableSlots.TextureLockRect);
             Assert.Equal(20, D3dVtableSlots.TextureUnlockRect);
             Assert.Equal(23, D3dVtableSlots.CreateTexture);
+            Assert.Equal(26, D3dVtableSlots.CreateVertexBuffer);
+            Assert.Equal(27, D3dVtableSlots.CreateIndexBuffer);
+            Assert.Equal(11, D3dVtableSlots.BufferLock);
+            Assert.Equal(12, D3dVtableSlots.BufferUnlock);
             Assert.Equal(41, D3dVtableSlots.BeginScene);
             Assert.Equal(42, D3dVtableSlots.EndScene);
             Assert.Equal(43, D3dVtableSlots.Clear);
@@ -32,8 +36,11 @@ namespace SharpGTA.Tests
             Assert.Equal(65, D3dVtableSlots.SetTexture);
             Assert.Equal(67, D3dVtableSlots.SetTextureStageState);
             Assert.Equal(69, D3dVtableSlots.SetSamplerState);
+            Assert.Equal(82, D3dVtableSlots.DrawIndexedPrimitive);
             Assert.Equal(83, D3dVtableSlots.DrawPrimitiveUp);
             Assert.Equal(89, D3dVtableSlots.SetFvf);
+            Assert.Equal(100, D3dVtableSlots.SetStreamSource);
+            Assert.Equal(104, D3dVtableSlots.SetIndices);
 
             Assert.Equal(32u, D3dConstants.SdkVersion);
             Assert.Equal(1u, D3dConstants.DeviceTypeHal);
@@ -41,6 +48,7 @@ namespace SharpGTA.Tests
             Assert.Equal(0x20u, D3dConstants.BehaviorSoftwareVertexProcessing);
             Assert.Equal(21u, D3dConstants.FormatA8R8G8B8);
             Assert.Equal(75u, D3dConstants.FormatD24S8);
+            Assert.Equal(101u, D3dConstants.FormatIndex16);
             Assert.Equal(1u, D3dConstants.SwapEffectDiscard);
             Assert.Equal(1u, D3dConstants.PresentFlagLockableBackBuffer);
             Assert.Equal(0u, D3dConstants.BackBufferTypeMono);
@@ -101,7 +109,11 @@ namespace SharpGTA.Tests
                 typeof(DeviceClearDelegate), typeof(DeviceSetTransformDelegate),
                 typeof(DeviceSetLightDelegate), typeof(DeviceLightEnableDelegate),
                 typeof(DeviceSetRenderStateDelegate), typeof(DeviceSetFvfDelegate),
-                typeof(DeviceDrawPrimitiveUpDelegate), typeof(DeviceGetBackBufferDelegate),
+                typeof(DeviceDrawPrimitiveUpDelegate), typeof(DeviceDrawIndexedPrimitiveDelegate),
+                typeof(DeviceSetStreamSourceDelegate), typeof(DeviceSetIndicesDelegate),
+                typeof(DeviceCreateVertexBufferDelegate), typeof(DeviceCreateIndexBufferDelegate),
+                typeof(BufferLockDelegate), typeof(BufferUnlockDelegate),
+                typeof(DeviceGetBackBufferDelegate),
                 typeof(DeviceCreateTextureDelegate), typeof(DeviceSetTextureDelegate),
                 typeof(DeviceSetTextureStageStateDelegate), typeof(DeviceSetSamplerStateDelegate),
                 typeof(SurfaceLockRectDelegate), typeof(SurfaceUnlockRectDelegate),

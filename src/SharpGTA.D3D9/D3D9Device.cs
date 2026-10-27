@@ -224,15 +224,68 @@ namespace SharpGTA.D3D9
             SetDirectionalLight(direction, 0xFFA0A0A0);
         }
 
-        internal void DrawModelMesh(D3D9Texture texture, uint materialColor, D3dModelVertex[] vertices)
+        internal D3D9ModelMesh CreateModelMesh(D3dModelVertex[] vertices, ushort[] indices)
+        {
+            ThrowIfUnavailable();
+            if (vertices == null)
+                throw new ArgumentNullException("vertices");
+            if (indices == null)
+                throw new ArgumentNullException("indices");
+            if (vertices.Length == 0)
+                throw new ArgumentException("A model mesh needs vertices.", "vertices");
+            if (indices.Length == 0 || indices.Length % 3 != 0)
+                throw new ArgumentException("Model indices must contain complete triangles.", "indices");
+            for (int i = 0; i < indices.Length; i++)
+            {
+                if (indices[i] >= vertices.Length)
+                    throw new ArgumentException("Model index is outside the vertex array.", "indices");
+            }
+
+            int vertexBytes = checked(vertices.Length * Marshal.SizeOf(typeof(D3dModelVertex)));
+            int indexBytes = checked(indices.Length * 2);
+            IntPtr vertexBuffer = IntPtr.Zero;
+            IntPtr indexBuffer = IntPtr.Zero;
+            try
+            {
+                DeviceCreateVertexBufferDelegate createVertices = ComVtable.GetMethod<DeviceCreateVertexBufferDelegate>(
+                    device, D3dVtableSlots.CreateVertexBuffer);
+                Check(createVertices(device, (uint)vertexBytes, 0, D3dConstants.FvfModelVertex,
+                    D3dConstants.PoolManaged, out vertexBuffer, IntPtr.Zero), "CreateVertexBuffer");
+                if (vertexBuffer == IntPtr.Zero)
+                    throw new InvalidOperationException("CreateVertexBuffer returned null.");
+                DeviceCreateIndexBufferDelegate createIndices = ComVtable.GetMethod<DeviceCreateIndexBufferDelegate>(
+                    device, D3dVtableSlots.CreateIndexBuffer);
+                Check(createIndices(device, (uint)indexBytes, 0, D3dConstants.FormatIndex16,
+                    D3dConstants.PoolManaged, out indexBuffer, IntPtr.Zero), "CreateIndexBuffer");
+                if (indexBuffer == IntPtr.Zero)
+                    throw new InvalidOperationException("CreateIndexBuffer returned null.");
+
+                UploadStructBuffer(vertexBuffer, vertices, vertexBytes);
+                byte[] indexData = new byte[indexBytes];
+                Buffer.BlockCopy(indices, 0, indexData, 0, indexBytes);
+                UploadBuffer(indexBuffer, indexData);
+                D3D9ModelMesh result = new D3D9ModelMesh(vertexBuffer, indexBuffer,
+                    vertices.Length, indices.Length);
+                vertexBuffer = IntPtr.Zero;
+                indexBuffer = IntPtr.Zero;
+                return result;
+            }
+            finally
+            {
+                if (indexBuffer != IntPtr.Zero)
+                    Release(ref indexBuffer);
+                if (vertexBuffer != IntPtr.Zero)
+                    Release(ref vertexBuffer);
+            }
+        }
+
+        internal void DrawModelMesh(D3D9Texture texture, uint materialColor, D3D9ModelMesh mesh)
         {
             ThrowIfUnavailable();
             if (!sceneOpen)
                 throw new InvalidOperationException("DrawModelMesh requires an open frame.");
-            if (vertices == null)
-                throw new ArgumentNullException("vertices");
-            if (vertices.Length == 0 || vertices.Length % 3 != 0)
-                throw new ArgumentException("Model batches must contain complete triangles.", "vertices");
+            if (mesh == null)
+                throw new ArgumentNullException("mesh");
 
             SetFvfChecked(D3dConstants.FvfModelVertex);
             SetTextureChecked(0, texture == null ? IntPtr.Zero : texture.Handle);
@@ -268,15 +321,53 @@ namespace SharpGTA.D3D9
             SetSamplerStateChecked(0, D3dConstants.SamplerMinFilter, D3dConstants.TextureFilterLinear);
             SetSamplerStateChecked(0, D3dConstants.SamplerMipFilter, D3dConstants.TextureFilterNone);
 
-            GCHandle pin = GCHandle.Alloc(vertices, GCHandleType.Pinned);
+            DeviceSetStreamSourceDelegate setStream = ComVtable.GetMethod<DeviceSetStreamSourceDelegate>(
+                device, D3dVtableSlots.SetStreamSource);
+            Check(setStream(device, 0, mesh.VertexBuffer, 0,
+                (uint)Marshal.SizeOf(typeof(D3dModelVertex))), "SetStreamSource");
+            DeviceSetIndicesDelegate setIndices = ComVtable.GetMethod<DeviceSetIndicesDelegate>(
+                device, D3dVtableSlots.SetIndices);
+            Check(setIndices(device, mesh.IndexBuffer), "SetIndices");
+            DeviceDrawIndexedPrimitiveDelegate draw = ComVtable.GetMethod<DeviceDrawIndexedPrimitiveDelegate>(
+                device, D3dVtableSlots.DrawIndexedPrimitive);
+            Check(draw(device, D3dConstants.PrimitiveTriangleList, 0, 0,
+                (uint)mesh.VertexCount, 0, (uint)mesh.TriangleCount), "DrawIndexedPrimitive");
+        }
+
+        private void UploadStructBuffer<T>(IntPtr buffer, T[] data, int byteLength)
+        {
+            GCHandle pin = GCHandle.Alloc(data, GCHandleType.Pinned);
             try
             {
-                DrawPrimitiveUpChecked((uint)(vertices.Length / 3), pin.AddrOfPinnedObject(),
-                    (uint)Marshal.SizeOf(typeof(D3dModelVertex)));
+                byte[] bytes = new byte[byteLength];
+                Marshal.Copy(pin.AddrOfPinnedObject(), bytes, 0, byteLength);
+                UploadBuffer(buffer, bytes);
             }
             finally
             {
                 pin.Free();
+            }
+        }
+
+        private void UploadBuffer(IntPtr buffer, byte[] data)
+        {
+            if (data == null)
+                throw new ArgumentNullException("data");
+            BufferLockDelegate lockBuffer = ComVtable.GetMethod<BufferLockDelegate>(
+                buffer, D3dVtableSlots.BufferLock);
+            IntPtr locked;
+            Check(lockBuffer(buffer, 0, (uint)data.Length, out locked, 0), "Buffer Lock");
+            try
+            {
+                if (locked == IntPtr.Zero)
+                    throw new InvalidOperationException("Buffer Lock returned null.");
+                Marshal.Copy(data, 0, locked, data.Length);
+            }
+            finally
+            {
+                BufferUnlockDelegate unlock = ComVtable.GetMethod<BufferUnlockDelegate>(
+                    buffer, D3dVtableSlots.BufferUnlock);
+                Check(unlock(buffer), "Buffer Unlock");
             }
         }
 

@@ -23,6 +23,9 @@ function Assert-WorldLog([string]$name, [string]$text) {
     if (-not $text.Contains("WORLD PREVIEW / FREE FLY (not player gameplay): 8689 static IPL instances.")) {
         throw "$name did not load the expected static IPL world."
     }
+    if (-not $text.Contains("backend=indexed-managed")) {
+        throw "$name did not use managed vertex/index buffers."
+    }
     $render = [regex]::Match($text,
         "World-Render: models=(\d+) txd=(\d+) drawCalls=(\d+) textures=(\d+) failedModels=(\d+) missingTextures=(\d+)")
     if (-not $render.Success) {

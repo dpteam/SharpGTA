@@ -62,6 +62,8 @@ namespace SharpGTA.D3D9
             Console.WriteLine("Model: " + ModelName + " atomics=" + atomics.Length +
                 " drawCalls=" + snapshot.DrawCalls.Count + " triangles=" + TriangleCount +
                 " textures=" + renderer.TextureCount + " missing=" + resources.MissingTextureCount);
+            Console.WriteLine("Model-Render: backend=indexed-managed meshes=" + renderer.MeshCount +
+                " vertices=" + renderer.VertexCount + " indices=" + renderer.IndexCount);
         }
 
         internal string ModelName { get; private set; }

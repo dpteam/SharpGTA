@@ -112,7 +112,7 @@ src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --menu --import-settings "
 src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --hidden --frames 2 --exercise-reset --screenshot artifacts\d3d9-reset.bmp
 ```
 
-D3D9 textures используют managed pool, A8R8G8B8, alpha-blended quads и fixed-function 3D meshes с directional light/D24S8. Menu/glyph rendering, frontend state/layout и hitboxes разделены; Headless по-прежнему не создаёт GPU/окно. Это не полноценный GTA renderer и не Windows XP VM test.
+D3D9 textures и static 3D vertex/index buffers используют managed pool; meshes рисуются через `DrawIndexedPrimitive` с оригинальными shared vertices/indices. Screen-space triangle/UI используют `DrawPrimitiveUP`, directional light и D24S8 работают для 3D. Menu/glyph rendering, frontend state/layout и hitboxes разделены; Headless по-прежнему не создаёт GPU/окно. Это не полноценный GTA renderer и не Windows XP VM test.
 
 ## Проекты
 

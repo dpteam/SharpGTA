@@ -58,6 +58,9 @@ function Assert-ModelLog([string]$name, [string]$text) {
     if (-not $text.Contains("Model: player atomics=16 drawCalls=16 triangles=1550 textures=1 missing=0")) {
         throw "$name did not resolve the original PLAYER.DFF/TXD without substitutions."
     }
+    if (-not $text.Contains("Model-Render: backend=indexed-managed meshes=16 vertices=1435 indices=4650")) {
+        throw "$name did not use shared managed vertex/index buffers for the original model."
+    }
 }
 
 function Invoke-Model([string]$name, [string]$command, [string[]]$arguments, [string]$screenshot) {

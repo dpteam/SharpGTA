@@ -225,6 +225,7 @@ namespace SharpGTA.D3D9
         internal const uint PoolManaged = 1;
         internal const uint FormatA8R8G8B8 = 21;
         internal const uint FormatD24S8 = 75;
+        internal const uint FormatIndex16 = 101;
         internal const uint SwapEffectDiscard = 1;
         internal const uint PresentFlagLockableBackBuffer = 1;
         internal const uint BackBufferTypeMono = 0;
