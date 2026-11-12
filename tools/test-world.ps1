@@ -367,6 +367,46 @@ function Test-WorldTime {
     Write-Host "PASS invalid --time is rejected"
 }
 
+function Test-SpawnedCars([string]$reference) {
+    Write-Host "=== Path-following cars ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    $output = Join-Path $root "artifacts/world-smoke"
+    [IO.Directory]::CreateDirectory($output) | Out-Null
+    $early = Join-Path $output "world-cars-early.bmp"
+    $late = Join-Path $output "world-cars-late.bmp"
+    $again = Join-Path $output "world-cars-again.bmp"
+    [string[]]$lateLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 60 `
+        --spawn-cars 4 --screenshot $late 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Spawned cars run failed." }
+    [string[]]$earlyLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 2 `
+        --spawn-cars 4 --screenshot $early 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Spawned cars early run failed." }
+    [string[]]$againLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 60 `
+        --spawn-cars 4 --screenshot $again 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Spawned cars repeat run failed." }
+
+    $lateText = [string]::Join("`n", $lateLog)
+    if ($lateText -notmatch "World-Cars: spawned=4 model=\S+ nearest=") {
+        throw "Spawned cars were not reported: $lateText"
+    }
+    if ($lateText -notmatch "World-Dynamic: spawned=4 alive=4 drawn=[1-9]\d*") {
+        throw "Spawned cars drew nothing: $lateText"
+    }
+    if ((Get-FileHash $late -Algorithm SHA256).Hash -eq
+        (Get-FileHash $reference -Algorithm SHA256).Hash) {
+        throw "Spawned cars did not change the frame."
+    }
+    if ((Get-FileHash $late -Algorithm SHA256).Hash -eq
+        (Get-FileHash $early -Algorithm SHA256).Hash) {
+        throw "Spawned cars did not move between two and sixty frames."
+    }
+    if ((Get-FileHash $late -Algorithm SHA256).Hash -ne
+        (Get-FileHash $again -Algorithm SHA256).Hash) {
+        throw "Spawned cars are not deterministic."
+    }
+    Write-Host "PASS spawned cars follow the network and move: $(($lateLog | Where-Object { $_ -match 'World-Cars:' }) -join ' ')"
+}
+
 function Test-PathOverlay([string]$reference) {
     Write-Host "=== Path graph overlay ==="
     $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
@@ -743,6 +783,7 @@ try {
     Test-WorldTime
     Test-DynamicEntities $baseline
     Test-PathOverlay $baseline
+    Test-SpawnedCars $baseline
 
     Invoke-World "net9.0-windows" "dotnet" `
         @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `

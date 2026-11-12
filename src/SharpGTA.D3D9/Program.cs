@@ -37,6 +37,8 @@ namespace SharpGTA.D3D9
             int frames = 1;
             bool pathOverlay = false;
             bool pathRoute = false;
+            int spawnCarCount = 0;
+            float spawnCarSpeed = 12.0f;
             float[] routePoints = new float[6];
             string pathKind = "car";
             float pathRadius = 200.0f;
@@ -84,6 +86,26 @@ namespace SharpGTA.D3D9
                 }
                 else if (args[i] == "--verify-sectors")
                     verifySectors = true;
+                else if (args[i] == "--spawn-cars")
+                {
+                    if (i + 1 >= args.Length ||
+                        !int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                            out spawnCarCount) || spawnCarCount < 0 || spawnCarCount > 1000)
+                    {
+                        Console.Error.WriteLine("Invalid --spawn-cars value; expected 0..1000 cars.");
+                        return 2;
+                    }
+                }
+                else if (args[i] == "--spawn-car-speed")
+                {
+                    if (i + 1 >= args.Length ||
+                        !float.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture,
+                            out spawnCarSpeed) || !(spawnCarSpeed > 0.0f))
+                    {
+                        Console.Error.WriteLine("Invalid --spawn-car-speed; expected a positive number.");
+                        return 2;
+                    }
+                }
                 else if (args[i] == "--path-overlay")
                     pathOverlay = true;
                 else if (args[i] == "--path-route")
@@ -280,7 +302,8 @@ namespace SharpGTA.D3D9
                 if (worldMode)
                     return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
                         frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
-                        spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius);
+                        spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
+                        spawnCarCount, spawnCarSpeed);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -303,7 +326,8 @@ namespace SharpGTA.D3D9
                         Console.WriteLine("Frontend: shutdown completed.");
                         if (frontend.Menu.WorldPreviewRequested)
                             return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
-                        spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius);
+                        spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
+                        spawnCarCount, spawnCarSpeed);
                         return result;
                     }
                 }
@@ -357,14 +381,17 @@ namespace SharpGTA.D3D9
         private static int RunWorldViewer(Win32Window window, D3D9Device device,
             IGameFileSystem files, int frames, string screenshot, bool exerciseReset,
             int streamBudget, int txdBudget, int byteBudgetMiB, int startHour, bool verifySectors,
-            int spawnCount, string spawnModel, bool pathOverlay, bool pathRoute, float[] routePoints, string pathKind, float pathRadius)
+            int spawnCount, string spawnModel, bool pathOverlay, bool pathRoute, float[] routePoints, string pathKind, float pathRadius,
+            int spawnCarCount, float spawnCarSpeed)
         {
             using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
             {
                 loader.LoadInitialImage();
                 using (WorldViewerApplication viewer =
                     new WorldViewerApplication(window, device, loader, streamBudget, txdBudget,
-                        byteBudgetMiB * 1024 * 1024, startHour, verifySectors, spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius))
+                        byteBudgetMiB * 1024 * 1024, startHour, verifySectors, spawnCount, spawnModel,
+                        pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
+                        spawnCarCount, spawnCarSpeed))
                     return viewer.Run(frames, screenshot, exerciseReset);
             }
         }

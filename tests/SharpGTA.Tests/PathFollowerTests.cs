@@ -77,6 +77,26 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void VehicleWithoutDrawDistanceIsVisibleWithinTheViewRadius()
+        {
+            ModelRegistry registry = new ModelRegistry(
+                new WorldTestDefinition(GameId.III, DataSchema.III, 200));
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "cars\n130, landstal, landstal, car, LANDSTAL, LANDSTAL, normal, 10, 0, 1a, 0, 1.0\nend\n"));
+            StaticWorld world = new StaticWorld();
+            world.Bind(new IplReader(DataSchema.III).Read(
+                "inst\n130, landstal, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1\nend\n"),
+                registry, new LoadReport());
+            DynamicEntity car;
+            Assert.True(world.TrySpawnEntity(WorldEntityKind.Vehicle, registry.Find("landstal"),
+                new Vector3(10.0f, 0.0f, 0.0f), Vector3.Zero, out car));
+            // Vehicle records carry no IDE draw distance, so the radius is the only limit.
+            Assert.Near(0.0f, registry.Find("landstal").LargestLodDistance);
+            Assert.True(SharpGTA.Rendering.StaticWorldScene.IsEntityVisible(car, Vector3.Zero, 100.0f));
+            Assert.False(SharpGTA.Rendering.StaticWorldScene.IsEntityVisible(car, Vector3.Zero, 5.0f));
+        }
+
+        [Test]
         public void TwoFollowersOfTheSameRouteStayDeterministic()
         {
             PathGraph graph = ChainGraph();

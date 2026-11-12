@@ -41,6 +41,10 @@ namespace SharpGTA.D3D9
         private RenderLineBatch pathOverlayBatch;
         private RenderLineBatch routeBatch;
         private int dynamicSpawned;
+        private int dynamicCars;
+        private PathFollowerModule dynamicCarFollowers;
+        private string dynamicCarModel = "";
+        private float dynamicCarNearest;
         private int dynamicDrawn;
         private int dynamicRejected;
         private readonly List<RenderDrawCall> mergedCalls = new List<RenderDrawCall>();
@@ -60,7 +64,8 @@ namespace SharpGTA.D3D9
         internal WorldViewerApplication(Win32Window window, D3D9Device device,
             GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget, int startHour,
             bool verifySectors, int spawnCount, string spawnModel, bool pathOverlay,
-            bool pathRoute, float[] routePoints, string pathKind, float pathRouteRadius)
+            bool pathRoute, float[] routePoints, string pathKind, float pathRouteRadius,
+            int spawnCarCount, float spawnCarSpeed)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
@@ -90,12 +95,89 @@ namespace SharpGTA.D3D9
             ResetCamera();
             if (spawnCount > 0)
                 SpawnDynamicEntities(spawnCount, spawnModel);
+            if (spawnCarCount > 0)
+                SpawnCars(spawnCarCount, spawnModel, spawnCarSpeed);
         }
 
         /// <summary>
         /// Spawns objects in front of the spawn point so the preview actually shows gameplay
         /// entities. They drift along X through the shared sector grid every frame.
         /// </summary>
+        /// <summary>
+        /// Spawns cars that follow the car network: the model comes from --spawn-model or the
+        /// first vehicle record, and each car takes the next car node with links plus a greedy
+        /// route. The follower module owns their positions, so plain integration is bypassed.
+        /// </summary>
+        private void SpawnCars(int count, string modelName, float speed)
+        {
+            PathGraph graph = loader.PathGraph;
+            ModelDefinition model = null;
+            if (modelName != null)
+                model = loader.Models.Find(modelName);
+            else
+            {
+                ModelDefinition vehicle;
+                if (loader.Models.TryFindFirst(ModelKind.Vehicle, out vehicle))
+                    model = vehicle;
+            }
+            if (model == null)
+                throw new ArgumentException("--spawn-cars needs a registered vehicle model.");
+            PathFollowerModule followers = new PathFollowerModule(graph);
+            // Cars must be close enough to survive the model draw distance, so starts are the
+            // nearest car nodes to the preview spawn, ordered by distance then node index.
+            const int MaxCandidates = 64;
+            List<int> candidates = new List<int>();
+            List<float> distances = new List<float>();
+            float radiusSquared = ViewRadius * ViewRadius;
+            for (int i = 0; i < graph.NodeCount; i++)
+            {
+                PathGraphNode node = graph.Nodes[i];
+                if (node.Kind != PathKind.Car || node.LinkCount == 0)
+                    continue;
+                float distanceSquared = (node.Position - spawn).LengthSquared();
+                if (distanceSquared > radiusSquared)
+                    continue;
+                int insert = candidates.Count;
+                while (insert > 0 && distances[insert - 1] > distanceSquared)
+                    insert--;
+                candidates.Insert(insert, i);
+                distances.Insert(insert, distanceSquared);
+                if (candidates.Count > MaxCandidates)
+                {
+                    candidates.RemoveAt(candidates.Count - 1);
+                    distances.RemoveAt(distances.Count - 1);
+                }
+            }
+
+            int spawned = 0;
+            for (int c = 0; c < candidates.Count && spawned < count; c++)
+            {
+                int i = candidates[c];
+                PathGraphNode node = graph.Nodes[i];
+                int[] route = PathRouteBuilder.BuildGreedy(graph, i, 40);
+                if (route.Length < 2)
+                    continue;
+                DynamicEntity entity;
+                if (!loader.World.TrySpawnEntity(WorldEntityKind.Vehicle, model, node.Position,
+                    Vector3.Zero, out entity))
+                    break;
+                if (!followers.Assign(entity, route, speed))
+                    continue;
+                spawned++;
+            }
+            dynamicCars = spawned;
+            dynamicCarFollowers = followers;
+            dynamicCarModel = model.Name;
+            if (spawned > 0)
+            {
+                Vector3 first = loader.World.DynamicEntities[0].Position;
+                dynamicCarNearest = (first - camera.Position).Length();
+            }
+            dynamicRejected = loader.World.DynamicRejectedCount;
+            runtime.AddModule(new DynamicEntityModule(loader.World));
+            runtime.AddModule(followers);
+        }
+
         private void SpawnDynamicEntities(int count, string modelName)
         {
             if (loader.World.Count == 0)
@@ -190,7 +272,7 @@ namespace SharpGTA.D3D9
                 // the objects the player is looking at, and a starved budget must not hide them
                 // behind map models. Draw calls stay static-first to keep the previous order.
                 RenderSceneSnapshot dynamicSnapshot = null;
-                if (dynamicSpawned > 0)
+                if (dynamicSpawned > 0 || dynamicCars > 0)
                     dynamicSnapshot = resources.BuildDynamic(loader.World.DynamicEntities,
                         camera.Position, ViewRadius, frame == 0);
                 RenderSceneSnapshot staticSnapshot = resources.BuildVisible(candidates,
@@ -210,14 +292,25 @@ namespace SharpGTA.D3D9
                     diagnosticsPrinted = true;
 
                     Console.WriteLine("World-Entities: " + EntitySummary());
-                    if (dynamicSpawned > 0)
+                    if (dynamicSpawned > 0 || dynamicCars > 0)
                     {
-                        Console.WriteLine("World-Dynamic: spawned=" + dynamicSpawned +
+                        Console.WriteLine("World-Dynamic: spawned=" + (dynamicSpawned + dynamicCars) +
                             " alive=" + loader.World.DynamicEntities.Count +
                             " drawn=" + dynamicDrawn +
                             " rejected=" + dynamicRejected +
                             " sectorMoves=" + loader.World.SectorMoves +
                             " deferred=" + resources.LastDynamicLoadReport.DeferredCount);
+                    }
+                    if (dynamicCars > 0)
+                    {
+                        Console.WriteLine("World-Cars: spawned=" + dynamicCars +
+                            " model=" + dynamicCarModel +
+                            " nearest=" + dynamicCarNearest.ToString("0.#", CultureInfo.InvariantCulture) +
+                            " alive=" + loader.World.DynamicEntities.Count +
+                            " completed=" + dynamicCarFollowers.CompletedCount +
+                            " travelled=" + dynamicCarFollowers.TravelledDistance.ToString("0.##",
+                                CultureInfo.InvariantCulture) +
+                            " rejected=" + dynamicRejected);
                     }
                     Console.WriteLine("World-Time: hour=" + clock.Hours.ToString("00", CultureInfo.InvariantCulture) +
                         ":" + clock.Minutes.ToString("00", CultureInfo.InvariantCulture) +

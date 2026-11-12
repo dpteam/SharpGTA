@@ -571,7 +571,7 @@ namespace SharpGTA.Headless
                 PathGraphNode node = graph.Nodes[i];
                 if (node.Kind != PathKind.Car || node.LinkCount == 0)
                     continue;
-                int[] route = BuildGreedyRoute(graph, i, 40);
+                int[] route = PathRouteBuilder.BuildGreedy(graph, i, 40);
                 if (route.Length < 2)
                     continue;
                 DynamicEntity entity;

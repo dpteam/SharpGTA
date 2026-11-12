@@ -78,6 +78,13 @@ namespace SharpGTA.Rendering
             if (distanceSquared > radius * radius)
                 return false;
             float largestDistance = entity.Model.LargestLodDistance;
+            if (entity.Model.LodDistances.Count == 0)
+            {
+                // Vehicle and ped records carry no IDE draw distance at all, so the caller's
+                // view radius is the only limit; culling them here hid every spawned car.
+                // A model that does have distances but a zero one stays invisible, as before.
+                return true;
+            }
             return largestDistance >= 2.0f &&
                 (float)Math.Sqrt(distanceSquared) <= largestDistance;
         }
