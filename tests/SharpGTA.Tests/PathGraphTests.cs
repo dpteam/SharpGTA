@@ -803,6 +803,41 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void VerifierConfirmsAHealthyGraphAndFlagsLongLinks()
+        {
+            PathGraph graph = new PathGraph(DetachedIII(
+                "2, 1, 0, 0, 0, 0, 160, 1, 1",
+                "2, 2, 0, 160, 0, 0, 160, 1, 1",
+                "2, -1, 0, 320, 0, 0, 160, 1, 1",
+                EmptyNodes(9)));
+
+            PathGraphReport report = PathGraphVerifier.Verify(graph, 200.0f);
+
+            Assert.Equal(3, report.NodeCount);
+            Assert.Equal(4, report.LinkCount);
+            Assert.Equal(0, report.SelfLinkCount);
+            Assert.Equal(0, report.AsymmetricLinkCount);
+            Assert.Equal(0, report.OverLengthLinkCount);
+            Assert.Near(10.0f, report.LongestLink, 0.0001f);
+            Assert.Equal(0, report.UnlabelledNodeCount);
+            Assert.Equal(0, report.MisgroupedNodeCount);
+            Assert.Equal(0, report.NearestMismatchCount);
+            Assert.Equal(3, report.NearestSampleCount);
+            Assert.True(report.IsConsistent);
+
+            // The same graph fails the length audit when the limit is below the tile spacing.
+            PathGraphReport strict = PathGraphVerifier.Verify(graph, 5.0f);
+            Assert.Equal(4, strict.OverLengthLinkCount);
+            Assert.True(strict.IsConsistent);
+
+            Assert.Throws<ArgumentNullException>(delegate { PathGraphVerifier.Verify(null, 10.0f); });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                PathGraphVerifier.Verify(graph, 0.0f);
+            });
+        }
+
+        [Test]
         public void EmptyWorldBuildsAnEmptyGraph()
         {
             PathGraph graph = new PathGraph(new PathWorld());

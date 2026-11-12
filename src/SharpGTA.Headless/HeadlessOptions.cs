@@ -28,6 +28,7 @@ namespace SharpGTA.Headless
             TxdEntries = new List<string>();
             PathNearestKind = PathKind.Car;
             PathNearestRadius = 100.0f;
+            PathVerifyLength = 200.0f;
         }
 
         public string Game { get; set; }
@@ -73,6 +74,8 @@ namespace SharpGTA.Headless
         public float PathNearestY { get; set; }
         public float PathNearestZ { get; set; }
         public bool HasPathRouteQuery { get; set; }
+        public bool VerifyPaths { get; set; }
+        public float PathVerifyLength { get; set; }
         public float PathRouteStartX { get; set; }
         public float PathRouteStartY { get; set; }
         public float PathRouteStartZ { get; set; }
@@ -228,6 +231,15 @@ namespace SharpGTA.Headless
                         options.PathNearestRadius = ParseSingle(Value(args, ref i, argument), argument);
                         options.HasPathRadiusOption = true;
                         break;
+                    case "--verify-paths":
+                        options.VerifyPaths = true;
+                        options.HasExplicitAssetAction = true;
+                        break;
+                    case "--path-verify-length":
+                        options.PathVerifyLength = ParseSingle(Value(args, ref i, argument), argument);
+                        if (!(options.PathVerifyLength > 0.0f))
+                            throw new CommandLineException("--path-verify-length must be positive.");
+                        break;
                     case "--path-merge-distance":
                         // Only changes how the path graph is built from already-requested map
                         // data, so it must not suppress the implicit --standard load.
@@ -283,7 +295,8 @@ namespace SharpGTA.Headless
                     options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
                     options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
                     options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview ||
-                    options.HasPathNearestQuery || options.HasPathMergeDistance || options.HasPathRouteQuery;
+                    options.HasPathNearestQuery || options.HasPathMergeDistance || options.HasPathRouteQuery ||
+                    options.VerifyPaths;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)

@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Building:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -35,7 +35,7 @@ try {
         $common = @("--game", $game, "--root", $gameRoot)
         $ground = if ($game -eq "iii") { @("812", "-936") } else { @("-864", "-575") }
         $zoneZ = if ($game -eq "iii") { "36" } else { "10" }
-        $standard = Invoke-Case "$game standard and world queries net40" $net40 ($common + @("--standard", "--query-ground", $ground[0], $ground[1], "-50", "100", "--query-zone", $ground[0], $ground[1], $zoneZ, "--query-path", "0", "0", "--query-path-nearest", $ground[0], $ground[1], $zoneZ, "--path-radius", "200", "--ticks", "1")) $false
+        $standard = Invoke-Case "$game standard and world queries net40" $net40 ($common + @("--standard", "--verify-paths", "--query-ground", $ground[0], $ground[1], "-50", "100", "--query-zone", $ground[0], $ground[1], $zoneZ, "--query-path", "0", "0", "--query-path-nearest", $ground[0], $ground[1], $zoneZ, "--path-radius", "200", "--ticks", "1")) $false
         if ($standard -notmatch "dat=2" -or $standard -notmatch "models=[1-9]" -or $standard -notmatch "instances=[1-9]") {
             throw "$game standard output has no loaded models/instances."
         }
@@ -71,6 +71,17 @@ try {
         }
         if ($standard -notmatch [regex]::Escape($graph)) {
             throw "$game path graph changed: expected '$graph'."
+        }
+        $verify = if ($game -eq "iii") {
+            "Path-Verify: nodes=4947 links=10272 selfLinks=0 asymmetricLinks=0 overLengthLinks=0 longest=186.61"
+        } else {
+            "Path-Verify: nodes=9642 links=20350 selfLinks=0 asymmetricLinks=0 overLengthLinks=26 longest=329.02"
+        }
+        if ($standard -notmatch [regex]::Escape($verify)) {
+            throw "$game path graph audit changed: expected '$verify'."
+        }
+        if ($standard -notmatch "Path-Verify: .*consistent=true") {
+            throw "$game path graph is internally inconsistent."
         }
         $groups = if ($game -eq "iii") {
             "Path-Groups: components=109 car=3 ped=106 water=0 singles=20 largest=1967"

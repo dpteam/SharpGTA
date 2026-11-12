@@ -167,7 +167,8 @@ namespace SharpGTA.Tests
                 string output;
                 string error;
                 Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
-                    "--query-path-nearest", "0", "0", "0", "--path-radius", "10" }, out output, out error), error);
+                    "--query-path-nearest", "0", "0", "0", "--path-radius", "10", "--verify-paths" },
+                    out output, out error), error);
                 Assert.True(output.IndexOf(
                     "Path-Graph: mergeDistance=1 tiles=1 nodes=4 car=4 ped=0 water=0 links=6 crossTile=0 crossings=0 " + "carLinks=3 deadEnds=4 laneFallbacks=6 unpairedExtern=0 " +
                     "unresolvedExtern=0 externalNext=0 danglingNext=0 selfNext=0 externalSlots=0 " +
@@ -176,6 +177,10 @@ namespace SharpGTA.Tests
                 Assert.True(output.IndexOf(
                     "Path-Groups: components=1 car=1 ped=0 water=0 singles=0 largest=4",
                     StringComparison.Ordinal) >= 0, output);
+                Assert.True(output.IndexOf(
+                    "Path-Verify: nodes=4 links=6 selfLinks=0 asymmetricLinks=0 overLengthLinks=0 ",
+                    StringComparison.Ordinal) >= 0, output);
+                Assert.True(output.IndexOf("consistent=true", StringComparison.Ordinal) >= 0, output);
                 Assert.True(output.IndexOf(
                     "Path-Nearest: kind=car position=(0,0,0) radius=10 found=true node=0 group=0 local=0 " +
                     "nodePosition=(0,0,0) distance=0 links=1 next=1 component=1", StringComparison.Ordinal) >= 0, output);

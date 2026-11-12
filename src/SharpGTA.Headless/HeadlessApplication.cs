@@ -57,6 +57,8 @@ namespace SharpGTA.Headless
                             WritePathNearestQuery(loader, options, output);
                         if (options.HasPathRouteQuery)
                             WritePathRouteQuery(loader, options, output);
+                        if (options.VerifyPaths)
+                            WritePathVerification(loader, options, output);
                         if (options.HasBuildingQuery)
                             WriteBuildingQuery(loader.World, options, output);
                         if (options.Verbose)
@@ -496,6 +498,37 @@ namespace SharpGTA.Headless
                 " found=true hops=" + (route.Length - 1).ToString(CultureInfo.InvariantCulture) +
                 " length=" + length.ToString("R", CultureInfo.InvariantCulture) +
                 " component=" + startNode.GroupId.ToString(CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// Independent audit of the built graph: symmetry, self links, absurd link lengths,
+        /// flood-fill labels and the nearest-node round trip.
+        /// </summary>
+        private static void WritePathVerification(GameDataLoader loader, HeadlessOptions options,
+            TextWriter output)
+        {
+            if (loader.Paths.GroupCount == 0)
+            {
+                throw new CommandLineException(
+                    "--verify-paths requires loaded path data; add --standard.");
+            }
+            PathGraphReport report = PathGraphVerifier.Verify(CreatePathGraph(loader, options),
+                options.PathVerifyLength);
+            output.WriteLine("Path-Verify: nodes=" + report.NodeCount.ToString(CultureInfo.InvariantCulture) +
+                " links=" + report.LinkCount.ToString(CultureInfo.InvariantCulture) +
+                " selfLinks=" + report.SelfLinkCount.ToString(CultureInfo.InvariantCulture) +
+                " asymmetricLinks=" + report.AsymmetricLinkCount.ToString(CultureInfo.InvariantCulture) +
+                " overLengthLinks=" + report.OverLengthLinkCount.ToString(CultureInfo.InvariantCulture) +
+                " longest=" + report.LongestLink.ToString("0.##", CultureInfo.InvariantCulture) +
+                " longestPair=" + report.LongestLinkFrom.ToString(CultureInfo.InvariantCulture) +
+                "->" + report.LongestLinkTo.ToString(CultureInfo.InvariantCulture) +
+                " unlabelled=" + report.UnlabelledNodeCount.ToString(CultureInfo.InvariantCulture) +
+                " misgrouped=" + report.MisgroupedNodeCount.ToString(CultureInfo.InvariantCulture) +
+                " nearestMismatch=" + report.NearestMismatchCount.ToString(CultureInfo.InvariantCulture) +
+                "/" + report.NearestSampleCount.ToString(CultureInfo.InvariantCulture) +
+                " consistent=" + (report.IsConsistent ? "true" : "false"));
+            output.WriteLine("Path-Verify-Length: limit=" +
+                options.PathVerifyLength.ToString("0.##", CultureInfo.InvariantCulture));
         }
 
         private static string PathKindName(PathKind kind)
