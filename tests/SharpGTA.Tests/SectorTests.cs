@@ -253,7 +253,7 @@ namespace SharpGTA.Tests
             Assert.True(Contains(results, world.Instances[0]));
 
             // Sector lists are read-only views.
-            IList<StaticInstance> main = world.GetSectorList(50, 50, false);
+            IList<WorldEntity> main = world.GetSectorList(50, 50, false);
             Assert.NotNull(main);
             Assert.Throws<NotSupportedException>(delegate { main.Add(world.Instances[0]); });
             Assert.Throws<ArgumentOutOfRangeException>(delegate { world.GetSectorList(100, 0, false); });
@@ -303,7 +303,7 @@ namespace SharpGTA.Tests
             return false;
         }
 
-        private static int Count(IList<StaticInstance> list)
+        private static int Count(IList<WorldEntity> list)
         {
             return list == null ? 0 : list.Count;
         }

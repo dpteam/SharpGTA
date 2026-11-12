@@ -23,12 +23,15 @@ namespace SharpGTA.World
         private const int SectorCount = SectorSide * SectorSide;
         private readonly List<StaticInstance> instances = new List<StaticInstance>();
         private readonly ReadOnlyCollection<StaticInstance> readOnlyInstances;
-        private readonly List<StaticInstance>[] sectorMain = new List<StaticInstance>[SectorCount];
-        private readonly List<StaticInstance>[] sectorOverlap = new List<StaticInstance>[SectorCount];
-        private readonly List<StaticInstance> unindexed = new List<StaticInstance>();
+        private readonly ReadOnlyCollection<WorldEntity> readOnlyDynamicEntities;
+        private readonly List<WorldEntity>[] sectorMain = new List<WorldEntity>[SectorCount];
+        private readonly List<WorldEntity>[] sectorOverlap = new List<WorldEntity>[SectorCount];
+        private readonly List<WorldEntity> unindexed = new List<WorldEntity>();
+        private readonly List<WorldEntity> dynamicEntities = new List<WorldEntity>();
         private int scanCode;
         private readonly List<ModelRegistry> registries = new List<ModelRegistry>();
         private readonly List<int> collisionRevisions = new List<int>();
+        private readonly List<WorldEntity> queryBuffer = new List<WorldEntity>();
         private WorldEntities entities;
         private GameDefinition entityDefinition;
         private ObjectData objectData;
@@ -37,41 +40,73 @@ namespace SharpGTA.World
         public StaticWorld()
         {
             readOnlyInstances = instances.AsReadOnly();
+            readOnlyDynamicEntities = dynamicEntities.AsReadOnly();
         }
 
         public int Count { get { return instances.Count; } }
         public int UnindexedCount { get { return unindexed.Count; } }
         public IList<StaticInstance> Instances { get { return readOnlyInstances; } }
 
+        /// <summary>Gameplay entities in deterministic spawn order.</summary>
+        public IList<WorldEntity> DynamicEntities { get { return readOnlyDynamicEntities; } }
+
+        /// <summary>Sector membership changes caused by moving dynamic entities.</summary>
+        public int SectorMoves { get; private set; }
+
         /// <summary>Per-kind entity pools for this world, or null before the first Bind.</summary>
         public WorldEntities Entities { get { return entities; } }
 
-        /// <summary>Instances that could not get a handle because their kind's pool was full.</summary>
+        /// <summary>
+        /// Map placements that could not get a handle because their pool was full. Gameplay
+        /// spawn rejections are counted separately so the placement diagnostics stay honest.
+        /// </summary>
         public int InstancesWithoutHandle
         {
-            get { return entities == null ? 0 : entities.TotalRejectedCount; }
+            get
+            {
+                if (entities == null)
+                    return 0;
+                return entities.RejectedCount(WorldEntityKind.Building) +
+                    entities.RejectedCount(WorldEntityKind.Dummy) +
+                    entities.RejectedCount(WorldEntityKind.Treadable);
+            }
+        }
+
+        /// <summary>Gameplay spawns rejected because their kind's pool was full.</summary>
+        public int DynamicRejectedCount
+        {
+            get
+            {
+                if (entities == null)
+                    return 0;
+                return entities.RejectedCount(WorldEntityKind.Object) +
+                    entities.RejectedCount(WorldEntityKind.Ped) +
+                    entities.RejectedCount(WorldEntityKind.Vehicle);
+            }
         }
 
         /// <summary>Resolves a building handle back to its placement, or false when stale.</summary>
         public bool TryGetBuilding(int handle, out StaticInstance instance)
         {
+            instance = null;
             if (entities == null)
-            {
-                instance = null;
                 return false;
-            }
-            return entities.TryGet(WorldEntityKind.Building, handle, out instance);
+            WorldEntity entity;
+            if (!entities.TryGet(WorldEntityKind.Building, handle, out entity))
+                return false;
+            instance = entity as StaticInstance;
+            return instance != null;
         }
 
-        /// <summary>Resolves a handle of any kind back to its placement.</summary>
-        public bool TryGetEntity(WorldEntityKind kind, int handle, out StaticInstance instance)
+        /// <summary>Resolves a handle of any kind back to its entity, or false when stale.</summary>
+        public bool TryGetEntity(WorldEntityKind kind, int handle, out WorldEntity entity)
         {
             if (entities == null)
             {
-                instance = null;
+                entity = null;
                 return false;
             }
-            return entities.TryGet(kind, handle, out instance);
+            return entities.TryGet(kind, handle, out entity);
         }
 
         /// <summary>Adds resolvable instances and reports every missing raw model ID.</summary>
@@ -148,6 +183,26 @@ namespace SharpGTA.World
         {
             if (result == null)
                 throw new ArgumentNullException("result");
+            QueryEntities(center, radius, queryBuffer);
+            result.Clear();
+            for (int i = 0; i < queryBuffer.Count; i++)
+            {
+                StaticInstance instance = queryBuffer[i] as StaticInstance;
+                if (instance != null)
+                    result.Add(instance);
+            }
+            return result.Count;
+        }
+
+        /// <summary>
+        /// Same sector scan as <see cref="QuerySectors"/>, without dropping dynamic entities.
+        /// The candidate set is mixed because the original keeps every kind in one CSector
+        /// array; callers filter by type when they need only placements.
+        /// </summary>
+        public int QueryEntities(Vector3 center, float radius, IList<WorldEntity> result)
+        {
+            if (result == null)
+                throw new ArgumentNullException("result");
             if (!(radius > 0.0f) || float.IsNaN(radius) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException("radius");
             result.Clear();
@@ -210,13 +265,13 @@ namespace SharpGTA.World
         /// Mirrors CWorld::GetSector(x, y)->m_lists[ENTITYLIST_*]. The returned list is
         /// read-only; callers must not mutate sector contents.
         /// </summary>
-        public IList<StaticInstance> GetSectorList(int column, int row, bool overlap)
+        public IList<WorldEntity> GetSectorList(int column, int row, bool overlap)
         {
             if (column < 0 || column >= SectorSide)
                 throw new ArgumentOutOfRangeException("column");
             if (row < 0 || row >= SectorSide)
                 throw new ArgumentOutOfRangeException("row");
-            List<StaticInstance> list = (overlap ? sectorOverlap : sectorMain)[row * SectorSide + column];
+            List<WorldEntity> list = (overlap ? sectorOverlap : sectorMain)[row * SectorSide + column];
             return list == null ? null : list.AsReadOnly();
         }
 
@@ -273,14 +328,18 @@ namespace SharpGTA.World
             {
                 for (int i = 0; i < instances.Count; i++)
                     instances[i].ScanCode = 0;
+                for (int i = 0; i < unindexed.Count; i++)
+                    unindexed[i].ScanCode = 0;
+                for (int i = 0; i < dynamicEntities.Count; i++)
+                    dynamicEntities[i].ScanCode = 0;
                 scanCode = 0;
             }
             scanCode++;
             return scanCode;
         }
 
-        private static void AppendSectorList(List<StaticInstance> list, int code,
-            IList<StaticInstance> result)
+        private static void AppendSectorList(List<WorldEntity> list, int code,
+            IList<WorldEntity> result)
         {
             if (list == null)
                 return;
@@ -288,8 +347,8 @@ namespace SharpGTA.World
                 AppendInstance(list[i], code, result);
         }
 
-        private static void AppendInstance(StaticInstance instance, int code,
-            IList<StaticInstance> result)
+        private static void AppendInstance(WorldEntity instance, int code,
+            IList<WorldEntity> result)
         {
             // An instance spanning several sectors appears in several overlap lists; the
             // scan code keeps one entry per query, like CEntity::m_scanCode.
@@ -299,18 +358,130 @@ namespace SharpGTA.World
             result.Add(instance);
         }
 
-        private static void TestSectorList(List<StaticInstance> list, int code, float x, float y,
+        private static void TestSectorList(List<WorldEntity> list, int code, float x, float y,
             float minZ, float maxZ, ref bool found, ref float closest, ref StaticWorldHit closestHit)
         {
             if (list == null)
                 return;
             for (int i = 0; i < list.Count; i++)
             {
-                StaticInstance instance = list[i];
+                WorldEntity instance = list[i];
                 if (instance.ScanCode == code)
                     continue;
                 instance.ScanCode = code;
                 TestInstance(instance, x, y, minZ, maxZ, ref found, ref closest, ref closestHit);
+            }
+        }
+
+        /// <summary>
+        /// Spawns a gameplay entity (object, ped or vehicle), allocating its kind's pool slot
+        /// and indexing it in the shared CWorld sector grid. Returns false when the pool is
+        /// full; the entity is not created and the rejection is counted.
+        /// </summary>
+        public bool TrySpawnEntity(WorldEntityKind kind, ModelDefinition model, Vector3 position,
+            Vector3 velocity, out DynamicEntity entity)
+        {
+            entity = null;
+            if (entities == null)
+                throw new InvalidOperationException("Bind a world before spawning entities.");
+            if (model == null)
+                throw new ArgumentNullException("model");
+            RequireFinite(position, "position");
+            RequireFinite(velocity, "velocity");
+            DynamicEntity candidate = new DynamicEntity(model, kind, position, velocity);
+            int handle = entities.Create(kind, candidate);
+            if (handle < 0)
+                return false;
+            candidate.Handle = handle;
+            dynamicEntities.Add(candidate);
+            Index(candidate);
+            entity = candidate;
+            return true;
+        }
+
+        /// <summary>Despawns a gameplay entity; static placements cannot be despawned here.</summary>
+        public bool DespawnEntity(WorldEntityKind kind, int handle)
+        {
+            if (entities == null)
+                return false;
+            WorldEntity entity;
+            if (!entities.TryGet(kind, handle, out entity) || entity.IsStatic)
+                return false;
+            Unindex(entity);
+            dynamicEntities.Remove(entity);
+            return entities.Release(kind, handle);
+        }
+
+        /// <summary>
+        /// Integrates gameplay entities and moves their sector membership. Returns how many
+        /// entities changed sector this step; static placements are never touched.
+        /// </summary>
+        public int AdvanceDynamic(float deltaSeconds)
+        {
+            if (!(deltaSeconds > 0.0f) || float.IsInfinity(deltaSeconds))
+                return 0;
+            int moves = 0;
+            for (int i = 0; i < dynamicEntities.Count; i++)
+            {
+                DynamicEntity entity = dynamicEntities[i] as DynamicEntity;
+                if (entity == null)
+                    continue;
+                int before = CellIndex(entity.WorldBounds);
+                Unindex(entity);
+                entity.Advance(deltaSeconds);
+                Index(entity);
+                if (CellIndex(entity.WorldBounds) != before)
+                    moves++;
+            }
+            SectorMoves += moves;
+            return moves;
+        }
+
+        /// <summary>
+        /// Sector cell of the middle of an entity's bound rect, or -1 when the entity left the
+        /// grid: the original moves it out of every sector list at that point, and a clamped
+        /// index would hide that transition.
+        /// </summary>
+        private static int CellIndex(BoundingBox bounds)
+        {
+            if (!IsFullyInsideGrid(bounds))
+                return -1;
+            return CoordinateToCell((bounds.Min.Y + bounds.Max.Y) * 0.5f) * SectorSide +
+                CoordinateToCell((bounds.Min.X + bounds.Max.X) * 0.5f);
+        }
+
+        private static void RequireFinite(Vector3 value, string name)
+        {
+            if (float.IsNaN(value.X) || float.IsNaN(value.Y) || float.IsNaN(value.Z) ||
+                float.IsInfinity(value.X) || float.IsInfinity(value.Y) || float.IsInfinity(value.Z))
+                throw new ArgumentOutOfRangeException(name);
+        }
+
+        /// <summary>Removes an entity from every sector its current bounds touch.</summary>
+        private void Unindex(WorldEntity entity)
+        {
+            BoundingBox bounds = entity.WorldBounds;
+            if (!IsFullyInsideGrid(bounds))
+            {
+                unindexed.Remove(entity);
+                return;
+            }
+            int minX = SectorIndexX(bounds.Min.X);
+            int maxX = SectorIndexX(bounds.Max.X);
+            int middleX = SectorIndexX((bounds.Min.X + bounds.Max.X) * 0.5f);
+            int minY = SectorIndexY(bounds.Min.Y);
+            int maxY = SectorIndexY(bounds.Max.Y);
+            int middleY = SectorIndexY((bounds.Min.Y + bounds.Max.Y) * 0.5f);
+            for (int y = minY; y <= maxY; y++)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    List<WorldEntity>[] lists =
+                        (x == middleX && y == middleY) ? sectorMain : sectorOverlap;
+                    List<WorldEntity> list = lists[y * SectorSide + x];
+                    if (list != null)
+                        list.Remove(entity);
+                }
             }
         }
 
@@ -369,7 +540,7 @@ namespace SharpGTA.World
                     "A static world cannot mix game profiles; its entity pools are per game.");
         }
 
-        private void Index(StaticInstance instance)
+        private void Index(WorldEntity instance)
         {
             BoundingBox bounds = instance.WorldBounds;
             if (!IsFullyInsideGrid(bounds))
@@ -391,10 +562,10 @@ namespace SharpGTA.World
                 for (int x = minX; x <= maxX; x++)
                 {
                     int index = y * SectorSide + x;
-                    List<StaticInstance>[] lists =
+                    List<WorldEntity>[] lists =
                         (x == middleX && y == middleY) ? sectorMain : sectorOverlap;
                     if (lists[index] == null)
-                        lists[index] = new List<StaticInstance>();
+                        lists[index] = new List<WorldEntity>();
                     lists[index].Add(instance);
                 }
             }
@@ -425,6 +596,9 @@ namespace SharpGTA.World
                 instances[i].RefreshWorldBounds();
                 Index(instances[i]);
             }
+            // Dynamic entities live in the same grid, so the rebuild must restore them too.
+            for (int i = 0; i < dynamicEntities.Count; i++)
+                Index(dynamicEntities[i]);
             for (int i = 0; i < registries.Count; i++)
                 collisionRevisions[i] = registries[i].CollisionRevision;
         }
@@ -443,9 +617,14 @@ namespace SharpGTA.World
             collisionRevisions.Add(registry.CollisionRevision);
         }
 
-        private static void TestInstance(StaticInstance instance, float x, float y,
+        private static void TestInstance(WorldEntity entity, float x, float y,
             float minZ, float maxZ, ref bool found, ref float closest, ref StaticWorldHit closestHit)
         {
+            // Dynamic entities are indexed in the same grid but carry no collision yet, and
+            // StaticWorldHit addresses a placement, so only statics can hit.
+            StaticInstance instance = entity as StaticInstance;
+            if (instance == null)
+                return;
             ColModel collision = instance.Model.Collision;
             if (collision == null)
                 return;

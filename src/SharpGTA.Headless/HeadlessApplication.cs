@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using SharpGTA.Assets;
+using SharpGTA.World;
 using SharpGTA.Data;
 using SharpGTA.Games.III;
 using SharpGTA.Games.VC;
 using SharpGTA.IO;
 using SharpGTA.Mathematics;
 using SharpGTA.Runtime;
-using SharpGTA.World;
 
 namespace SharpGTA.Headless
 {
@@ -65,6 +65,11 @@ namespace SharpGTA.Headless
                     SimulationRuntime runtime = new SimulationRuntime(definition);
                     gameClock = new GameClock();
                     runtime.AddModule(gameClock);
+                    if (options.HasSpawnObjects)
+                    {
+                        SpawnObjects(loader, options);
+                        runtime.AddModule(new DynamicEntityModule(loader.World));
+                    }
                     if (options.RenderPreview)
                         RenderPreviewRunner.Run(loader, options, output);
                     if (options.HasStateAt && options.StateAt == 0 && options.Ticks != 0)
@@ -79,6 +84,8 @@ namespace SharpGTA.Headless
                         }
                     }
                     output.WriteLine("Ticks: " + runtime.Clock.Tick.ToString(CultureInfo.InvariantCulture));
+                    if (options.HasSpawnObjects)
+                        WriteDynamicSummary(loader.World, options, output);
                     output.WriteLine("Clock: day=" + gameClock.DaysPassed.ToString(CultureInfo.InvariantCulture) +
                         " time=" + gameClock.Hours.ToString("00", CultureInfo.InvariantCulture) + ":" +
                         gameClock.Minutes.ToString("00", CultureInfo.InvariantCulture) + ":" +
@@ -261,6 +268,56 @@ namespace SharpGTA.Headless
                 " mapLevel=" + zones.GetRawLevelFromPosition(position).ToString(CultureInfo.InvariantCulture) +
                 " cullFlags=" + attributes.ToString(CultureInfo.InvariantCulture) +
                 " wantedDrop=" + wanted.ToString(CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// Spawns deterministic gameplay objects four units apart along X, drifting with
+        /// (1, 0.5, 0) u/s, so two runs of the same command move identically.
+        /// </summary>
+        private static void SpawnObjects(GameDataLoader loader, HeadlessOptions options)
+        {
+            ModelDefinition model = ResolveSpawnModel(loader, options);
+            for (int i = 0; i < options.SpawnObjectCount; i++)
+            {
+                DynamicEntity entity;
+                // Four units apart keeps even a full object pool inside the world grid.
+                loader.World.TrySpawnEntity(WorldEntityKind.Object, model,
+                    new Vector3(-900.0f + (i % 450) * 4.0f, 0.0f, 0.0f),
+                    new Vector3(1.0f, 0.5f, 0.0f), out entity);
+            }
+        }
+
+        private static ModelDefinition ResolveSpawnModel(GameDataLoader loader, HeadlessOptions options)
+        {
+            if (loader.World.Count == 0)
+                throw new CommandLineException("--spawn-objects requires loaded map data; add --standard.");
+            if (options.SpawnModel != null)
+            {
+                ModelDefinition named = loader.Models.Find(options.SpawnModel);
+                if (named == null)
+                    throw new CommandLineException("--spawn-objects: model '" + options.SpawnModel +
+                        "' is not registered.");
+                return named;
+            }
+            // Without --spawn-model borrow the first placement's model, so the probe works on
+            // any real map instead of depending on a synthetic model name.
+            return loader.World.Instances[0].Model;
+        }
+
+        private static void WriteDynamicSummary(StaticWorld world, HeadlessOptions options, TextWriter output)
+        {
+            string summary = "Dynamic: requested=" + options.SpawnObjectCount.ToString(CultureInfo.InvariantCulture) +
+                " alive=" + world.DynamicEntities.Count.ToString(CultureInfo.InvariantCulture) +
+                " objects=" + world.Entities.Count(WorldEntityKind.Object).ToString(CultureInfo.InvariantCulture) +
+                " rejected=" + world.DynamicRejectedCount.ToString(CultureInfo.InvariantCulture) +
+                " sectorMoves=" + world.SectorMoves.ToString(CultureInfo.InvariantCulture);
+            if (world.DynamicEntities.Count > 0)
+            {
+                Vector3 first = world.DynamicEntities[0].Position;
+                Vector3 last = world.DynamicEntities[world.DynamicEntities.Count - 1].Position;
+                summary += " first=" + Vector(first) + " last=" + Vector(last);
+            }
+            output.WriteLine(summary);
         }
 
         private static void WriteBuildingQuery(StaticWorld world, HeadlessOptions options, TextWriter output)
@@ -495,6 +552,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --query-zone X Y Z        Query navigation/info/map zones and cull attributes.");
             output.WriteLine("  --query-path GROUP NODE   Print one resolved path node position and next link.");
             output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
+            output.WriteLine("  --spawn-objects N [--spawn-model NAME]  Spawn N drifting gameplay objects and tick them.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");
             output.WriteLine("  --state-at N              Also print the diagnostic state hash at tick N.");
             output.WriteLine("  --verbose                 Print retained asset issues.");

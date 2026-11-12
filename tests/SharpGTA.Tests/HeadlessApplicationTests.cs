@@ -66,17 +66,100 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void SpawnedObjectsTickDeterministically()
+        {
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreateSyntheticTree(temporary);
+                string[] args =
+                {
+                    "--root", temporary.Path, "--standard", "--spawn-objects", "4", "--ticks", "1500"
+                };
+                string first;
+                string second;
+                string error;
+                Assert.Equal(0, Invoke(args, out first, out error));
+                Assert.Equal(0, Invoke(args, out second, out error));
+                // Same command, same world, same positions: no wall clock, no randomness.
+                Assert.Equal(first, second);
+                Assert.True(first.IndexOf("Dynamic: requested=4 alive=4 objects=4 rejected=0",
+                    StringComparison.Ordinal) >= 0);
+                System.Text.RegularExpressions.Match moves =
+                    System.Text.RegularExpressions.Regex.Match(first, "sectorMoves=(\\d+)");
+                Assert.True(moves.Success, "Dynamic summary is missing sectorMoves.");
+                Assert.True(int.Parse(moves.Groups[1].Value,
+                    System.Globalization.CultureInfo.InvariantCulture) > 0,
+                    "Fifty units of travel must cross at least one sector boundary.");
+            }
+        }
+
+        private static void CreateSyntheticTree(TemporaryDirectory temporary)
+        {
+            temporary.WriteBytes("MODELS/GTA3.DIR", new byte[0]);
+            temporary.WriteBytes("MODELS/GTA3.IMG", new byte[0]);
+            temporary.WriteText("DATA/A.IDE", "objs\n1, ground, generic, 1, 100, 0\nend\n");
+            temporary.WriteBytes("DATA/A.COL", WorldTestAssets.CreateBoxCollision("ground", 2.0f, -1.0f, 0.0f));
+            temporary.WriteText("DATA/A.IPL", "inst\n1, ground, 10, 20, 3, 5, 5, 5, 0, 0, 1, 1\nend\n");
+            temporary.WriteText("DATA/DEFAULT.DAT", "IDE DATA/A.IDE\nCOLFILE 0 DATA/A.COL\nIPL DATA/A.IPL\n");
+            temporary.WriteText("DATA/GTA3.DAT", "# empty main\n");
+        }
+
+        [Test]
+        public void SpawnObjectsRequiresARootAndLoadsStandardImplicitly()
+        {
+            string output;
+            string error;
+            Assert.Equal(2, Invoke(new string[] { "--spawn-objects", "3", "--ticks", "5" },
+                out output, out error));
+            Assert.True(error.IndexOf("--root", StringComparison.Ordinal) >= 0);
+
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreateSyntheticTree(temporary);
+                // No --standard: spawning needs a loaded world, so plain --root must load it.
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-objects", "3", "--ticks", "5" },
+                    out output, out error));
+                Assert.True(output.IndexOf("instances=1", StringComparison.Ordinal) >= 0);
+                Assert.True(output.IndexOf("Dynamic: requested=3 alive=3 objects=3 rejected=0",
+                    StringComparison.Ordinal) >= 0);
+            }
+        }
+
+        [Test]
+        public void DynamicStateIsPartOfTheStateHash()
+        {
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreateSyntheticTree(temporary);
+                string withThree;
+                string withFour;
+                string repeated;
+                string error;
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-objects", "3",
+                    "--ticks", "20", "--state-at", "20" }, out withThree, out error));
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-objects", "4",
+                    "--ticks", "20", "--state-at", "20" }, out withFour, out error));
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-objects", "3",
+                    "--ticks", "20", "--state-at", "20" }, out repeated, out error));
+                Assert.Equal(withThree, repeated);
+                Assert.True(withThree.IndexOf("State@20:", StringComparison.Ordinal) >= 0);
+                Assert.False(HashOf(withThree) == HashOf(withFour),
+                    "Dynamic entities must contribute to the deterministic state hash.");
+            }
+        }
+
+        private static string HashOf(string output)
+        {
+            int index = output.IndexOf("State@20: ", StringComparison.Ordinal);
+            return index < 0 ? null : output.Substring(index + 10, 16);
+        }
+
+        [Test]
         public void StandardSyntheticAssetsLoadAndAnswerGroundQueryWithoutGpu()
         {
             using (TemporaryDirectory temporary = new TemporaryDirectory())
             {
-                temporary.WriteBytes("MODELS/GTA3.DIR", new byte[0]);
-                temporary.WriteBytes("MODELS/GTA3.IMG", new byte[0]);
-                temporary.WriteText("DATA/A.IDE", "objs\n1, ground, generic, 1, 100, 0\nend\n");
-                temporary.WriteBytes("DATA/A.COL", WorldTestAssets.CreateBoxCollision("ground", 2.0f, -1.0f, 0.0f));
-                temporary.WriteText("DATA/A.IPL", "inst\n1, ground, 10, 20, 3, 5, 5, 5, 0, 0, 1, 1\nend\n");
-                temporary.WriteText("DATA/DEFAULT.DAT", "IDE DATA/A.IDE\nCOLFILE 0 DATA/A.COL\nIPL DATA/A.IPL\n");
-                temporary.WriteText("DATA/GTA3.DAT", "# empty main\n");
+                CreateSyntheticTree(temporary);
 
                 string output;
                 string error;

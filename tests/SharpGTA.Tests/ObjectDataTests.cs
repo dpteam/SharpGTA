@@ -168,7 +168,7 @@ namespace SharpGTA.Tests
             StaticInstance treadable = Find(world, "pathmodel");
             Assert.True(plain.Handle > 0 && dummy.Handle > 0 && treadable.Handle > 0);
 
-            StaticInstance resolved;
+            WorldEntity resolved;
             Assert.True(world.TryGetEntity(WorldEntityKind.Building, plain.Handle, out resolved));
             Assert.True(ReferenceEquals(plain, resolved));
             Assert.True(world.TryGetEntity(WorldEntityKind.Dummy, dummy.Handle, out resolved));
@@ -180,8 +180,9 @@ namespace SharpGTA.Tests
             // of the lookup and a cross-pool read must not return the dummy.
             Assert.True(world.TryGetEntity(WorldEntityKind.Building, dummy.Handle, out resolved));
             Assert.False(ReferenceEquals(dummy, resolved));
-            Assert.True(world.TryGetBuilding(plain.Handle, out resolved));
-            Assert.True(ReferenceEquals(plain, resolved));
+            StaticInstance building;
+            Assert.True(world.TryGetBuilding(plain.Handle, out building));
+            Assert.True(ReferenceEquals(plain, building));
         }
 
         [Test]
@@ -206,7 +207,7 @@ namespace SharpGTA.Tests
             Assert.Equal(1, entities.TotalRejectedCount);
             Assert.Equal(2, entities.Capacity(WorldEntityKind.Building));
 
-            StaticInstance resolved;
+            WorldEntity resolved;
             Assert.True(entities.TryGet(WorldEntityKind.Building, firstHandle, out resolved));
             Assert.True(entities.Release(WorldEntityKind.Building, firstHandle));
             Assert.False(entities.TryGet(WorldEntityKind.Building, firstHandle, out resolved));
@@ -218,8 +219,8 @@ namespace SharpGTA.Tests
             entities.Clear();
             Assert.Equal(0, entities.Count(WorldEntityKind.Building));
             Assert.Equal(0, entities.TotalRejectedCount);
-            Assert.Equal(1, entities.PedCapacity);
-            Assert.Equal(1, entities.VehicleCapacity);
+            Assert.Equal(1, entities.Capacity(WorldEntityKind.Ped));
+            Assert.Equal(1, entities.Capacity(WorldEntityKind.Vehicle));
         }
 
         [Test]
@@ -236,9 +237,9 @@ namespace SharpGTA.Tests
             Assert.Equal(1, world.Entities.Count(WorldEntityKind.Building));
             Assert.Equal(0, world.Entities.Count(WorldEntityKind.Dummy));
             Assert.Equal(0, world.Entities.Count(WorldEntityKind.Treadable));
-            StaticInstance resolved;
-            Assert.True(world.TryGetBuilding(world.Instances[0].Handle, out resolved));
-            Assert.True(ReferenceEquals(world.Instances[0], resolved));
+            StaticInstance building;
+            Assert.True(world.TryGetBuilding(world.Instances[0].Handle, out building));
+            Assert.True(ReferenceEquals(world.Instances[0], building));
         }
 
         [Test]
@@ -341,9 +342,9 @@ namespace SharpGTA.Tests
             List<StaticInstance> results = new List<StaticInstance>();
             Assert.Equal(1, world.QuerySectors(Vector3.Zero, 50.0f, results));
             Assert.Equal(handle, world.Instances[0].Handle);
-            StaticInstance resolved;
-            Assert.True(world.TryGetBuilding(handle, out resolved));
-            Assert.True(ReferenceEquals(world.Instances[0], resolved));
+            StaticInstance building;
+            Assert.True(world.TryGetBuilding(handle, out building));
+            Assert.True(ReferenceEquals(world.Instances[0], building));
         }
 
         [Test]

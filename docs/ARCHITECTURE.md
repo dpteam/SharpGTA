@@ -67,6 +67,12 @@ World host кодирует ключи как `dff:NAME` / `txd:NAME`, prefetch-
 
 `ObjectData`/`ObjectDataReader` читают `DATA/OBJECT.DAT`: 11 колонок `CObjectInfo`, комментарии `;` в любом месте строки, остановка на `*`-sentinel, дополнительные VC-колонки игнорируются как в `sscanf`, повторяющиеся модели перезаписываются последней строкой. Битая строка и отсутствие файла дают warning в `LoadReport`, а не валят весь load: оригинал продолжает разбор молча, поэтому modded-дерево не должно ломать карту. Полная перегрузка пула (`New` вернул -1) не скрывается: placement остаётся в мире без handle, а счётчик `rejected` попадает в diagnostics. Классификация фиксируется при `Add`, поэтому `SetEntityClassification` после первого `Bind` отклоняется явно; path-группы из IPL обрабатываются после инстансов того же файла, как и в оригинале, а III/VC хранят path-заголовки в IDE.
 
+## Dynamic entities
+
+`WorldEntity` — общий предок `StaticInstance` (IPL placement) и `DynamicEntity` (gameplay object/ped/vehicle): модель, `Transform`, `Position`, per-pool `Handle`, `ScanCode`, `WorldBounds`. Пул на вид один, поэтому gameplay object и placement делят `CObject`/`CBuilding`-семантику и разыменовываются только вместе с `WorldEntityKind`.
+
+Gameplay entities создаются `StaticWorld.TrySpawnEntity` (object/ped/vehicle pool), индексируются в тот же секторный грид, что и placements (`QueryEntities` возвращает смешанный набор, `QuerySectors` — только placements), и освобождаются `DespawnEntity` с обычной generation-защитой handle. `DynamicEntityModule` шагает их из `SimulationRuntime`: `AdvanceDynamic(deltaSeconds)` снимает сущность с грида, интегрирует линейную скорость, ставит обратно и считает смены сектора (`SectorMoves`); модуль реализует `IStateSerializable`, поэтому позиции и скорости входят в `State@N`. Сущность, ушедшая за границу сетки, попадает в `unindexed` и, как и placements там, всегда возвращается запросами — сетка не может её проиндексировать. Физики, гравитации, коллизий, AI и рендера динамических entities пока нет; `--spawn-objects N` — детерминированный пробник слоя.
+
 ## Sector lists
 
 `StaticWorld` раскладывает инстансы по оригинальной сетке `CWorld`: 100×100 секторов по 40 units, начало в -2000, то есть мир -2000..2000. Инстанс попадает в каждый сектор, которого касается его `WorldBounds`; только в middle-секторе (`xmid/ymid` по центру bounds) он лежит в main-листе, во всех остальных покрытых ячейках — в overlap-листе, как `CEntity::Add`. Инстансы, чьи bounds выходят за сетку, идут в `unindexed` и всегда попадают в выборку.

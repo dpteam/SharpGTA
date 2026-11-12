@@ -8,46 +8,46 @@ namespace SharpGTA.World
         /// <summary>CBuilding: a plain IPL placement.</summary>
         Building,
 
-        /// <summary>CObject: a gameplay object; nothing is created from map data yet.</summary>
+        /// <summary>CObject: a gameplay object.</summary>
         Object,
 
         /// <summary>CDummyObject: an IPL placement of a model listed in OBJECT.DAT.</summary>
         Dummy,
 
         /// <summary>CTreadable: an IPL placement of a model used by a path header.</summary>
-        Treadable
+        Treadable,
+
+        /// <summary>CPed: a gameplay character.</summary>
+        Ped,
+
+        /// <summary>CVehicle: a gameplay vehicle.</summary>
+        Vehicle
     }
 
     /// <summary>
     /// Entity pools mirroring CPools: one fixed pool per kind, sized from the selected game's
-    /// limits. Buildings, dummies and treadables are materialized because map loading creates
-    /// those entities; the object pool is reserved for gameplay objects. Ped and vehicle
-    /// capacities come from the same limits table until gameplay entities exist.
+    /// limits. Map loading fills the building, dummy and treadable pools; the simulation
+    /// fills object, ped and vehicle pools through StaticWorld.TrySpawnEntity. Pools hold
+    /// WorldEntity so a placement and a gameplay entity can share one per-kind pool, as in the
+    /// original.
     /// </summary>
     public sealed class WorldEntities
     {
-        private readonly EntityPool<StaticInstance> buildings;
-        private readonly EntityPool<StaticInstance> objects;
-        private readonly EntityPool<StaticInstance> dummies;
-        private readonly EntityPool<StaticInstance> treadables;
-        private readonly int pedCapacity;
-        private readonly int vehicleCapacity;
-        private readonly int[] rejected = new int[4];
+        private readonly EntityPool<WorldEntity>[] pools;
+        private readonly int[] rejected = new int[6];
 
         public WorldEntities(GameLimits limits)
         {
             if (limits == null)
                 throw new ArgumentNullException("limits");
-            buildings = new EntityPool<StaticInstance>(limits.Buildings);
-            objects = new EntityPool<StaticInstance>(limits.Objects);
-            dummies = new EntityPool<StaticInstance>(limits.Dummies);
-            treadables = new EntityPool<StaticInstance>(limits.Treadables);
-            pedCapacity = limits.Peds;
-            vehicleCapacity = limits.Vehicles;
+            pools = new EntityPool<WorldEntity>[6];
+            pools[(int)WorldEntityKind.Building] = new EntityPool<WorldEntity>(limits.Buildings);
+            pools[(int)WorldEntityKind.Object] = new EntityPool<WorldEntity>(limits.Objects);
+            pools[(int)WorldEntityKind.Dummy] = new EntityPool<WorldEntity>(limits.Dummies);
+            pools[(int)WorldEntityKind.Treadable] = new EntityPool<WorldEntity>(limits.Treadables);
+            pools[(int)WorldEntityKind.Ped] = new EntityPool<WorldEntity>(limits.Peds);
+            pools[(int)WorldEntityKind.Vehicle] = new EntityPool<WorldEntity>(limits.Vehicles);
         }
-
-        public int PedCapacity { get { return pedCapacity; } }
-        public int VehicleCapacity { get { return vehicleCapacity; } }
 
         public int Capacity(WorldEntityKind kind)
         {
@@ -77,11 +77,11 @@ namespace SharpGTA.World
         }
 
         /// <summary>Allocates a handle of this kind, or -1 when the pool is full.</summary>
-        public int Create(WorldEntityKind kind, StaticInstance instance)
+        public int Create(WorldEntityKind kind, WorldEntity entity)
         {
-            if (instance == null)
-                throw new ArgumentNullException("instance");
-            int handle = Pool(kind).New(instance);
+            if (entity == null)
+                throw new ArgumentNullException("entity");
+            int handle = Pool(kind).New(entity);
             if (handle < 0)
                 rejected[(int)kind]++;
             return handle;
@@ -92,46 +92,36 @@ namespace SharpGTA.World
             return Pool(kind).Delete(handle);
         }
 
-        public bool TryGet(WorldEntityKind kind, int handle, out StaticInstance instance)
+        public bool TryGet(WorldEntityKind kind, int handle, out WorldEntity entity)
         {
-            instance = Pool(kind).GetAt(handle);
-            return instance != null;
+            entity = Pool(kind).GetAt(handle);
+            return entity != null;
         }
 
         /// <summary>
         /// Drops every handle and keeps the rejection counters at zero. Existing
-        /// StaticInstance.Handle values become unresolvable, so only clear a world that is
+        /// WorldEntity.Handle values become unresolvable, so only clear a world that is
         /// being discarded.
         /// </summary>
         public void Clear()
         {
-            buildings.Clear();
-            objects.Clear();
-            dummies.Clear();
-            treadables.Clear();
-            for (int i = 0; i < rejected.Length; i++)
+            for (int i = 0; i < pools.Length; i++)
+            {
+                pools[i].Clear();
                 rejected[i] = 0;
+            }
         }
 
-        private EntityPool<StaticInstance> Pool(WorldEntityKind kind)
+        private EntityPool<WorldEntity> Pool(WorldEntityKind kind)
         {
-            switch (Validate(kind))
-            {
-                case WorldEntityKind.Building:
-                    return buildings;
-                case WorldEntityKind.Object:
-                    return objects;
-                case WorldEntityKind.Dummy:
-                    return dummies;
-                default:
-                    return treadables;
-            }
+            return pools[(int)Validate(kind)];
         }
 
         private static WorldEntityKind Validate(WorldEntityKind kind)
         {
             if (kind != WorldEntityKind.Building && kind != WorldEntityKind.Object &&
-                kind != WorldEntityKind.Dummy && kind != WorldEntityKind.Treadable)
+                kind != WorldEntityKind.Dummy && kind != WorldEntityKind.Treadable &&
+                kind != WorldEntityKind.Ped && kind != WorldEntityKind.Vehicle)
                 throw new ArgumentOutOfRangeException("kind");
             return kind;
         }

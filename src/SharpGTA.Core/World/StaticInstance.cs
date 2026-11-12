@@ -5,11 +5,13 @@ using SharpGTA.Mathematics;
 namespace SharpGTA.World
 {
     /// <summary>A static IPL placement with metadata and no entity/physics behavior.</summary>
-    public sealed class StaticInstance
+    public sealed class StaticInstance : WorldEntity
     {
+        private BoundingBox worldBounds;
+
         internal StaticInstance(ObjectInstanceRecord record, ModelDefinition model)
+            : base(model, Matrix.Identity, record.Position)
         {
-            Model = model;
             Scale = record.Scale;
             Area = record.Area;
             HasArea = record.HasArea;
@@ -21,38 +23,21 @@ namespace SharpGTA.World
             Matrix transform = Matrix.CreateFromQuaternion(Rotation);
             transform.Position = record.Position;
             Transform = transform;
-            Position = record.Position;
-            Handle = -1;
             RefreshWorldBounds();
         }
 
-        public ModelDefinition Model { get; private set; }
-        public Matrix Transform { get; private set; }
         public Quaternion Rotation { get; private set; }
-        public Vector3 Position { get; private set; }
 
         /// <summary>Parsed IPL scale, retained as metadata but deliberately not applied.</summary>
         public Vector3 Scale { get; private set; }
         public float Area { get; private set; }
         public bool HasArea { get; private set; }
-        public BoundingBox WorldBounds { get; private set; }
 
-        /// <summary>
-        /// Last sector-scan stamp; mirrors CEntity::m_scanCode, 0 means unscanned. Sector
-        /// queries mutate it, so they are neither reentrant nor safe to call concurrently.
-        /// </summary>
-        public int ScanCode { get; internal set; }
-
-        /// <summary>
-        /// Entity-pool handle in this placement's own pool (building, dummy or treadable), or
-        /// -1 when the pool was full. Handles are per-pool, so a lookup needs the matching
-        /// WorldEntityKind, as CPools::Get*Ref requires the entity type.
-        /// </summary>
-        public int Handle { get; internal set; }
+        public override BoundingBox WorldBounds { get { return worldBounds; } }
 
         internal void RefreshWorldBounds()
         {
-            WorldBounds = CalculateWorldBounds(this);
+            worldBounds = CalculateWorldBounds(this);
         }
 
         private static BoundingBox CalculateWorldBounds(StaticInstance instance)
