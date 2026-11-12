@@ -198,12 +198,15 @@ namespace SharpGTA.Tests
             staticWorld.Bind(placements, registry, new LoadReport());
             PathWorld world = new PathWorld();
             world.AddGroups(groups);
+            Assert.Equal(1, world.Version);
 
             Assert.Throws<InvalidOperationException>(delegate
             {
                 world.GetWorldPosition(groups[0], groups[0].Nodes[0]);
             });
             int unresolved = world.BindInstances(staticWorld.Instances);
+
+            Assert.Equal(2, world.Version);
 
             Assert.Equal(1, unresolved);
             Assert.Equal(1, world.UnresolvedCount);

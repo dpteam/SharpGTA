@@ -192,7 +192,7 @@ namespace SharpGTA.Tests
             files.AddText("DATA/MAP.IDE", "objs\n1, ground, generic, 1, 100, 0\nend\n");
             string nodes = "";
             for (int i = 0; i < 12; i++)
-                nodes += "1, 0, 0, 16, 0, 0, 10, 1, 1, 0, 0, 1\n";
+                nodes += "2, 0, 0, 16, 0, 0, 10, 1, 1, 0, 0, 1\n";
             files.AddText("DATA/MAP.IPL",
                 "inst\n1, ground, 10, 20, 3, 1, 1, 1, 0, 0, 1, 1\nend\n" +
                 "zone\ndefaultArea, 0, -1, -1, -1, 1, 1, 1, 0\ninfoArea, 2, -2, -2, -2, 2, 2, 2, 0\nend\n" +
@@ -223,6 +223,33 @@ namespace SharpGTA.Tests
                 Assert.Near(11.0f, position.X);
                 Assert.Near(20.0f, position.Y);
                 Assert.Near(3.0f, position.Z);
+
+                // The graph is built lazily from the bound path world: twelve interior car slots,
+                // each naming node 0, so the whole tile is one star with symmetric adjacency.
+                PathGraph graph = loader.PathGraph;
+                Assert.Equal(12, graph.NodeCount);
+                Assert.Equal(12, graph.CarNodeCount);
+                Assert.Equal(0, graph.PedNodeCount);
+                Assert.Equal(22, graph.LinkCount);
+                Assert.Equal(0, graph.ExternalNextCount);
+                Assert.Equal(0, graph.DanglingNextCount);
+                // Slot 0 names itself; the original links nothing for that, only the star.
+                Assert.Equal(1, graph.SelfNextCount);
+                Assert.Equal(0, graph.ExternalSlotCount);
+                Assert.Equal(0, graph.EmptySlotCount);
+                Assert.Equal(0, graph.UnresolvedGroupCount);
+                Assert.Near(11.0f, graph.Nodes[0].Position.X);
+                Assert.Equal(11, graph.Nodes[0].LinkCount);
+                Assert.Equal(0, graph.Nodes[1].Links[0]);
+
+                // Reloading map data rebinds path transforms, so a stale graph must not survive.
+                loader.LoadIpl("DATA/MAP.IPL");
+                Assert.False(object.ReferenceEquals(graph, loader.PathGraph));
+
+                // A caller that mutates the path world directly cannot keep a stale graph either.
+                PathGraph current = loader.PathGraph;
+                loader.Paths.BindInstances(loader.World.Instances);
+                Assert.False(object.ReferenceEquals(current, loader.PathGraph));
             }
         }
 

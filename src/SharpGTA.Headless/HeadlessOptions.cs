@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using SharpGTA.Data;
 
 namespace SharpGTA.Headless
 {
@@ -25,6 +26,8 @@ namespace SharpGTA.Headless
             DffEntries = new List<string>();
             TxdPaths = new List<string>();
             TxdEntries = new List<string>();
+            PathNearestKind = PathKind.Car;
+            PathNearestRadius = 100.0f;
         }
 
         public string Game { get; set; }
@@ -64,6 +67,15 @@ namespace SharpGTA.Headless
 
         public bool HasBuildingQuery { get; set; }
         public int BuildingHandle { get; set; }
+
+        public bool HasPathNearestQuery { get; set; }
+        public float PathNearestX { get; set; }
+        public float PathNearestY { get; set; }
+        public float PathNearestZ { get; set; }
+        public PathKind PathNearestKind { get; set; }
+        public float PathNearestRadius { get; set; }
+        public bool HasPathKindOption { get; set; }
+        public bool HasPathRadiusOption { get; set; }
 
         public bool HasSpawnObjects { get; set; }
         public int SpawnObjectCount { get; set; }
@@ -182,6 +194,21 @@ namespace SharpGTA.Headless
                         options.HasBuildingQuery = true;
                         options.HasExplicitAssetAction = true;
                         break;
+                    case "--query-path-nearest":
+                        options.PathNearestX = ParseSingle(Value(args, ref i, argument), argument);
+                        options.PathNearestY = ParseSingle(Value(args, ref i, argument), argument);
+                        options.PathNearestZ = ParseSingle(Value(args, ref i, argument), argument);
+                        options.HasPathNearestQuery = true;
+                        options.HasExplicitAssetAction = true;
+                        break;
+                    case "--path-kind":
+                        options.PathNearestKind = ParsePathKind(Value(args, ref i, argument));
+                        options.HasPathKindOption = true;
+                        break;
+                    case "--path-radius":
+                        options.PathNearestRadius = ParseSingle(Value(args, ref i, argument), argument);
+                        options.HasPathRadiusOption = true;
+                        break;
                     case "--spawn-objects":
                         // Spawning needs a loaded world, not a one-shot asset action, so it
                         // does not suppress the implicit --standard load.
@@ -206,6 +233,10 @@ namespace SharpGTA.Headless
             {
                 if (options.HasStateAt && options.StateAt > options.Ticks)
                     throw new CommandLineException("--state-at cannot be greater than --ticks.");
+                if ((options.HasPathKindOption || options.HasPathRadiusOption) && !options.HasPathNearestQuery)
+                    throw new CommandLineException("--path-kind and --path-radius require --query-path-nearest.");
+                if (options.HasPathNearestQuery && !(options.PathNearestRadius > 0.0f))
+                    throw new CommandLineException("--path-radius must be a positive number.");
                 if (options.GxtKey != null && options.GxtPath == null)
                     throw new CommandLineException("--gxt-key requires --gxt.");
                 if (options.RenderPreview && options.DffPaths.Count + options.DffEntries.Count == 0)
@@ -217,7 +248,8 @@ namespace SharpGTA.Headless
                     options.DffPaths.Count != 0 || options.DffEntries.Count != 0 || options.DffScan ||
                     options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
                     options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
-                    options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview;
+                    options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview ||
+                    options.HasPathNearestQuery;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)
@@ -257,6 +289,18 @@ namespace SharpGTA.Headless
                 float.IsNaN(result) || float.IsInfinity(result))
                 throw new CommandLineException("Invalid finite number for " + option + ": " + value);
             return result;
+        }
+
+        private static PathKind ParsePathKind(string value)
+        {
+            if (string.Equals(value, "car", StringComparison.OrdinalIgnoreCase))
+                return PathKind.Car;
+            if (string.Equals(value, "ped", StringComparison.OrdinalIgnoreCase))
+                return PathKind.Ped;
+            if (string.Equals(value, "water", StringComparison.OrdinalIgnoreCase))
+                return PathKind.Water;
+            throw new CommandLineException("Invalid path kind for --path-kind: " + value +
+                " (expected car, ped or water).");
         }
     }
 }

@@ -1,0 +1,379 @@
+using System;
+using System.Collections.Generic;
+using SharpGTA.Assets;
+using SharpGTA.Data;
+using SharpGTA.IO;
+using SharpGTA.Mathematics;
+using SharpGTA.World;
+
+namespace SharpGTA.Tests
+{
+    public sealed class PathGraphTests
+    {
+        // Third field is the node type: 0 empty, 1 extern (tile boundary), 2 intern (a node).
+        private const string InternNode = "2, -1, 0, 16, 32, 48, 160, 1, 1";
+
+        [Test]
+        public void GraphKeepsInteriorSlotsAndLinksEitherSideOfNext()
+        {
+            // Four interior slots chained 0 -> 1 -> 2 -> 3; the last one has no next.
+            PathWorld world = DetachedIII(
+                "2, 1, 0, 0, 0, 0, 160, 1, 1",
+                "2, 2, 0, 160, 0, 0, 160, 1, 1",
+                "2, 3, 0, 320, 0, 0, 160, 1, 1",
+                "2, -1, 0, 480, 0, 0, 160, 1, 1",
+                EmptyNodes(8));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(4, graph.NodeCount);
+            Assert.Equal(4, graph.CarNodeCount);
+            Assert.Equal(0, graph.PedNodeCount);
+            Assert.Equal(0, graph.WaterNodeCount);
+            Assert.Equal(8, graph.EmptySlotCount);
+            Assert.Equal(0, graph.ExternalSlotCount);
+            // Three tile links, stored in both directions like the original lists.
+            Assert.Equal(6, graph.LinkCount);
+            Assert.Equal(0, graph.ExternalNextCount);
+            Assert.Equal(0, graph.DanglingNextCount);
+            Assert.Equal(0, graph.SelfNextCount);
+            Assert.Equal(0, graph.UnresolvedGroupCount);
+
+            PathGraphNode first = graph.Nodes[0];
+            Assert.Equal(0, first.GlobalIndex);
+            Assert.Equal(0, first.GroupIndex);
+            Assert.Equal(0, first.LocalIndex);
+            Assert.Equal(PathKind.Car, first.Kind);
+            Assert.Equal(1, first.LinkCount);
+            Assert.Equal(1, first.Links[0]);
+            Assert.Equal(2, graph.Nodes[1].LinkCount);
+            Assert.Equal(2, graph.Nodes[2].LinkCount);
+            Assert.Equal(1, graph.Nodes[2].Links[0]);
+            Assert.Equal(1, graph.Nodes[3].LinkCount);
+            Assert.Equal(2, graph.Nodes[3].Links[0]);
+            Assert.Equal(-1, graph.Nodes[3].NextNodeIndex);
+
+            // Stored coordinates are compressed by 16 and detached groups ignore transforms.
+            AssertVector(Vector3.Zero, first.Position);
+            AssertVector(new Vector3(30.0f, 0.0f, 0.0f), graph.Nodes[3].Position);
+            Assert.Equal(3, graph.Nodes[3].LocalIndex);
+        }
+
+        [Test]
+        public void ExternalsAndEmptySlotsAreNotNodesButAreCounted()
+        {
+            PathWorld world = DetachedIII(
+                "1, 0, 0, 0, 0, 0, 160, 1, 1",     // extern, points at slot 0
+                "2, 2, 0, 160, 0, 0, 160, 1, 1",   // intern, points at slot 2 (extern)
+                "1, 1, 0, 320, 0, 0, 160, 1, 1",   // extern, points at slot 1 (intern)
+                "2, 1, 0, 480, 0, 0, 160, 1, 1",   // intern, points at another intern
+                EmptyNodes(8));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(2, graph.NodeCount);
+            Assert.Equal(2, graph.ExternalSlotCount);
+            Assert.Equal(8, graph.EmptySlotCount);
+            Assert.Equal(0, graph.UnknownSlotCount);
+            // A lane may end at the tile boundary; the extern slot is not a node and the
+            // cross-tile merge that would follow it is not implemented yet.
+            Assert.Equal(1, graph.ExternalNextCount);
+            Assert.Equal(0, graph.DanglingNextCount);
+            // intern(3) -> intern(1) is the only pair either side names.
+            Assert.Equal(2, graph.LinkCount);
+            Assert.Equal(1, graph.Nodes[0].LocalIndex);
+            Assert.Equal(1, graph.Nodes[0].Links[0]);
+            Assert.Equal(3, graph.Nodes[1].LocalIndex);
+            Assert.Equal(1, graph.Nodes[1].LinkCount);
+        }
+
+        [Test]
+        public void DanglingSelfAndOutOfRangeNextAreCountedSeparately()
+        {
+            PathWorld world = DetachedIII(
+                "2, 9, 0, 0, 0, 0, 160, 1, 1",    // points at an empty slot
+                "2, 1, 0, 160, 0, 0, 160, 1, 1",  // points at itself
+                "2, 12, 0, 320, 0, 0, 160, 1, 1", // points outside the twelve slots
+                "2, -1, 0, 480, 0, 0, 160, 1, 1",
+                EmptyNodes(8));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(4, graph.NodeCount);
+            Assert.Equal(0, graph.LinkCount);
+            Assert.Equal(2, graph.DanglingNextCount);
+            Assert.Equal(1, graph.SelfNextCount);
+            Assert.Equal(0, graph.ExternalNextCount);
+            for (int i = 0; i < graph.NodeCount; i++)
+                Assert.Equal(0, graph.Nodes[i].LinkCount);
+        }
+
+        [Test]
+        public void GroupsWithOnlyPaddingOrExternalsProduceNoNodes()
+        {
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII("car, -1, unused\n" + EmptyNodes(12) + "\n"));
+            world.AddGroups(ParseIII("car, -1, unused\n" + Repeat("1, -1, 0, 0, 0, 0, 160, 1, 1", 12)));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(0, graph.NodeCount);
+            Assert.Equal(0, graph.LinkCount);
+            Assert.Equal(12, graph.EmptySlotCount);
+            Assert.Equal(12, graph.ExternalSlotCount);
+            Assert.Equal(0, graph.UnresolvedGroupCount);
+        }
+
+        [Test]
+        public void GroupsWithoutATransformStayOutOfTheGraph()
+        {
+            ModelRegistry registry = new ModelRegistry(new PathTestDefinition());
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n10, road, generic, 1, 100, 0\nend\n"));
+            IplDocument placements = new IplReader(DataSchema.III).Read(
+                "inst\n10, road, 100, 0, 0, 1, 1, 1, 0, 0, 1, 1\nend\n");
+            StaticWorld staticWorld = new StaticWorld();
+            staticWorld.Bind(placements, registry, new LoadReport());
+
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII("car, 10, road\n" + InternNode + "\n" + EmptyNodes(11) + "\n"));
+            world.AddGroups(ParseIII("car, 11, missing\n" + InternNode + "\n" + EmptyNodes(11) + "\n"));
+            world.AddGroups(ParseIII("car, -1, unused\n" + InternNode + "\n" + EmptyNodes(11) + "\n"));
+
+            // Before binding, both attached groups have no transform and cannot be placed.
+            PathGraph unbound = new PathGraph(world);
+            Assert.Equal(1, unbound.NodeCount);
+            Assert.Equal(2, unbound.UnresolvedGroupCount);
+
+            world.BindInstances(staticWorld.Instances);
+            PathGraph bound = new PathGraph(world);
+
+            Assert.Equal(2, bound.NodeCount);
+            Assert.Equal(1, bound.UnresolvedGroupCount);
+            // The bound node sits on the placement, so the graph never guesses an origin.
+            AssertVector(new Vector3(101.0f, 2.0f, 3.0f), bound.Nodes[0].Position);
+            Assert.Equal(2, bound.Nodes[1].GroupIndex);
+        }
+
+        [Test]
+        public void SameModelIdAcrossKindsKeepsSeparateGroups()
+        {
+            ModelRegistry registry = new ModelRegistry(new PathTestDefinition());
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n10, road, generic, 1, 100, 0\nend\n"));
+            IplDocument placements = new IplReader(DataSchema.III).Read(
+                "inst\n10, road, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\nend\n");
+            StaticWorld staticWorld = new StaticWorld();
+            staticWorld.Bind(placements, registry, new LoadReport());
+
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII("car, 10, road\n" + InternNode + "\n" + EmptyNodes(11) + "\n"));
+            world.AddGroups(ParseIII("ped, 10, road\n" + InternNode + "\n" + EmptyNodes(11) + "\n"));
+            world.BindInstances(staticWorld.Instances);
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(2, graph.NodeCount);
+            Assert.Equal(1, graph.CarNodeCount);
+            Assert.Equal(1, graph.PedNodeCount);
+            Assert.Equal(PathKind.Car, graph.Nodes[0].Kind);
+            Assert.Equal(PathKind.Ped, graph.Nodes[1].Kind);
+            Assert.Equal(0, graph.Nodes[0].LinkCount);
+            Assert.Equal(0, graph.Nodes[1].LinkCount);
+        }
+
+        [Test]
+        public void NearestNodeUsesManhattanDistanceWithTripleWeightOnZ()
+        {
+            // A is three units below the query, B is four units to the side: plain 3D
+            // distance would pick A, the original weighted metric picks B.
+            PathWorld world = DetachedIII(
+                "2, -1, 0, 0, 0, -48, 160, 1, 1",
+                "2, -1, 0, 64, 0, 0, 160, 1, 1",
+                EmptyNodes(10));
+
+            PathGraph graph = new PathGraph(world);
+            AssertVector(new Vector3(0.0f, 0.0f, -3.0f), graph.Nodes[0].Position);
+            AssertVector(new Vector3(4.0f, 0.0f, 0.0f), graph.Nodes[1].Position);
+
+            PathGraphNode node;
+            float distance;
+            Assert.True(graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, 100.0f, out node, out distance));
+            Assert.Equal(1, node.GlobalIndex);
+            Assert.Near(4.0f, distance);
+
+            // |dx| + |dy| + 3|dz| = 0 + 0 + 9 for A, 4 + 0 + 0 for B.
+            Assert.True(graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, 4.5f, out node, out distance));
+            Assert.Equal(1, node.GlobalIndex);
+            Assert.Near(4.0f, distance);
+
+            // A node exactly at the limit is rejected: the original compares strictly.
+            Assert.False(graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, 4.0f, out node, out distance));
+            Assert.Equal(null, node);
+            Assert.True(graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, 4.001f, out node, out distance));
+
+            // The original seeds its search with a 10000 unit sentinel, so a huge radius still
+            // cannot reach a node beyond it.
+            Assert.False(graph.TryFindNearestNode(new Vector3(99999.0f, 0.0f, 0.0f), PathKind.Car,
+                20000.0f, out node, out distance));
+
+            // No node of the kind inside the limit, and a non-finite query point finds nothing.
+            Assert.False(graph.TryFindNearestNode(new Vector3(1000.0f, 0.0f, 0.0f), PathKind.Car,
+                100.0f, out node, out distance));
+            Assert.Equal(null, node);
+            Assert.False(graph.TryFindNearestNode(new Vector3(float.NaN, 0.0f, 0.0f), PathKind.Car,
+                100.0f, out node, out distance));
+        }
+
+        [Test]
+        public void NearestNodeTiesResolveToTheFirstSymbolicNode()
+        {
+            PathWorld world = DetachedIII(
+                "2, -1, 0, 0, 0, 0, 160, 1, 1",
+                "2, -1, 0, 0, 0, 0, 160, 1, 1",
+                EmptyNodes(10));
+
+            PathGraph graph = new PathGraph(world);
+            PathGraphNode node;
+            float distance;
+            Assert.True(graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, 10.0f, out node, out distance));
+            Assert.Equal(0, node.GlobalIndex);
+            Assert.Near(0.0f, distance);
+            Assert.Equal(1, graph.Nodes[1].GlobalIndex);
+        }
+
+        [Test]
+        public void NearestNodeIsScopedByKindAndValidatesArguments()
+        {
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII("car, -1, unused\n" + Repeat("2, -1, 0, 16, 32, 48, 160, 1, 1", 12)));
+            world.AddGroups(ParseVC("0, -1\n" + Repeat("2, -1, 0, 0, 0, 0, 10, 0, 0, 0, 0", 12)));
+            world.AddGroups(ParseVC("2, -1\n" + Repeat("2, -1, 0, 160, 0, 0, 10, 0, 0, 0, 0", 12)));
+
+            PathGraph graph = new PathGraph(world);
+            Assert.Equal(36, graph.NodeCount);
+            Assert.Equal(12, graph.CarNodeCount);
+            Assert.Equal(12, graph.PedNodeCount);
+            Assert.Equal(12, graph.WaterNodeCount);
+            Assert.Equal(PathKind.Car, graph.Nodes[0].Kind);
+            Assert.Equal(PathKind.Ped, graph.Nodes[12].Kind);
+            Assert.Equal(PathKind.Water, graph.Nodes[24].Kind);
+
+            PathGraphNode node;
+            float distance;
+            Assert.True(graph.TryFindNearestNode(new Vector3(10.0f, 0.0f, 0.0f), PathKind.Water,
+                5.0f, out node, out distance));
+            Assert.Equal(PathKind.Water, node.Kind);
+            Assert.Near(0.0f, distance);
+            Assert.True(graph.TryFindNearestNode(new Vector3(10.0f, 0.0f, 0.0f), PathKind.Ped,
+                15.0f, out node, out distance));
+            Assert.Equal(PathKind.Ped, node.Kind);
+            Assert.Near(10.0f, distance);
+            Assert.True(graph.TryFindNearestNode(new Vector3(3.0f, 2.0f, 3.0f), PathKind.Car,
+                5.0f, out node, out distance));
+            Assert.Equal(PathKind.Car, node.Kind);
+            Assert.Near(2.0f, distance);
+
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, 0.0f, out node, out distance);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, -1.0f, out node, out distance);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, float.NaN, out node, out distance);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, float.PositiveInfinity, out node, out distance);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                graph.TryFindNearestNode(Vector3.Zero, (PathKind)42, 5.0f, out node, out distance);
+            });
+            Assert.Throws<ArgumentNullException>(delegate
+            {
+                new PathGraph(null);
+            });
+        }
+
+        [Test]
+        public void LinkListsCannotBeMutatedByCallers()
+        {
+            PathWorld world = DetachedIII(
+                "2, 1, 0, 0, 0, 0, 160, 1, 1",
+                "2, 1, 0, 160, 0, 0, 160, 1, 1",
+                EmptyNodes(10));
+
+            PathGraph graph = new PathGraph(world);
+            IList<int> links = graph.Nodes[0].Links;
+            Assert.Equal(1, links.Count);
+            Assert.Throws<NotSupportedException>(delegate { links[0] = 99; });
+            Assert.Throws<NotSupportedException>(delegate { links.Add(99); });
+            Assert.Equal(1, graph.Nodes[0].Links[0]);
+        }
+
+        [Test]
+        public void EmptyWorldBuildsAnEmptyGraph()
+        {
+            PathGraph graph = new PathGraph(new PathWorld());
+
+            Assert.Equal(0, graph.NodeCount);
+            Assert.Equal(0, graph.LinkCount);
+            Assert.Equal(0, graph.EmptySlotCount);
+            Assert.Equal(0, graph.ExternalSlotCount);
+            Assert.Equal(0, graph.UnresolvedGroupCount);
+            Assert.Equal(0, graph.Nodes.Count);
+
+            PathGraphNode node;
+            float distance;
+            Assert.False(graph.TryFindNearestNode(Vector3.Zero, PathKind.Car, 10.0f, out node, out distance));
+        }
+
+        private static PathWorld DetachedIII(params string[] nodeLines)
+        {
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII("car, -1, unused\n" + string.Join("\n", nodeLines) + "\n"));
+            return world;
+        }
+
+        private static string EmptyNodes(int count)
+        {
+            return Repeat("0, -1, 0, 0, 0, 0, 0, 0, 0", count).TrimEnd('\n');
+        }
+
+        private static PathGroup[] ParseIII(string body)
+        {
+            const string sourceName = "iii-paths.ide";
+            IdeDocument document = new IdeReader(DataSchema.III).Read(
+                "path\n" + body + "end\n", sourceName);
+            return PathRecordParser.ParseGroups(document.RawRecords, DataSchema.III, sourceName);
+        }
+
+        private static PathGroup[] ParseVC(string body)
+        {
+            const string sourceName = "vc-paths.ipl";
+            IplDocument document = new IplReader(DataSchema.VC).Read(
+                "path\n" + body + "end\n", sourceName);
+            return PathRecordParser.ParseGroups(document.RawRecords, DataSchema.VC, sourceName);
+        }
+
+        private static string Repeat(string line, int count)
+        {
+            string result = "";
+            for (int i = 0; i < count; i++)
+                result += line + "\n";
+            return result;
+        }
+
+        private static void AssertVector(Vector3 expected, Vector3 actual)
+        {
+            Assert.Near(expected.X, actual.X, 0.0001f);
+            Assert.Near(expected.Y, actual.Y, 0.0001f);
+            Assert.Near(expected.Z, actual.Z, 0.0001f);
+        }
+    }
+}

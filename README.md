@@ -51,7 +51,7 @@ SharpGTA.Headless.exe --game vc --root "D:\Games\GTA Vice City" --verbose
 
 # Отдельные проверки.
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --standard --query-ground 10 20 -5 100
-SharpGTA.Headless.exe --root "D:\Games\GTA III" --standard --query-zone 812 -936 36 --query-path 0 0
+SharpGTA.Headless.exe --root "D:\Games\GTA III" --standard --query-zone 812 -936 36 --query-path 0 0 --query-path-nearest 812 -936 36
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --gxt TEXT/AMERICAN.GXT --gxt-key MAIN
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --standard --rw-entry PLAYER.DFF
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --dff-entry PLAYER.DFF
@@ -135,7 +135,7 @@ D3D9 textures и static 3D vertex/index buffers используют managed poo
 - `src/SharpGTA.Launcher` — standalone MSHTML launcher с общими frontend settings и прямым запуском D3D9.
 - `tests/SharpGTA.Tests` — собственный dependency-free test runner; синтетические данные не требуют игровых ресурсов.
 
-`--query-zone` читает navigation/info/map zones и cull flags, `--query-path GROUP NODE` выводит world position и next link. III paths читаются преимущественно из IDE, VC — из IPL; attached coords `/16` получают transform объекта, detached остаются мировыми. Это ещё не AI pathfinding.
+`--query-zone` читает navigation/info/map zones и cull flags, `--query-path GROUP NODE` выводит world position и next link, `--query-path-nearest X Y Z [--path-kind car|ped|water] [--path-radius R]` ищет ближайший узел графа той же метрикой, что `CPathFind::FindNodeClosestToCoors`. III paths читаются преимущественно из IDE, VC — из IPL; attached coords `/16` получают transform объекта, detached остаются мировыми. `PathGraph` делает узлами только intern-слоты (`type 2`, как `m_pathNodes`), связывает их симметрично по `next` внутри тайла, а extern-слоты держит как границу тайла; межтайловых connections и AI pathfinding ещё нет.
 
 Подробности границ и ограничений — в [ARCHITECTURE.md](docs/ARCHITECTURE.md), результаты чтения двух реальных деревьев — в [REAL-ASSETS.md](docs/REAL-ASSETS.md), источники — в [REFERENCE-SOURCES.md](docs/REFERENCE-SOURCES.md), CI — в [CI.md](docs/CI.md), будущие multiplayer и межигровые ресурсы — в [IDEAS.md](IDEAS.md) и [RESOURCE-COMPATIBILITY.md](docs/RESOURCE-COMPATIBILITY.md).
 

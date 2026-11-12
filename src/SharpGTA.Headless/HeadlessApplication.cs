@@ -53,6 +53,8 @@ namespace SharpGTA.Headless
                             WriteZoneQuery(loader.Zones, options, output);
                         if (options.HasPathQuery)
                             WritePathQuery(loader.Paths, options, output);
+                        if (options.HasPathNearestQuery)
+                            WritePathNearestQuery(loader, options, output);
                         if (options.HasBuildingQuery)
                             WriteBuildingQuery(loader.World, options, output);
                         if (options.Verbose)
@@ -245,6 +247,22 @@ namespace SharpGTA.Headless
                 " detached=" + loader.Paths.DetachedCount.ToString(CultureInfo.InvariantCulture) +
                 " water=" + loader.Paths.WaterCount.ToString(CultureInfo.InvariantCulture) +
                 " unresolved=" + loader.Paths.UnresolvedCount.ToString(CultureInfo.InvariantCulture));
+            if (loader.Paths.GroupCount != 0)
+            {
+                PathGraph graph = loader.PathGraph;
+                output.WriteLine("Path-Graph: nodes=" + graph.NodeCount.ToString(CultureInfo.InvariantCulture) +
+                    " car=" + graph.CarNodeCount.ToString(CultureInfo.InvariantCulture) +
+                    " ped=" + graph.PedNodeCount.ToString(CultureInfo.InvariantCulture) +
+                    " water=" + graph.WaterNodeCount.ToString(CultureInfo.InvariantCulture) +
+                    " links=" + graph.LinkCount.ToString(CultureInfo.InvariantCulture) +
+                    " externalNext=" + graph.ExternalNextCount.ToString(CultureInfo.InvariantCulture) +
+                    " danglingNext=" + graph.DanglingNextCount.ToString(CultureInfo.InvariantCulture) +
+                    " selfNext=" + graph.SelfNextCount.ToString(CultureInfo.InvariantCulture) +
+                    " externalSlots=" + graph.ExternalSlotCount.ToString(CultureInfo.InvariantCulture) +
+                    " emptySlots=" + graph.EmptySlotCount.ToString(CultureInfo.InvariantCulture) +
+                    " unknownSlots=" + graph.UnknownSlotCount.ToString(CultureInfo.InvariantCulture) +
+                    " unresolvedGroups=" + graph.UnresolvedGroupCount.ToString(CultureInfo.InvariantCulture));
+            }
             output.WriteLine("Asset-Issues: total=" + loader.Report.TotalIssueCount.ToString(CultureInfo.InvariantCulture) +
                 " retained=" + loader.Report.Count.ToString(CultureInfo.InvariantCulture) +
                 " dropped=" + loader.Report.DroppedIssueCount.ToString(CultureInfo.InvariantCulture));
@@ -360,6 +378,51 @@ namespace SharpGTA.Headless
                 " node=" + options.PathNodeIndex.ToString(CultureInfo.InvariantCulture) +
                 " resolved=true kind=" + group.Kind + " model=" + group.ModelName +
                 " position=" + Vector(position) + " next=" + node.NextNodeIndex.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void WritePathNearestQuery(GameDataLoader loader, HeadlessOptions options,
+            TextWriter output)
+        {
+            if (loader.Paths.GroupCount == 0)
+            {
+                throw new CommandLineException(
+                    "--query-path-nearest requires loaded path data; add --standard.");
+            }
+            Vector3 position = new Vector3(options.PathNearestX, options.PathNearestY,
+                options.PathNearestZ);
+            string prefix = "Path-Nearest: kind=" + PathKindName(options.PathNearestKind) +
+                " position=" + Vector(position) +
+                " radius=" + options.PathNearestRadius.ToString("R", CultureInfo.InvariantCulture);
+            PathGraphNode node;
+            float distance;
+            if (!loader.PathGraph.TryFindNearestNode(position, options.PathNearestKind,
+                options.PathNearestRadius, out node, out distance))
+            {
+                output.WriteLine(prefix + " found=false");
+                return;
+            }
+            output.WriteLine(prefix + " found=true node=" + node.GlobalIndex.ToString(CultureInfo.InvariantCulture) +
+                " group=" + node.GroupIndex.ToString(CultureInfo.InvariantCulture) +
+                " local=" + node.LocalIndex.ToString(CultureInfo.InvariantCulture) +
+                " nodePosition=" + Vector(node.Position) +
+                " distance=" + distance.ToString("R", CultureInfo.InvariantCulture) +
+                " links=" + node.LinkCount.ToString(CultureInfo.InvariantCulture) +
+                " next=" + node.NextNodeIndex.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static string PathKindName(PathKind kind)
+        {
+            switch (kind)
+            {
+                case PathKind.Car:
+                    return "car";
+                case PathKind.Ped:
+                    return "ped";
+                case PathKind.Water:
+                    return "water";
+                default:
+                    return "unknown";
+            }
         }
 
         private static void WriteGroundQuery(StaticWorld world, HeadlessOptions options, TextWriter output)
@@ -551,6 +614,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --query-ground X Y Z0 Z1  Query static COLL ground between two Z values.");
             output.WriteLine("  --query-zone X Y Z        Query navigation/info/map zones and cull attributes.");
             output.WriteLine("  --query-path GROUP NODE   Print one resolved path node position and next link.");
+            output.WriteLine("  --query-path-nearest X Y Z  Find the closest path node; --path-kind car|ped|water, --path-radius R.");
             output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
             output.WriteLine("  --spawn-objects N [--spawn-model NAME]  Spawn N drifting gameplay objects and tick them.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");

@@ -47,6 +47,8 @@ namespace SharpGTA.Assets
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private bool embeddedCollisionLoaded;
         private bool disposed;
+        private PathGraph pathGraph;
+        private int pathGraphVersion = -1;
 
         public GameDataLoader(GameDefinition definition, IGameFileSystem fileSystem)
         {
@@ -79,6 +81,26 @@ namespace SharpGTA.Assets
         public ObjectData Objects { get; private set; }
         public LoadReport Report { get; private set; }
         public GameDataLoadStats Stats { get; private set; }
+
+        /// <summary>
+        /// Path node/link graph over the currently bound path world. Built on first access and
+        /// dropped whenever the path world changes, so links never point at a transform that
+        /// has moved; <see cref="PathWorld.Version"/> also catches callers that mutate the
+        /// path world directly instead of going through this loader.
+        /// </summary>
+        public PathGraph PathGraph
+        {
+            get
+            {
+                ThrowIfDisposed();
+                if (pathGraph == null || pathGraphVersion != Paths.Version)
+                {
+                    pathGraph = new PathGraph(Paths);
+                    pathGraphVersion = Paths.Version;
+                }
+                return pathGraph;
+            }
+        }
 
         public void LoadStandard()
         {
@@ -263,6 +285,7 @@ namespace SharpGTA.Assets
 
         private void RefreshPathStats()
         {
+            // Rebind bumps PathWorld.Version, which is what invalidates the lazy graph.
             Stats.UnresolvedPathGroupCount = Paths.BindInstances(World.Instances);
         }
 

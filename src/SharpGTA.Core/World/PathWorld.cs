@@ -43,6 +43,12 @@ namespace SharpGTA.World
         public int ResolvedCount { get; private set; }
         public int UnresolvedCount { get { return GroupCount - ResolvedCount; } }
 
+        /// <summary>
+        /// Incremented on every change that can move a node: adding groups or rebinding
+        /// transforms. Derived caches (like the path graph) compare it before reuse.
+        /// </summary>
+        public int Version { get; private set; }
+
         public void AddGroups(IList<PathGroup> pathGroups)
         {
             if (pathGroups == null)
@@ -60,6 +66,7 @@ namespace SharpGTA.World
                 if (!string.IsNullOrEmpty(pathGroups[i].ModelName))
                     pathObjects.Add(pathGroups[i].ModelName);
             }
+            Version++;
             RefreshCounts();
         }
 
@@ -94,6 +101,7 @@ namespace SharpGTA.World
                     : new Matrix?(instance.Transform);
             }
             RefreshCounts();
+            Version++;
             return UnresolvedCount;
         }
 

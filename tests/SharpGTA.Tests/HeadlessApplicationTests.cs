@@ -93,6 +93,38 @@ namespace SharpGTA.Tests
             }
         }
 
+        /// <summary>
+        /// Same map as <see cref="CreateSyntheticTree"/> plus one detached car path group with
+        /// four real slots (0 -> 1 -> 2 -> 3) and eight type-0 padding slots.
+        /// </summary>
+        private static void CreatePathTree(TemporaryDirectory temporary)
+        {
+            temporary.WriteBytes("MODELS/GTA3.DIR", new byte[0]);
+            temporary.WriteBytes("MODELS/GTA3.IMG", new byte[0]);
+            temporary.WriteText("DATA/A.IDE",
+                "objs\n1, ground, generic, 1, 100, 0\nend\n" +
+                "path\n" +
+                "car, -1, unused\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "2, 2, 0, 160, 0, 0, 160, 1, 1\n" +
+                "2, 3, 0, 320, 0, 0, 160, 1, 1\n" +
+                "2, -1, 0, 480, 0, 0, 160, 1, 1\n" +
+                RepeatLine("0, -1, 0, 0, 0, 0, 0, 0, 0", 8) +
+                "end\n");
+            temporary.WriteBytes("DATA/A.COL", WorldTestAssets.CreateBoxCollision("ground", 2.0f, -1.0f, 0.0f));
+            temporary.WriteText("DATA/A.IPL", "inst\n1, ground, 10, 20, 3, 5, 5, 5, 0, 0, 1, 1\nend\n");
+            temporary.WriteText("DATA/DEFAULT.DAT", "IDE DATA/A.IDE\nCOLFILE 0 DATA/A.COL\nIPL DATA/A.IPL\n");
+            temporary.WriteText("DATA/GTA3.DAT", "# empty main\n");
+        }
+
+        private static string RepeatLine(string line, int count)
+        {
+            string result = "";
+            for (int i = 0; i < count; i++)
+                result += line + "\n";
+            return result;
+        }
+
         private static void CreateSyntheticTree(TemporaryDirectory temporary)
         {
             temporary.WriteBytes("MODELS/GTA3.DIR", new byte[0]);
@@ -122,6 +154,71 @@ namespace SharpGTA.Tests
                 Assert.True(output.IndexOf("instances=1", StringComparison.Ordinal) >= 0);
                 Assert.True(output.IndexOf("Dynamic: requested=3 alive=3 objects=3 rejected=0",
                     StringComparison.Ordinal) >= 0);
+            }
+        }
+
+        [Test]
+        public void PathGraphProbeReportsNodesLinksAndNearestNode()
+        {
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreatePathTree(temporary);
+
+                string output;
+                string error;
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
+                    "--query-path-nearest", "0", "0", "0", "--path-radius", "10" }, out output, out error), error);
+                Assert.True(output.IndexOf(
+                    "Path-Graph: nodes=4 car=4 ped=0 water=0 links=6 externalNext=0 danglingNext=0 " +
+                    "selfNext=0 externalSlots=0 emptySlots=8 unknownSlots=0 unresolvedGroups=0",
+                    StringComparison.Ordinal) >= 0, output);
+                Assert.True(output.IndexOf(
+                    "Path-Nearest: kind=car position=(0,0,0) radius=10 found=true node=0 group=0 local=0 " +
+                    "nodePosition=(0,0,0) distance=0 links=1 next=1", StringComparison.Ordinal) >= 0, output);
+
+                // The same coordinates five hundred units away have no node inside the limit.
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
+                    "--query-path-nearest", "500", "0", "0", "--path-radius", "50" }, out output, out error), error);
+                Assert.True(output.IndexOf("found=false", StringComparison.Ordinal) >= 0, output);
+
+                // The synthetic tree only has car paths, so a ped query must come back empty.
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
+                    "--query-path-nearest", "0", "0", "0", "--path-kind", "ped", "--path-radius", "100" },
+                    out output, out error), error);
+                Assert.True(output.IndexOf("Path-Nearest: kind=ped", StringComparison.Ordinal) >= 0);
+                Assert.True(output.IndexOf("found=false", StringComparison.Ordinal) >= 0, output);
+            }
+        }
+
+        [Test]
+        public void PathNearestOptionsAreValidatedAndNeedLoadedPaths()
+        {
+            string output;
+            string error;
+            Assert.Equal(2, Invoke(new string[] { "--path-kind", "ped" }, out output, out error));
+            Assert.True(error.IndexOf("--query-path-nearest", StringComparison.Ordinal) >= 0);
+
+            Assert.Equal(2, Invoke(new string[] { "--query-path-nearest", "0", "0", "0",
+                "--path-radius", "0" }, out output, out error));
+            Assert.True(error.IndexOf("--path-radius", StringComparison.Ordinal) >= 0);
+
+            Assert.Equal(2, Invoke(new string[] { "--query-path-nearest", "0", "0", "0",
+                "--path-kind", "boat" }, out output, out error));
+            Assert.True(error.IndexOf("--path-kind", StringComparison.Ordinal) >= 0);
+
+            Assert.Equal(2, Invoke(new string[] { "--query-path-nearest", "0", "0" },
+                out output, out error));
+            Assert.True(error.IndexOf("--query-path-nearest", StringComparison.Ordinal) >= 0);
+
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreateSyntheticTree(temporary);
+                Assert.Equal(2, Invoke(new string[] { "--root", temporary.Path, "--query-path-nearest",
+                    "0", "0", "0" }, out output, out error));
+                Assert.True(error.IndexOf("--standard", StringComparison.Ordinal) >= 0);
+                Assert.False(output.IndexOf("Path-Nearest:", StringComparison.Ordinal) >= 0);
+                // A world without path data must not pretend to have an empty graph.
+                Assert.False(output.IndexOf("Path-Graph:", StringComparison.Ordinal) >= 0);
             }
         }
 

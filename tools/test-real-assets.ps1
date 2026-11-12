@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Building:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -35,7 +35,7 @@ try {
         $common = @("--game", $game, "--root", $gameRoot)
         $ground = if ($game -eq "iii") { @("812", "-936") } else { @("-864", "-575") }
         $zoneZ = if ($game -eq "iii") { "36" } else { "10" }
-        $standard = Invoke-Case "$game standard and world queries net40" $net40 ($common + @("--standard", "--query-ground", $ground[0], $ground[1], "-50", "100", "--query-zone", $ground[0], $ground[1], $zoneZ, "--query-path", "0", "0", "--ticks", "1")) $false
+        $standard = Invoke-Case "$game standard and world queries net40" $net40 ($common + @("--standard", "--query-ground", $ground[0], $ground[1], "-50", "100", "--query-zone", $ground[0], $ground[1], $zoneZ, "--query-path", "0", "0", "--query-path-nearest", $ground[0], $ground[1], $zoneZ, "--path-radius", "200", "--ticks", "1")) $false
         if ($standard -notmatch "dat=2" -or $standard -notmatch "models=[1-9]" -or $standard -notmatch "instances=[1-9]") {
             throw "$game standard output has no loaded models/instances."
         }
@@ -63,6 +63,37 @@ try {
         if ($game -eq "vc" -and ($standard -notmatch "navigation=12 information=165 mapZones=33 cull=631 occl=344 pathGroups=1957 pathNodes=23484 detached=1957 water=108 unresolved=0" -or
             $standard -notmatch "Zone: navigation=HAVANA:Default info=ICCREAM:Info")) {
             throw "VC zone/path data changed or was not loaded."
+        }
+        $graph = if ($game -eq "iii") {
+            "Path-Graph: nodes=2518 car=1120 ped=1398 water=0 links=2724 externalNext=1054 danglingNext=0 selfNext=0 externalSlots=2485 emptySlots=5437 unknownSlots=0 unresolvedGroups=34"
+        } else {
+            "Path-Graph: nodes=9642 car=2973 ped=6291 water=378 links=15438 externalNext=1619 danglingNext=0 selfNext=0 externalSlots=5090 emptySlots=8752 unknownSlots=0 unresolvedGroups=0"
+        }
+        if ($standard -notmatch [regex]::Escape($graph)) {
+            throw "$game path graph changed: expected '$graph'."
+        }
+        $nearestNode = if ($game -eq "iii") { "node=221 group=87 local=1" } else { "node=139 group=31 local=3" }
+        $nearest = "Path-Nearest: kind=car position=($($ground[0]),$($ground[1]),$zoneZ) radius=200 found=true $nearestNode"
+        if ($standard -notmatch [regex]::Escape($nearest)) {
+            throw "$game car path lookup did not find the expected node."
+        }
+        # Nothing within fifty units of an empty patch of the map must report found=false.
+        $missPath = Invoke-Case "$game empty path lookup" $net40 ($common + @("--standard", "--query-path-nearest", "3000", "3000", "100", "--path-radius", "50", "--ticks", "0")) $false
+        if ($missPath -notmatch "Path-Nearest: kind=car .*found=false") {
+            throw "$game path lookup invented a node far away from any path."
+        }
+        $pedPath = Invoke-Case "$game ped path lookup" $net40 ($common + @("--standard", "--query-path-nearest", $ground[0], $ground[1], $zoneZ, "--path-kind", "ped", "--path-radius", "200", "--ticks", "0")) $false
+        $pedNode = if ($game -eq "iii") { "node=495 group=165 local=0" } else { "node=9176 group=1885 local=4" }
+        if ($pedPath -notmatch "Path-Nearest: kind=ped .*found=true $pedNode ") {
+            throw "$game ped path lookup did not find the expected node."
+        }
+        if ($game -eq "vc") {
+            # VC water lanes live in the same file but their own kind, so they must be reachable
+            # only through --path-kind water.
+            $waterPath = Invoke-Case "vc water path lookup" $net40 ($common + @("--standard", "--query-path-nearest", "-744", "-530", "5", "--path-kind", "water", "--path-radius", "300", "--ticks", "0")) $false
+            if ($waterPath -notmatch "Path-Nearest: kind=water .*found=true node=7027 group=1458 local=0") {
+                throw "VC water path lookup did not find the expected node."
+            }
         }
         if ($game -eq "vc" -and $standard -notmatch "collisions=4[0-9][0-9][0-9]") {
             throw "VC embedded collision was not loaded; only a small loose collision subset is present."
