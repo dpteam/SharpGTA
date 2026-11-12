@@ -71,6 +71,28 @@ function Assert-WorldLog([string]$name, [string]$text) {
     }
     Write-Host "$name sectors: $($sectors.Value) (verified against linear scan)"
 
+    $entities = [regex]::Match($text,
+        "World-Entities: buildings=(\d+)/(\d+) dummies=(\d+)/(\d+) treadables=(\d+)/(\d+) objects=(\d+)/(\d+) rejected=(\d+)")
+    if (-not $entities.Success) {
+        throw "$name did not print entity-pool diagnostics."
+    }
+    [int]$entityTotal = 0
+    for ($group = 1; $group -le 7; $group += 2) {
+        $used = [int]$entities.Groups[$group].Value
+        $capacity = [int]$entities.Groups[$group + 1].Value
+        if ($used -gt $capacity) {
+            throw "$name overflowed an entity pool: $($entities.Value)."
+        }
+        $entityTotal += $used
+    }
+    if ([int]$entities.Groups[9].Value -ne 0) {
+        throw "$name left placements without a pool handle: $($entities.Value)."
+    }
+    if ($entityTotal -ne $allInstances) {
+        throw "$name entity pools do not cover every placement: $($entities.Value)."
+    }
+    Write-Host "$name entities: $($entities.Value)"
+
     $stream = [regex]::Match($text,
         "World-Streaming: models=(\d+)/(\d+) txds=(\d+)/(\d+) evictedModels=(\d+) evictedTxds=(\d+) remaining=(\d+) deferred=(\d+)")
     if (-not $stream.Success) {

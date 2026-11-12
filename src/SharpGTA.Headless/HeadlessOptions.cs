@@ -61,6 +61,9 @@ namespace SharpGTA.Headless
         public float ZoneY { get; set; }
         public float ZoneZ { get; set; }
         public bool HasPathQuery { get; set; }
+
+        public bool HasBuildingQuery { get; set; }
+        public int BuildingHandle { get; set; }
         public int PathGroupIndex { get; set; }
         public int PathNodeIndex { get; set; }
 
@@ -170,6 +173,11 @@ namespace SharpGTA.Headless
                         options.HasPathQuery = true;
                         options.HasExplicitAssetAction = true;
                         break;
+                    case "--query-building":
+                        options.BuildingHandle = ParseNonNegativeInt32(Value(args, ref i, argument), argument);
+                        options.HasBuildingQuery = true;
+                        options.HasExplicitAssetAction = true;
+                        break;
                     case "--strict":
                         options.Strict = true;
                         break;
@@ -195,7 +203,8 @@ namespace SharpGTA.Headless
                     options.GxtPath != null || options.RenderWarePaths.Count != 0 || options.RenderWareEntries.Count != 0 ||
                     options.DffPaths.Count != 0 || options.DffEntries.Count != 0 || options.DffScan ||
                     options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
-                    options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery || options.RenderPreview;
+                    options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
+                    options.HasBuildingQuery || options.RenderPreview;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)

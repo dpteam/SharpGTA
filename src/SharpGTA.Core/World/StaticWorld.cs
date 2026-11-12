@@ -29,6 +29,10 @@ namespace SharpGTA.World
         private int scanCode;
         private readonly List<ModelRegistry> registries = new List<ModelRegistry>();
         private readonly List<int> collisionRevisions = new List<int>();
+        private WorldEntities entities;
+        private GameDefinition entityDefinition;
+        private ObjectData objectData;
+        private PathWorld paths;
 
         public StaticWorld()
         {
@@ -38,6 +42,37 @@ namespace SharpGTA.World
         public int Count { get { return instances.Count; } }
         public int UnindexedCount { get { return unindexed.Count; } }
         public IList<StaticInstance> Instances { get { return readOnlyInstances; } }
+
+        /// <summary>Per-kind entity pools for this world, or null before the first Bind.</summary>
+        public WorldEntities Entities { get { return entities; } }
+
+        /// <summary>Instances that could not get a handle because their kind's pool was full.</summary>
+        public int InstancesWithoutHandle
+        {
+            get { return entities == null ? 0 : entities.TotalRejectedCount; }
+        }
+
+        /// <summary>Resolves a building handle back to its placement, or false when stale.</summary>
+        public bool TryGetBuilding(int handle, out StaticInstance instance)
+        {
+            if (entities == null)
+            {
+                instance = null;
+                return false;
+            }
+            return entities.TryGet(WorldEntityKind.Building, handle, out instance);
+        }
+
+        /// <summary>Resolves a handle of any kind back to its placement.</summary>
+        public bool TryGetEntity(WorldEntityKind kind, int handle, out StaticInstance instance)
+        {
+            if (entities == null)
+            {
+                instance = null;
+                return false;
+            }
+            return entities.TryGet(kind, handle, out instance);
+        }
 
         /// <summary>Adds resolvable instances and reports every missing raw model ID.</summary>
         public int Bind(IplDocument document, ModelRegistry registry, LoadReport report)
@@ -54,6 +89,7 @@ namespace SharpGTA.World
             if (report == null)
                 throw new ArgumentNullException("report");
 
+            EnsureEntities(registry);
             EnsureCollisionBounds();
             int added = 0;
             for (int i = 0; i < document.Instances.Count; i++)
@@ -281,7 +317,56 @@ namespace SharpGTA.World
         private void Add(StaticInstance instance)
         {
             instances.Add(instance);
+            // Every IPL placement becomes a CBuilding in the original, so it receives a
+            // building-pool handle; a full pool is reported instead of throwing.
+            instance.Handle = entities.Create(Classify(instance.Model), instance);
             Index(instance);
+        }
+
+        /// <summary>
+        /// The original decides an IPL placement's entity kind by model: OBJECT.DAT models
+        /// become CDummyObjects, models used by a path header become CTreadables, and the rest
+        /// are CBuildings.
+        /// </summary>
+        private WorldEntityKind Classify(ModelDefinition model)
+        {
+            if (objectData != null && objectData.Contains(model.Name))
+                return WorldEntityKind.Dummy;
+            if (paths != null && paths.IsPathObject(model.Name))
+                return WorldEntityKind.Treadable;
+            return WorldEntityKind.Building;
+        }
+
+        /// <summary>
+        /// Installs the classification sources. Placements are classified when they are added,
+        /// so this must happen before the first Bind; changing it later would leave already
+        /// created entities in the wrong pool, which is rejected instead of hidden.
+        /// </summary>
+        public void SetEntityClassification(ObjectData objects, PathWorld pathWorld)
+        {
+            if (instances.Count != 0)
+                throw new InvalidOperationException(
+                    "Entity classification must be set before instances are bound.");
+            objectData = objects;
+            paths = pathWorld;
+        }
+
+        /// <summary>
+        /// Creates the pools from the first bound game definition. Mixing definitions in one
+        /// world would mix capacities and raw IDs, so it is rejected explicitly.
+        /// </summary>
+        private void EnsureEntities(ModelRegistry registry)
+        {
+            GameDefinition definition = registry.Definition;
+            if (entities == null)
+            {
+                entityDefinition = definition;
+                entities = new WorldEntities(definition.Limits);
+                return;
+            }
+            if (entityDefinition.Id != definition.Id)
+                throw new InvalidOperationException(
+                    "A static world cannot mix game profiles; its entity pools are per game.");
         }
 
         private void Index(StaticInstance instance)

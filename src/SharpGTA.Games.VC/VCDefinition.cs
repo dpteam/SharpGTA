@@ -10,7 +10,7 @@ namespace SharpGTA.Games.VC
         private VCDefinition()
             : base(GameId.ViceCity, "Grand Theft Auto: Vice City", "DATA/GTA_VC.DAT",
                 "beach", 21, 7, CollisionStorageKind.StreamedSlots, DataSchema.VC,
-                new GameLimits(6500, 1385, 35, 450, 9650, 20400, 67, 16))
+                new GameLimits(6500, 1385, 35, 450, 9650, 20400, 67, 16, 7000, 460, 140, 110, 2340, 1))
         {
         }
 

@@ -12,7 +12,7 @@ namespace SharpGTA.Tests
         internal PathTestDefinition()
             : base(GameId.III, "Synthetic path test", "DATA/MAIN.DAT", "test", 24, 4,
                 CollisionStorageKind.LevelBased, DataSchema.III,
-                new GameLimits(20, 16, 1, 1, 1, 1, 1, 1))
+                new GameLimits(20, 16, 1, 1, 1, 1, 1, 1, 8, 4, 4, 4, 4, 4))
         {
         }
     }

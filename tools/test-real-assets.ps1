@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|World-Data:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -40,6 +40,18 @@ try {
             throw "$game standard output has no loaded models/instances."
         }
         if ($standard -notmatch "Ground: hit=true model=") { throw "$game real static ground query failed." }
+        # Entity pools must cover every placement with original pool sizes and no overflow.
+        if ($standard -notmatch "Entities: buildings=\d+/\d+ dummies=\d+/\d+ treadables=\d+/\d+ objects=\d+/\d+ rejected=0 objectData=[1-9]") {
+            throw "$game entity pools did not cover every map placement."
+        }
+        $entitySplit = if ($game -eq "iii") {
+            "buildings=5140/5500 dummies=2336/2802 treadables=1213/1214 objects=0/450 rejected=0"
+        } else {
+            "buildings=6778/7000 dummies=2336/2340 treadables=0/1 objects=0/460 rejected=0"
+        }
+        if ($standard -notmatch [regex]::Escape("Entities: $entitySplit")) {
+            throw "$game entity classification changed: expected '$entitySplit'."
+        }
         if ($standard -notmatch "Zone: navigation=" -or $standard -notmatch "Path: group=0 node=0 resolved=true") {
             throw "$game zone/path query failed."
         }
@@ -54,6 +66,14 @@ try {
         }
         if ($game -eq "vc" -and $standard -notmatch "collisions=4[0-9][0-9][0-9]") {
             throw "VC embedded collision was not loaded; only a small loose collision subset is present."
+        }
+        $building = Invoke-Case "$game building handle" $net40 ($common + @("--standard", "--query-building", "257", "--ticks", "0")) $false
+        if ($building -notmatch "Building: handle=257 stale=false model=") {
+            throw "$game building handle did not resolve to a placement."
+        }
+        $stale = Invoke-Case "$game stale building handle" $net40 ($common + @("--standard", "--query-building", "258", "--ticks", "0")) $false
+        if ($stale -notmatch "Building: handle=258 stale=true") {
+            throw "$game stale building handle was not reported as stale."
         }
         $null = Invoke-Case "$game standard net9" $net9 ($common + @("--standard", "--ticks", "1")) $true
         $gxt = Invoke-Case "$game GXT" $net40 ($common + @("--gxt", "TEXT/AMERICAN.GXT", "--ticks", "0")) $false

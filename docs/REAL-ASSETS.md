@@ -68,6 +68,8 @@
 - III: `TEXDICTION`, `SPLASH`, `MODELFILE`;
 - VC: `TEXDICTION`, `MODELFILE`, `SPLASH`.
 
+Entity-пулы заполняются из IPL по правилам оригинала и укладываются в лимиты без overflow: III `buildings=5140/5500 dummies=2336/2802 treadables=1213/1214 objects=0/450 rejected=0`, VC `buildings=6778/7000 dummies=2336/2340 treadables=0/1 objects=0/460 rejected=0` при 167/326 моделях в `OBJECT.DAT`. Это самый сильный сигнал, что классификация совпадает с `CFileLoader::LoadObjectInstance`, а не подогнана: treadable-ёмкость III исчерпана на 1213 из 1214.
+
 `MAPZONE` III теперь загружается. III unresolved paths — attached groups без соответствующего instance, выводятся через `--verbose`; это не ошибка parser. Полного `CPathFind.PreparePathData` ещё нет.
 
 ## Важные границы проверки

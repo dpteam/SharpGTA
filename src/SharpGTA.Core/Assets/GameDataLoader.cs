@@ -62,6 +62,8 @@ namespace SharpGTA.Assets
             Images = new ImgCatalog();
             Zones = new ZoneWorld(definition);
             Paths = new PathWorld();
+            Objects = new ObjectData();
+            World.SetEntityClassification(Objects, Paths);
             Report = new LoadReport();
             Stats = new GameDataLoadStats();
         }
@@ -74,6 +76,7 @@ namespace SharpGTA.Assets
         public ImgCatalog Images { get; private set; }
         public ZoneWorld Zones { get; private set; }
         public PathWorld Paths { get; private set; }
+        public ObjectData Objects { get; private set; }
         public LoadReport Report { get; private set; }
         public GameDataLoadStats Stats { get; private set; }
 
@@ -81,8 +84,27 @@ namespace SharpGTA.Assets
         {
             ThrowIfDisposed();
             LoadInitialImage();
+            LoadObjectData();
             LoadDat(Definition.DefaultDatPath);
             LoadDat(Definition.MainDatPath);
+        }
+
+        /// <summary>
+        /// Loads OBJECT.DAT when present. The original reads it before the map so that listed
+        /// models become CDummyObjects instead of CBuildings while IPLs are loaded.
+        /// </summary>
+        public void LoadObjectData()
+        {
+            ThrowIfDisposed();
+            string path = "DATA/OBJECT.DAT";
+            if (!fileSystem.FileExists(path))
+            {
+                Report.Add(LoadIssueSeverity.Warning, "ObjectData", path, 0,
+                    "OBJECT.DAT is absent; every placement becomes a building and the building pool may overflow.");
+                return;
+            }
+            Objects = new ObjectDataReader().Read(ReadRequiredText(path), path, Report);
+            World.SetEntityClassification(Objects, Paths);
         }
 
         public void LoadInitialImage()

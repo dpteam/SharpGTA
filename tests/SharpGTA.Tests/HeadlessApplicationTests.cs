@@ -22,6 +22,24 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void BuildingQueryRequiresLoadedMapData()
+        {
+            string output;
+            string error;
+            using (TemporaryDirectory directory = new TemporaryDirectory())
+            {
+                int result = Invoke(new string[]
+                {
+                    "--game", "iii", "--root", directory.Path, "--query-building", "257"
+                }, out output, out error);
+                Assert.Equal(2, result);
+                Assert.True(error.IndexOf("--standard", StringComparison.Ordinal) >= 0);
+                // The misleading "stale" line must not be printed for an unloaded world.
+                Assert.False(output.IndexOf("stale=", StringComparison.Ordinal) >= 0);
+            }
+        }
+
+        [Test]
         public void HeadlessSimulationIsDeterministicAcrossProcessesEntryPoints()
         {
             string firstOutput;

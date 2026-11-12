@@ -27,6 +27,8 @@ namespace SharpGTA.World
     {
         private readonly List<PathGroup> groups = new List<PathGroup>();
         private readonly ReadOnlyCollection<PathGroup> readOnlyGroups;
+        private readonly HashSet<string> pathObjects =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         public PathWorld()
         {
@@ -51,8 +53,20 @@ namespace SharpGTA.World
                     throw new ArgumentException("Path groups cannot contain null entries.", "pathGroups");
             }
             for (int i = 0; i < pathGroups.Count; i++)
+            {
                 groups.Add(pathGroups[i]);
+                // A model that appears in a path header is a treadable map object in the
+                // original (ThePaths.IsPathObject), not a plain building.
+                if (!string.IsNullOrEmpty(pathGroups[i].ModelName))
+                    pathObjects.Add(pathGroups[i].ModelName);
+            }
             RefreshCounts();
+        }
+
+        /// <summary>True when a model is used by a path header, so IPL uses it as a treadable.</summary>
+        public bool IsPathObject(string modelName)
+        {
+            return modelName != null && pathObjects.Contains(modelName);
         }
 
         /// <summary>

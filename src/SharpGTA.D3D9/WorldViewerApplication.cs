@@ -127,6 +127,7 @@ namespace SharpGTA.D3D9
                 {
                     diagnosticsPrinted = true;
 
+                    Console.WriteLine("World-Entities: " + EntitySummary());
                     Console.WriteLine("World-Time: hour=" + clock.Hours.ToString("00", CultureInfo.InvariantCulture) +
                         ":" + clock.Minutes.ToString("00", CultureInfo.InvariantCulture) +
                         " day=" + clock.DaysPassed +
@@ -193,6 +194,20 @@ namespace SharpGTA.D3D9
                     " oversize=" + resources.ByteCacheOversized);
             }
             return verifySectorsFailed ? 3 : 0;
+        }
+
+        private string EntitySummary()
+        {
+            WorldEntities entities = loader.World.Entities;
+            return "buildings=" + entities.Count(WorldEntityKind.Building) +
+                "/" + entities.Capacity(WorldEntityKind.Building) +
+                " dummies=" + entities.Count(WorldEntityKind.Dummy) +
+                "/" + entities.Capacity(WorldEntityKind.Dummy) +
+                " treadables=" + entities.Count(WorldEntityKind.Treadable) +
+                "/" + entities.Capacity(WorldEntityKind.Treadable) +
+                " objects=" + entities.Count(WorldEntityKind.Object) +
+                "/" + entities.Capacity(WorldEntityKind.Object) +
+                " rejected=" + loader.World.InstancesWithoutHandle;
         }
 
         /// <summary>

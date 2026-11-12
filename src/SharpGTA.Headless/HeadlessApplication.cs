@@ -53,6 +53,8 @@ namespace SharpGTA.Headless
                             WriteZoneQuery(loader.Zones, options, output);
                         if (options.HasPathQuery)
                             WritePathQuery(loader.Paths, options, output);
+                        if (options.HasBuildingQuery)
+                            WriteBuildingQuery(loader.World, options, output);
                         if (options.Verbose)
                         {
                             WriteIssues(loader.Report, output);
@@ -216,6 +218,16 @@ namespace SharpGTA.Headless
                 " models=" + loader.Models.Count.ToString(CultureInfo.InvariantCulture) +
                 " collisions=" + loader.Collisions.Count.ToString(CultureInfo.InvariantCulture) +
                 " instances=" + loader.World.Count.ToString(CultureInfo.InvariantCulture));
+            if (loader.World.Entities != null)
+            {
+                WorldEntities entities = loader.World.Entities;
+                output.WriteLine("Entities: buildings=" + Context(entities, WorldEntityKind.Building) +
+                    " dummies=" + Context(entities, WorldEntityKind.Dummy) +
+                    " treadables=" + Context(entities, WorldEntityKind.Treadable) +
+                    " objects=" + Context(entities, WorldEntityKind.Object) +
+                    " rejected=" + loader.World.InstancesWithoutHandle.ToString(CultureInfo.InvariantCulture) +
+                    " objectData=" + loader.Objects.Count.ToString(CultureInfo.InvariantCulture));
+            }
             output.WriteLine("World-Data: navigation=" + (loader.Zones.Navigation.Count - 1).ToString(CultureInfo.InvariantCulture) +
                 " information=" + (loader.Zones.Information.Count - 1).ToString(CultureInfo.InvariantCulture) +
                 " mapZones=" + (loader.Zones.MapZones.Count - 1).ToString(CultureInfo.InvariantCulture) +
@@ -231,6 +243,12 @@ namespace SharpGTA.Headless
                 " dropped=" + loader.Report.DroppedIssueCount.ToString(CultureInfo.InvariantCulture));
         }
 
+        private static string Context(WorldEntities entities, WorldEntityKind kind)
+        {
+            return entities.Count(kind).ToString(CultureInfo.InvariantCulture) + "/" +
+                entities.Capacity(kind).ToString(CultureInfo.InvariantCulture);
+        }
+
         private static void WriteZoneQuery(ZoneWorld zones, HeadlessOptions options, TextWriter output)
         {
             Vector3 position = new Vector3(options.ZoneX, options.ZoneY, options.ZoneZ);
@@ -243,6 +261,26 @@ namespace SharpGTA.Headless
                 " mapLevel=" + zones.GetRawLevelFromPosition(position).ToString(CultureInfo.InvariantCulture) +
                 " cullFlags=" + attributes.ToString(CultureInfo.InvariantCulture) +
                 " wantedDrop=" + wanted.ToString(CultureInfo.InvariantCulture));
+        }
+
+        private static void WriteBuildingQuery(StaticWorld world, HeadlessOptions options, TextWriter output)
+        {
+            string handle = options.BuildingHandle.ToString(CultureInfo.InvariantCulture);
+            if (world.Entities == null || world.Count == 0)
+            {
+                // Without map data every lookup would look like a stale handle, which hides
+                // the real mistake: the game tree was never loaded.
+                throw new CommandLineException(
+                    "--query-building requires loaded map data; add --standard.");
+            }
+            StaticInstance instance;
+            if (!world.TryGetBuilding(options.BuildingHandle, out instance))
+            {
+                output.WriteLine("Building: handle=" + handle + " stale=true");
+                return;
+            }
+            output.WriteLine("Building: handle=" + handle + " stale=false model=" + instance.Model.Name +
+                " position=" + Vector(instance.Position));
         }
 
         private static void WritePathQuery(PathWorld paths, HeadlessOptions options, TextWriter output)
@@ -456,6 +494,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --query-ground X Y Z0 Z1  Query static COLL ground between two Z values.");
             output.WriteLine("  --query-zone X Y Z        Query navigation/info/map zones and cull attributes.");
             output.WriteLine("  --query-path GROUP NODE   Print one resolved path node position and next link.");
+            output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");
             output.WriteLine("  --state-at N              Also print the diagnostic state hash at tick N.");
             output.WriteLine("  --verbose                 Print retained asset issues.");

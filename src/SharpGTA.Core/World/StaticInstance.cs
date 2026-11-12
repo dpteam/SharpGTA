@@ -22,6 +22,7 @@ namespace SharpGTA.World
             transform.Position = record.Position;
             Transform = transform;
             Position = record.Position;
+            Handle = -1;
             RefreshWorldBounds();
         }
 
@@ -41,6 +42,13 @@ namespace SharpGTA.World
         /// queries mutate it, so they are neither reentrant nor safe to call concurrently.
         /// </summary>
         public int ScanCode { get; internal set; }
+
+        /// <summary>
+        /// Entity-pool handle in this placement's own pool (building, dummy or treadable), or
+        /// -1 when the pool was full. Handles are per-pool, so a lookup needs the matching
+        /// WorldEntityKind, as CPools::Get*Ref requires the entity type.
+        /// </summary>
+        public int Handle { get; internal set; }
 
         internal void RefreshWorldBounds()
         {

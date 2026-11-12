@@ -15,7 +15,7 @@ namespace SharpGTA.Tests
         internal WorldTestDefinition(GameId id, DataSchema schema, int modelCapacity)
             : base(id, "Synthetic " + id, "DATA/MAIN.DAT", "test", 24, 4,
                 id == GameId.ViceCity ? CollisionStorageKind.StreamedSlots : CollisionStorageKind.LevelBased, schema,
-                new GameLimits(modelCapacity, 16, 1, 1, 1, 1, 1, 1))
+                new GameLimits(modelCapacity, 16, 1, 1, 1, 1, 1, 1, 64, 16, 8, 8, 8, 32))
         {
         }
     }

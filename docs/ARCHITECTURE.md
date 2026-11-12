@@ -59,6 +59,14 @@ World host кодирует ключи как `dff:NAME` / `txd:NAME`, prefetch-
 
 `StaticWorldScene` учитывает time-фильтр до draw distance и LOD handoff, поэтому скрытые timed-модели не запрашиваются у стримера и не попадают в draw calls. Timed-модели участвуют в suffix LOD-парах и draw-distance handoff так же, как обычные, потому что оригинальный `IsSimple()` включает `MITYPE_TIME`. Неtimed placements всегда видимы; pool overflow не скрывает остальной мир, а считается в diagnostics. `OtherTimeModel` уже разрешён, но потребителя в renderer'е ещё нет.
 
+## Entity pools и классификация placements
+
+`WorldEntities` держит по пулу на вид entity с размерами из `GameLimits` (III: buildings 5500, objects 450, dummies 2802, treadables 1214, peds 140, vehicles 110; VC: 7000/460/2340/1/140/110). Каждый IPL placement получает числовой handle в пуле своего вида и хранит его в `StaticInstance.Handle`; вид не дублируется в записи, а определяется пулом, поэтому разыменование требует совпадающий `WorldEntityKind`, как `CPools::GetBuilding` против `CPools::GetObject`.
+
+Классификация повторяет `CFileLoader::LoadObjectInstance`: модель, перечисленная в `OBJECT.DAT`, становится `CDummyObject`, модель из path-заголовка (наш `PathWorld.IsPathObject`, оригинальный `ThePaths.IsPathObject`) — `CTreadable`, остальные — `CBuilding`. Именно это объясняет, почему оригинальные пулы (5500/2802/1214) вмещают карту почти без запаса: на реальных данных выходит III 5140/2336/1213 и VC 6778/2336/0 при `rejected=0`. Object pool остаётся пустым до gameplay objects, ped/vehicle пулы пока только ёмкости.
+
+`ObjectData`/`ObjectDataReader` читают `DATA/OBJECT.DAT`: 11 колонок `CObjectInfo`, комментарии `;` в любом месте строки, остановка на `*`-sentinel, дополнительные VC-колонки игнорируются как в `sscanf`, повторяющиеся модели перезаписываются последней строкой. Битая строка и отсутствие файла дают warning в `LoadReport`, а не валят весь load: оригинал продолжает разбор молча, поэтому modded-дерево не должно ломать карту. Полная перегрузка пула (`New` вернул -1) не скрывается: placement остаётся в мире без handle, а счётчик `rejected` попадает в diagnostics. Классификация фиксируется при `Add`, поэтому `SetEntityClassification` после первого `Bind` отклоняется явно; path-группы из IPL обрабатываются после инстансов того же файла, как и в оригинале, а III/VC хранят path-заголовки в IDE.
+
 ## Sector lists
 
 `StaticWorld` раскладывает инстансы по оригинальной сетке `CWorld`: 100×100 секторов по 40 units, начало в -2000, то есть мир -2000..2000. Инстанс попадает в каждый сектор, которого касается его `WorldBounds`; только в middle-секторе (`xmid/ymid` по центру bounds) он лежит в main-листе, во всех остальных покрытых ячейках — в overlap-листе, как `CEntity::Add`. Инстансы, чьи bounds выходят за сетку, идут в `unindexed` и всегда попадают в выборку.
