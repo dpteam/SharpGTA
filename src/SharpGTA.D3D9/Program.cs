@@ -35,6 +35,7 @@ namespace SharpGTA.D3D9
             int spawnCount = 0;
             string spawnModel = null;
             int frames = 1;
+            bool pathOverlay = false;
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--hidden")
@@ -79,6 +80,8 @@ namespace SharpGTA.D3D9
                 }
                 else if (args[i] == "--verify-sectors")
                     verifySectors = true;
+                else if (args[i] == "--path-overlay")
+                    pathOverlay = true;
                 else if (args[i] == "--spawn")
                 {
                     if (i + 1 >= args.Length)
@@ -230,7 +233,7 @@ namespace SharpGTA.D3D9
                 if (worldMode)
                     return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
                         frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
-                        spawnCount, spawnModel);
+                        spawnCount, spawnModel, pathOverlay);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -253,7 +256,7 @@ namespace SharpGTA.D3D9
                         Console.WriteLine("Frontend: shutdown completed.");
                         if (frontend.Menu.WorldPreviewRequested)
                             return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
-                        spawnCount, spawnModel);
+                        spawnCount, spawnModel, pathOverlay);
                         return result;
                     }
                 }
@@ -307,14 +310,14 @@ namespace SharpGTA.D3D9
         private static int RunWorldViewer(Win32Window window, D3D9Device device,
             IGameFileSystem files, int frames, string screenshot, bool exerciseReset,
             int streamBudget, int txdBudget, int byteBudgetMiB, int startHour, bool verifySectors,
-            int spawnCount, string spawnModel)
+            int spawnCount, string spawnModel, bool pathOverlay)
         {
             using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
             {
                 loader.LoadInitialImage();
                 using (WorldViewerApplication viewer =
                     new WorldViewerApplication(window, device, loader, streamBudget, txdBudget,
-                        byteBudgetMiB * 1024 * 1024, startHour, verifySectors, spawnCount, spawnModel))
+                        byteBudgetMiB * 1024 * 1024, startHour, verifySectors, spawnCount, spawnModel, pathOverlay))
                     return viewer.Run(frames, screenshot, exerciseReset);
             }
         }

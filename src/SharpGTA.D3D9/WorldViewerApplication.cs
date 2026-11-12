@@ -29,6 +29,10 @@ namespace SharpGTA.D3D9
         private readonly List<StaticInstance> verifyBuffer = new List<StaticInstance>();
         private readonly HashSet<StaticInstance> verifySet = new HashSet<StaticInstance>();
         private readonly bool verifySectors;
+        private readonly bool pathOverlay;
+        private const int MaxPathOverlaySegments = 20000;
+        private bool pathOverlayReported;
+        private RenderLineBatch pathOverlayBatch;
         private int dynamicSpawned;
         private int dynamicDrawn;
         private int dynamicRejected;
@@ -48,7 +52,7 @@ namespace SharpGTA.D3D9
 
         internal WorldViewerApplication(Win32Window window, D3D9Device device,
             GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget, int startHour,
-            bool verifySectors, int spawnCount, string spawnModel)
+            bool verifySectors, int spawnCount, string spawnModel, bool pathOverlay)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
@@ -69,6 +73,7 @@ namespace SharpGTA.D3D9
             resources.AttachRenderer(renderer);
             clock.SetTime(startHour, 0);
             this.verifySectors = verifySectors;
+            this.pathOverlay = pathOverlay;
             spawn = new Vector3(812.0f, -936.0f, 36.0f);
             ResetCamera();
             if (spawnCount > 0)
@@ -235,10 +240,12 @@ namespace SharpGTA.D3D9
                     if (missingTextures.Length > 4)
                         Console.WriteLine("World-Render-Missing-Texture: " + (missingTextures.Length - 4) + " more.");
                 }
+                if (pathOverlay)
+                    pathOverlayBatch = BuildPathOverlay();
                 renderer.Render(snapshot,
                     D3dMatrix.LookAt(camera.Position, camera.Target, Vector3.UnitZ),
                     D3dMatrix.PerspectiveFov((float)(Math.PI / 3.0), device.Width / (float)device.Height,
-                        0.05f, 1800.0f), 0xFFE0E0E0);
+                        0.05f, 1800.0f), 0xFFE0E0E0, pathOverlayBatch);
                 if (screenshot != null && frame == frames - 1)
                     SaveScreenshot(screenshot);
                 device.Present();
@@ -427,6 +434,21 @@ namespace SharpGTA.D3D9
             }
             else
                 Console.WriteLine("Ground: no static COLL hit below the free-fly camera.");
+        }
+
+        private RenderLineBatch BuildPathOverlay()
+        {
+            PathGraph graph = loader.PathGraph;
+            pathOverlayBatch = PathOverlayBuilder.Build(graph, camera.Position, ViewRadius * 4.0f,
+                MaxPathOverlaySegments);
+            if (pathOverlayBatch.SegmentCount > 0 && !pathOverlayReported)
+            {
+                pathOverlayReported = true;
+                Console.WriteLine("Path-Overlay: segments=" + pathOverlayBatch.SegmentCount +
+                    " nodes=" + graph.NodeCount +
+                    " radius=" + (ViewRadius * 4.0f).ToString("0.#", CultureInfo.InvariantCulture));
+            }
+            return pathOverlayBatch;
         }
 
         private void SaveScreenshot(string path)

@@ -367,6 +367,52 @@ function Test-WorldTime {
     Write-Host "PASS invalid --time is rejected"
 }
 
+function Test-PathOverlay([string]$reference) {
+    Write-Host "=== Path graph overlay ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    $output = Join-Path $root "artifacts/world-smoke"
+    $first = Join-Path $output "world-overlay-a.bmp"
+    $second = Join-Path $output "world-overlay-b.bmp"
+    [string[]]$log = @()
+    foreach ($screenshot in @($first, $second)) {
+        $log = @(& $exe --world --game iii --root $gameRoot --hidden --frames 2 `
+            --path-overlay --screenshot $screenshot 2>&1 | ForEach-Object { $_.ToString() })
+        if ($LASTEXITCODE -ne 0) { throw "Path overlay run failed." }
+    }
+    $text = [string]::Join("`n", $log)
+    $overlay = [regex]::Match($text, "Path-Overlay: segments=(\d+) nodes=(\d+)")
+    if (-not $overlay.Success -or [int]$overlay.Groups[1].Value -le 0) {
+        throw "Path overlay did not draw any segments: $text"
+    }
+    if ((Get-FileHash $first -Algorithm SHA256).Hash -ne
+        (Get-FileHash $second -Algorithm SHA256).Hash) {
+        throw "Path overlay is not deterministic."
+    }
+    if ((Get-FileHash $first -Algorithm SHA256).Hash -eq
+        (Get-FileHash $reference -Algorithm SHA256).Hash) {
+        throw "Path overlay did not change the frame."
+    }
+
+    # Both line kinds must really be on screen, not just a different frame.
+    [byte[]]$bytes = [IO.File]::ReadAllBytes($first)
+    $offset = [BitConverter]::ToInt32($bytes, 10)
+    $width = [BitConverter]::ToInt32($bytes, 18)
+    $height = [BitConverter]::ToInt32($bytes, 22)
+    $car = 0
+    $ped = 0
+    for ($index = $offset; $index -lt $bytes.Length - 3; $index += 4) {
+        $b = [int]$bytes[$index]
+        $g = [int]$bytes[$index + 1]
+        $r = [int]$bytes[$index + 2]
+        if ($r -eq 255 -and $g -eq 160 -and $b -eq 63) { $car++ }
+        elseif ($r -eq 63 -and $g -eq 208 -and $b -eq 255) { $ped++ }
+    }
+    if ($car -lt 100 -or $ped -lt 100) {
+        throw "Path overlay colours are missing: car=$car ped=$ped."
+    }
+    Write-Host "PASS path overlay draws $($overlay.Groups[1].Value) segments (car=$car ped=$ped pixels)."
+}
+
 function Test-DynamicEntities([string]$reference) {
     Write-Host "=== Dynamic gameplay entities ==="
     $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
@@ -674,6 +720,7 @@ try {
     Test-ByteBudget $reset
     Test-WorldTime
     Test-DynamicEntities $baseline
+    Test-PathOverlay $baseline
 
     Invoke-World "net9.0-windows" "dotnet" `
         @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `

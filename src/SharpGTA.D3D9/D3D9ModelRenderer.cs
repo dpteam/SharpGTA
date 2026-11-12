@@ -68,6 +68,12 @@ namespace SharpGTA.D3D9
 
         internal void Render(RenderSceneSnapshot snapshot, D3dMatrix view, D3dMatrix projection, uint ambient)
         {
+            Render(snapshot, view, projection, ambient, null);
+        }
+
+        internal void Render(RenderSceneSnapshot snapshot, D3dMatrix view, D3dMatrix projection,
+            uint ambient, RenderLineBatch overlay)
+        {
             if (disposed)
                 throw new ObjectDisposedException("D3D9ModelRenderer");
             if (snapshot == null)
@@ -89,6 +95,8 @@ namespace SharpGTA.D3D9
                     D3D9Texture texture = material == null ? null : GetTexture(call.Geometry, material);
                     device.DrawModelMesh(texture, color, meshes[call.Mesh]);
                 }
+                if (overlay != null)
+                    device.DrawLines(overlay);
                 device.EndFrame();
             }
             finally

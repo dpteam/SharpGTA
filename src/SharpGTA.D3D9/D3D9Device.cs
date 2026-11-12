@@ -1,6 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 using SharpGTA.Mathematics;
+using SharpGTA.Rendering;
 
 namespace SharpGTA.D3D9
 {
@@ -189,6 +190,58 @@ namespace SharpGTA.D3D9
             {
                 DrawPrimitiveUpChecked((uint)(vertices.Length / 3), pin.AddrOfPinnedObject(),
                     (uint)Marshal.SizeOf(typeof(D3dTexturedVertex)));
+            }
+            finally
+            {
+                pin.Free();
+            }
+        }
+
+        /// <summary>
+        /// Draws a managed line batch with the identity world transform, so callers only need to
+        /// have the view/projection set. Used by the path overlay; depth is disabled so the lines
+        /// stay visible over geometry.
+        /// </summary>
+        internal void DrawLines(RenderLineBatch batch)
+        {
+            if (batch == null)
+                throw new ArgumentNullException("batch");
+            ThrowIfUnavailable();
+            if (!sceneOpen)
+                throw new InvalidOperationException("DrawLines requires an open frame.");
+            if (batch.SegmentCount == 0)
+                return;
+
+            D3dLineVertex[] vertices = new D3dLineVertex[batch.Positions.Length];
+            for (int i = 0; i < vertices.Length; i++)
+            {
+                vertices[i].X = batch.Positions[i].X;
+                vertices[i].Y = batch.Positions[i].Y;
+                vertices[i].Z = batch.Positions[i].Z;
+                vertices[i].Color = D3D9ModelRenderer.ToD3dColor(batch.Colors[i]);
+            }
+
+            D3dMatrix world = D3dMatrix.FromGtaMatrix(Matrix.Identity);
+            SetTransformChecked(D3dConstants.StateWorld, ref world);
+            SetFvfChecked(D3dConstants.FvfLineVertex);
+            SetTextureChecked(0, IntPtr.Zero);
+            SetRenderStateChecked(D3dConstants.StateLighting, 0);
+            SetRenderStateChecked(D3dConstants.StateCullMode, D3dConstants.CullNone);
+            SetRenderStateChecked(D3dConstants.StateZEnable, 0);
+            SetRenderStateChecked(D3dConstants.StateZWriteEnable, 0);
+            SetRenderStateChecked(D3dConstants.StateAlphaTestEnable, 0);
+            SetRenderStateChecked(D3dConstants.StateAlphaBlendEnable, 1);
+            SetRenderStateChecked(D3dConstants.StateSourceBlend, D3dConstants.BlendSourceAlpha);
+            SetRenderStateChecked(D3dConstants.StateDestinationBlend, D3dConstants.BlendInverseSourceAlpha);
+            SetTextureStageStateChecked(0, D3dConstants.TextureColorOp, D3dConstants.TextureOpSelectArg1);
+            SetTextureStageStateChecked(0, D3dConstants.TextureColorArg1, D3dConstants.TextureArgumentDiffuse);
+            SetTextureStageStateChecked(1, D3dConstants.TextureColorOp, D3dConstants.TextureOpDisable);
+
+            GCHandle pin = GCHandle.Alloc(vertices, GCHandleType.Pinned);
+            try
+            {
+                DrawPrimitiveUpChecked(D3dConstants.PrimitiveLineList, (uint)batch.SegmentCount,
+                    pin.AddrOfPinnedObject(), (uint)Marshal.SizeOf(typeof(D3dLineVertex)));
             }
             finally
             {
@@ -628,9 +681,15 @@ namespace SharpGTA.D3D9
 
         private void DrawPrimitiveUpChecked(uint primitiveCount, IntPtr data, uint stride)
         {
+            DrawPrimitiveUpChecked(D3dConstants.PrimitiveTriangleList, primitiveCount, data, stride);
+        }
+
+        private void DrawPrimitiveUpChecked(uint primitiveType, uint primitiveCount, IntPtr data,
+            uint stride)
+        {
             DeviceDrawPrimitiveUpDelegate draw = ComVtable.GetMethod<DeviceDrawPrimitiveUpDelegate>(
                 device, D3dVtableSlots.DrawPrimitiveUp);
-            Check(draw(device, D3dConstants.PrimitiveTriangleList, primitiveCount, data, stride), "DrawPrimitiveUP");
+            Check(draw(device, primitiveType, primitiveCount, data, stride), "DrawPrimitiveUP");
         }
 
         private static void Release(ref IntPtr instance)

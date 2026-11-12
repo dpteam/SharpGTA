@@ -153,6 +153,15 @@ namespace SharpGTA.D3D9
     }
 
     [StructLayout(LayoutKind.Sequential)]
+    internal struct D3dLineVertex
+    {
+        internal float X;
+        internal float Y;
+        internal float Z;
+        internal uint Color;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
     internal struct D3dModelVertex
     {
         internal float X;
@@ -231,6 +240,7 @@ namespace SharpGTA.D3D9
         internal const uint BackBufferTypeMono = 0;
         internal const uint CullNone = 1;
         internal const uint PrimitiveTriangleList = 4;
+        internal const uint PrimitiveLineList = 2;
         internal const uint FvfXyz = 0x002;
         internal const uint FvfXyzRhw = 0x004;
         internal const uint FvfNormal = 0x010;
@@ -239,6 +249,7 @@ namespace SharpGTA.D3D9
         internal const uint FvfTex1 = 0x100;
         internal const uint FvfTexturedVertex = FvfVertex | FvfTex1;
         internal const uint FvfModelVertex = FvfXyz | FvfNormal | FvfDiffuse | FvfTex1;
+        internal const uint FvfLineVertex = FvfXyz | FvfDiffuse;
         internal const uint ClearTarget = 1;
         internal const uint ClearZBuffer = 2;
         internal const uint StateProjection = 3;
