@@ -508,6 +508,69 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void LinksCarryDistanceAndCrossingFlags()
+        {
+            // Slot 0 names slot 1 with `crossing` set; slot 1 names slot 0 back without it.
+            // Crossing flags exist for ped connections only, so this uses ped path data.
+            PathWorld world = DetachedIIIPed(
+                "2, 1, 1, 0, 0, 0, 160",
+                "2, 0, 0, 160, 0, 0, 160",
+                EmptyPedNodes(10));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(1, graph.Nodes[0].LinkCount);
+            Assert.Near(10.0f, graph.Nodes[0].LinkDistance(0), 0.0001f);
+            Assert.True(graph.Nodes[0].LinkCrossesRoad(0));
+            Assert.True(graph.Nodes[1].LinkCrossesRoad(0));
+            Assert.Equal(2, graph.CrossingLinkCount);
+            Assert.Throws<ArgumentOutOfRangeException>(delegate { graph.Nodes[0].LinkDistance(-1); });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate { graph.Nodes[0].LinkDistance(1); });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate { graph.Nodes[0].LinkCrossesRoad(1); });
+
+            PathWorld quiet = DetachedIIIPed(
+                "2, 1, 0, 0, 0, 0, 160",
+                "2, 0, 0, 160, 0, 0, 160",
+                EmptyPedNodes(10));
+            Assert.Equal(0, new PathGraph(quiet).CrossingLinkCount);
+        }
+
+        [Test]
+        public void ExternalCrossingsAreNotMarkedAsRoadCrossings()
+        {
+            ModelRegistry registry = new ModelRegistry(new PathTestDefinition());
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n10, roadA, generic, 1, 100, 0\n11, roadB, generic, 1, 100, 0\nend\n"));
+            IplDocument placements = new IplReader(DataSchema.III).Read(
+                "inst\n" +
+                "10, roadA, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "11, roadB, 100, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "end\n");
+            StaticWorld staticWorld = new StaticWorld();
+            staticWorld.Bind(placements, registry, new LoadReport());
+
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII(
+                "car, 10, roadA\n" +
+                "2, 1, 1, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 1, 1600, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(10) + "\n"));
+            world.AddGroups(ParseIII(
+                "car, 11, roadB\n" +
+                "2, 1, 1, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 1, 0, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(10) + "\n"));
+            world.BindInstances(staticWorld.Instances);
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(1, graph.CrossTileLinkCount);
+            Assert.Equal(0, graph.CrossingLinkCount);
+            Assert.False(graph.Nodes[0].LinkCrossesRoad(0));
+            Assert.Near(100.0f, graph.Nodes[0].LinkDistance(0), 0.0001f);
+        }
+
+        [Test]
         public void EmptyWorldBuildsAnEmptyGraph()
         {
             PathGraph graph = new PathGraph(new PathWorld());
@@ -529,6 +592,18 @@ namespace SharpGTA.Tests
             PathWorld world = new PathWorld();
             world.AddGroups(ParseIII("car, -1, unused\n" + string.Join("\n", nodeLines) + "\n"));
             return world;
+        }
+
+        private static PathWorld DetachedIIIPed(params string[] nodeLines)
+        {
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII("ped, -1, unused\n" + string.Join("\n", nodeLines) + "\n"));
+            return world;
+        }
+
+        private static string EmptyPedNodes(int count)
+        {
+            return Repeat("0, -1, 0, 0, 0, 0, 0", count).TrimEnd('\n');
         }
 
         private static string EmptyNodes(int count)

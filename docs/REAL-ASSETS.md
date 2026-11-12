@@ -32,6 +32,7 @@
 | Path graph nodes (car / ped / water) | 4947 (1971 / 2976 / 0) | 9642 (2973 / 6291 / 378) |
 | Path graph adjacency entries | 7140 | 20350 |
 | Cross-tile crossings / unpaired externals | 1634 / 3457 | 2456 / 178 |
+| Links flagged `bCrossesRoad` | 512 | 36 |
 | Path graph extern slots / empty slots | 6726 / 14691 | 5090 / 8752 |
 | Path graph components (car / ped / water) | 1480 (482 / 998 / 0) | 42 (4 / 32 / 6) |
 | Single-node components / largest component | 936 / 254 | 0 / 5102 |

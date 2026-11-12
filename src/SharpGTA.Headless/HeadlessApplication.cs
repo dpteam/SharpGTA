@@ -258,6 +258,7 @@ namespace SharpGTA.Headless
                     " water=" + graph.WaterNodeCount.ToString(CultureInfo.InvariantCulture) +
                     " links=" + graph.LinkCount.ToString(CultureInfo.InvariantCulture) +
                     " crossTile=" + graph.CrossTileLinkCount.ToString(CultureInfo.InvariantCulture) +
+                    " crossings=" + graph.CrossingLinkCount.ToString(CultureInfo.InvariantCulture) +
                     " unpairedExtern=" + graph.UnpairedExternCount.ToString(CultureInfo.InvariantCulture) +
                     " unresolvedExtern=" + graph.UnresolvedExternCount.ToString(CultureInfo.InvariantCulture) +
                     " externalNext=" + graph.ExternalNextCount.ToString(CultureInfo.InvariantCulture) +

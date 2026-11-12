@@ -169,7 +169,7 @@ namespace SharpGTA.Tests
                 Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
                     "--query-path-nearest", "0", "0", "0", "--path-radius", "10" }, out output, out error), error);
                 Assert.True(output.IndexOf(
-                    "Path-Graph: mergeDistance=1 tiles=1 nodes=4 car=4 ped=0 water=0 links=6 crossTile=0 unpairedExtern=0 " +
+                    "Path-Graph: mergeDistance=1 tiles=1 nodes=4 car=4 ped=0 water=0 links=6 crossTile=0 crossings=0 unpairedExtern=0 " +
                     "unresolvedExtern=0 externalNext=0 danglingNext=0 selfNext=0 externalSlots=0 " +
                     "emptySlots=8 unknownSlots=0 unresolvedGroups=0",
                     StringComparison.Ordinal) >= 0, output);

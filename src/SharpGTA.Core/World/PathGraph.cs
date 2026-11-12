@@ -12,6 +12,8 @@ namespace SharpGTA.World
         private static readonly ReadOnlyCollection<int> NoLinks =
             new ReadOnlyCollection<int>(new int[0]);
         private ReadOnlyCollection<int> links = NoLinks;
+        private float[] linkDistances = new float[0];
+        private bool[] linkCrosses = new bool[0];
 
         internal PathGraphNode(int globalIndex, int groupIndex, int tileIndex, PathGroup group,
             PathNode source, int localIndex, Vector3 position)
@@ -49,6 +51,27 @@ namespace SharpGTA.World
         /// </summary>
         public IList<int> Links { get { return links; } }
 
+        /// <summary>
+        /// Straight-line length of a link, the way `m_distances` stores it for a connection.
+        /// </summary>
+        public float LinkDistance(int index)
+        {
+            if (index < 0 || index >= linkDistances.Length)
+                throw new ArgumentOutOfRangeException("index");
+            return linkDistances[index];
+        }
+
+        /// <summary>
+        /// `m_connectionFlags.bCrossesRoad` for a link: true when the named side of the tile
+        /// pair has `crossing` set. The original only fills this for ped connections.
+        /// </summary>
+        public bool LinkCrossesRoad(int index)
+        {
+            if (index < 0 || index >= linkCrosses.Length)
+                throw new ArgumentOutOfRangeException("index");
+            return linkCrosses[index];
+        }
+
         public PathKind Kind { get { return Group.Kind; } }
 
         /// <summary>Group-local `next` value: a slot index inside the group, or -1 for none.</summary>
@@ -62,6 +85,12 @@ namespace SharpGTA.World
         internal void SetLinks(ReadOnlyCollection<int> value)
         {
             links = value;
+        }
+
+        internal void SetLinkData(float[] distances, bool[] crosses)
+        {
+            linkDistances = distances;
+            linkCrosses = crosses;
         }
 
         internal void SetGroupId(int value)
@@ -201,8 +230,12 @@ namespace SharpGTA.World
             readOnlyNodes = nodes.AsReadOnly();
 
             List<int>[] adjacency = new List<int>[nodes.Count];
+            List<bool>[] crossing = new List<bool>[nodes.Count];
             for (int i = 0; i < adjacency.Length; i++)
+            {
                 adjacency[i] = new List<int>(2);
+                crossing[i] = new List<bool>(2);
+            }
 
             int links = 0;
             for (int t = 0; t < tiles.Count; t++)
@@ -225,7 +258,13 @@ namespace SharpGTA.World
                         if (group.Nodes[a].NextNodeIndex != b &&
                             group.Nodes[b].NextNodeIndex != a)
                             continue;
-                        Connect(adjacency, left, right, ref links);
+                        // The original marks a ped connection as crossing the road when the side that
+                        // names the other has its `crossing` flag set; car links carry lane
+                        // data instead and leave the flag clear.
+                        bool crossesRoad = group.Kind == PathKind.Ped &&
+                            ((group.Nodes[a].NextNodeIndex == b && group.Nodes[a].Cross) ||
+                             (group.Nodes[b].NextNodeIndex == a && group.Nodes[b].Cross));
+                        Connect(adjacency, crossing, left, right, crossesRoad, ref links);
                     }
                 }
             }
@@ -275,7 +314,7 @@ namespace SharpGTA.World
                 // The original averages the two collapsed positions and keeps the pair.
                 found.Position = (found.Position + position) * 0.5f;
                 CrossTileLinkCount++;
-                Connect(adjacency, found.NodeIndex, interior, ref links);
+                Connect(adjacency, crossing, found.NodeIndex, interior, false, ref links);
             }
             LinkCount = links;
 
@@ -296,7 +335,21 @@ namespace SharpGTA.World
             }
 
             for (int i = 0; i < nodes.Count; i++)
-                nodes[i].SetLinks(adjacency[i].AsReadOnly());
+            {
+                PathGraphNode node = nodes[i];
+                List<int> targets = adjacency[i];
+                node.SetLinks(targets.AsReadOnly());
+                float[] distances = new float[targets.Count];
+                bool[] crosses = new bool[targets.Count];
+                for (int k = 0; k < targets.Count; k++)
+                {
+                    distances[k] = (nodes[targets[k]].Position - node.Position).Length();
+                    crosses[k] = crossing[i][k];
+                    if (crosses[k])
+                        CrossingLinkCount++;
+                }
+                node.SetLinkData(distances, crosses);
+            }
 
             AssignFloodFillGroups();
         }
@@ -370,6 +423,9 @@ namespace SharpGTA.World
 
         /// <summary>Adjacency entries, including both directions of every tile and external link.</summary>
         public int LinkCount { get; private set; }
+
+        /// <summary>Adjacency entries whose `bCrossesRoad` flag is set.</summary>
+        public int CrossingLinkCount { get; private set; }
 
         /// <summary>External pairs collapsed into one crossing between two neighbouring tiles.</summary>
         public int CrossTileLinkCount { get; private set; }
@@ -522,18 +578,21 @@ namespace SharpGTA.World
             }
         }
 
-        private static void Connect(List<int>[] adjacency, int left, int right, ref int links)
+        private static void Connect(List<int>[] adjacency, List<bool>[] crossing, int left,
+            int right, bool crossesRoad, ref int links)
         {
             if (left < 0 || right < 0 || left == right)
                 return;
             if (!adjacency[left].Contains(right))
             {
                 adjacency[left].Add(right);
+                crossing[left].Add(crossesRoad);
                 links++;
             }
             if (!adjacency[right].Contains(left))
             {
                 adjacency[right].Add(left);
+                crossing[right].Add(crossesRoad);
                 links++;
             }
         }
