@@ -11,11 +11,38 @@ namespace SharpGTA.World
     /// </summary>
     public sealed class PathGraphReport
     {
+        /// <summary>Details for the longest over-length connections, in discovery order.</summary>
+        public sealed class LongLink
+        {
+            public int From { get; internal set; }
+            public int To { get; internal set; }
+            public float Distance { get; internal set; }
+            public PathKind Kind { get; internal set; }
+            public Vector3 FromPosition { get; internal set; }
+            public Vector3 ToPosition { get; internal set; }
+            public int FromTile { get; internal set; }
+            public int ToTile { get; internal set; }
+        }
+
+        private readonly List<LongLink> overLength = new List<LongLink>();
+
+        /// <summary>Bounded sample of over-length links so a report stays printable.</summary>
+        public IList<LongLink> OverLengthSamples { get { return overLength; } }
+
+        internal void AddOverLength(LongLink link)
+        {
+            if (overLength.Count < 8)
+                overLength.Add(link);
+        }
+
         public int NodeCount { get; internal set; }
         public int LinkCount { get; internal set; }
         public int SelfLinkCount { get; internal set; }
         public int AsymmetricLinkCount { get; internal set; }
         public int OverLengthLinkCount { get; internal set; }
+        public int OverLengthCarCount { get; internal set; }
+        public int OverLengthPedCount { get; internal set; }
+        public int OverLengthWaterCount { get; internal set; }
 
         /// <summary>Longest connection in world units, and the nodes it joins.</summary>
         public float LongestLink { get; internal set; }
@@ -79,7 +106,31 @@ namespace SharpGTA.World
                         report.LongestLinkTo = target;
                     }
                     if (distance > maximumLinkLength)
+                    {
                         report.OverLengthLinkCount++;
+                        switch (node.Kind)
+                        {
+                            case PathKind.Car:
+                                report.OverLengthCarCount++;
+                                break;
+                            case PathKind.Ped:
+                                report.OverLengthPedCount++;
+                                break;
+                            default:
+                                report.OverLengthWaterCount++;
+                                break;
+                        }
+                        PathGraphReport.LongLink detail = new PathGraphReport.LongLink();
+                        detail.From = i;
+                        detail.To = target;
+                        detail.Distance = distance;
+                        detail.Kind = node.Kind;
+                        detail.FromPosition = node.Position;
+                        detail.ToPosition = nodes[target].Position;
+                        detail.FromTile = node.TileIndex;
+                        detail.ToTile = nodes[target].TileIndex;
+                        report.AddOverLength(detail);
+                    }
                     if (!nodes[target].Links.Contains(i))
                         report.AsymmetricLinkCount++;
                 }

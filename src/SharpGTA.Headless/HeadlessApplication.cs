@@ -519,6 +519,9 @@ namespace SharpGTA.Headless
                 " selfLinks=" + report.SelfLinkCount.ToString(CultureInfo.InvariantCulture) +
                 " asymmetricLinks=" + report.AsymmetricLinkCount.ToString(CultureInfo.InvariantCulture) +
                 " overLengthLinks=" + report.OverLengthLinkCount.ToString(CultureInfo.InvariantCulture) +
+                " overLengthCar=" + report.OverLengthCarCount.ToString(CultureInfo.InvariantCulture) +
+                " overLengthPed=" + report.OverLengthPedCount.ToString(CultureInfo.InvariantCulture) +
+                " overLengthWater=" + report.OverLengthWaterCount.ToString(CultureInfo.InvariantCulture) +
                 " longest=" + report.LongestLink.ToString("0.##", CultureInfo.InvariantCulture) +
                 " longestPair=" + report.LongestLinkFrom.ToString(CultureInfo.InvariantCulture) +
                 "->" + report.LongestLinkTo.ToString(CultureInfo.InvariantCulture) +
@@ -529,6 +532,18 @@ namespace SharpGTA.Headless
                 " consistent=" + (report.IsConsistent ? "true" : "false"));
             output.WriteLine("Path-Verify-Length: limit=" +
                 options.PathVerifyLength.ToString("0.##", CultureInfo.InvariantCulture));
+            IList<PathGraphReport.LongLink> longLinks = report.OverLengthSamples;
+            for (int i = 0; i < longLinks.Count; i++)
+            {
+                PathGraphReport.LongLink link = longLinks[i];
+                output.WriteLine("Path-Verify-Long: " + link.From.ToString(CultureInfo.InvariantCulture) +
+                    "->" + link.To.ToString(CultureInfo.InvariantCulture) +
+                    " kind=" + PathKindName(link.Kind) +
+                    " length=" + link.Distance.ToString("0.##", CultureInfo.InvariantCulture) +
+                    " tiles=" + link.FromTile.ToString(CultureInfo.InvariantCulture) +
+                    "->" + link.ToTile.ToString(CultureInfo.InvariantCulture) +
+                    " from=" + Vector(link.FromPosition) + " to=" + Vector(link.ToPosition));
+            }
         }
 
         private static string PathKindName(PathKind kind)

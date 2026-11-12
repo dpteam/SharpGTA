@@ -818,6 +818,7 @@ namespace SharpGTA.Tests
             Assert.Equal(0, report.SelfLinkCount);
             Assert.Equal(0, report.AsymmetricLinkCount);
             Assert.Equal(0, report.OverLengthLinkCount);
+            Assert.Equal(0, report.OverLengthCarCount);
             Assert.Near(10.0f, report.LongestLink, 0.0001f);
             Assert.Equal(0, report.UnlabelledNodeCount);
             Assert.Equal(0, report.MisgroupedNodeCount);
@@ -828,6 +829,9 @@ namespace SharpGTA.Tests
             // The same graph fails the length audit when the limit is below the tile spacing.
             PathGraphReport strict = PathGraphVerifier.Verify(graph, 5.0f);
             Assert.Equal(4, strict.OverLengthLinkCount);
+            Assert.Equal(4, strict.OverLengthCarCount);
+            Assert.Equal(0, strict.OverLengthWaterCount);
+            Assert.Equal(4, strict.OverLengthSamples.Count);
             Assert.True(strict.IsConsistent);
 
             Assert.Throws<ArgumentNullException>(delegate { PathGraphVerifier.Verify(null, 10.0f); });

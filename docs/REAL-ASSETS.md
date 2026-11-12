@@ -34,7 +34,7 @@
 | Cross-tile crossings / unpaired externals | 3200 / 325 | 2456 / 178 |
 | `CCarPathLink` entries / lane fallbacks | 2079 / 4 | 3064 / 4 |
 | Links flagged `bCrossesRoad` | 512 | 36 |
-| Path audit (`--verify-paths`) | consistent, longest 186.61 | consistent, 26 links over 200 (max 329.02) |
+| Path audit (`--verify-paths`) | consistent, longest 186.61, no long links | consistent, 26 long links (all water, max 329.02) |
 | Route probe (ground to 200 units away) | 26 hops, 728.49 units | 282 hops, 4847.98 units |
 | Path graph extern slots / empty slots | 6726 / 14691 | 5090 / 8752 |
 | Path graph components (car / ped / water) | 109 (3 / 106 / 0) | 42 (4 / 32 / 6) |
