@@ -102,7 +102,7 @@ namespace SharpGTA.World
         }
 
         /// <summary>Original `maxdist` passed to PreparePathDataForType for both path types.</summary>
-        private const float ExternMergeDistance = 1.0f;
+        private const float DefaultExternMergeDistance = 1.0f;
 
         private readonly List<PathGraphNode> nodes = new List<PathGraphNode>();
         private readonly List<PathGraphNode> carNodes = new List<PathGraphNode>();
@@ -117,9 +117,23 @@ namespace SharpGTA.World
         private int selfNexts;
 
         public PathGraph(PathWorld world)
+            : this(world, DefaultExternMergeDistance)
+        {
+        }
+
+        /// <summary>
+        /// Builds the graph, merging external pairs that are closer than
+        /// <paramref name="externMergeDistance"/>. The original always uses one unit; a larger
+        /// value is a deliberate, documented divergence used to measure how far apart the
+        /// authored externals of a tree really are.
+        /// </summary>
+        public PathGraph(PathWorld world, float externMergeDistance)
         {
             if (world == null)
                 throw new ArgumentNullException("world");
+            if (!(externMergeDistance > 0.0f) || float.IsInfinity(externMergeDistance))
+                throw new ArgumentOutOfRangeException("externMergeDistance");
+            ExternMergeDistance = externMergeDistance;
 
             List<Tile> tiles = new List<Tile>();
             List<int[]> externSlots = new List<int[]>();
@@ -351,6 +365,9 @@ namespace SharpGTA.World
 
         public int LargestComponentSize { get; private set; }
 
+        /// <summary>Distance under which two external slots are treated as one crossing.</summary>
+        public float ExternMergeDistance { get; private set; }
+
         /// <summary>Adjacency entries, including both directions of every tile and external link.</summary>
         public int LinkCount { get; private set; }
 
@@ -454,7 +471,7 @@ namespace SharpGTA.World
         /// candidate must beat the current best on both |dx| and |dy|, and the best shrinks to
         /// Max(|dx|, |dy|). Strictly nearer only, so ties keep the earlier slot.
         /// </summary>
-        private static int FindNearestExtern(List<ExternEntry> pending, Vector3 position)
+        private int FindNearestExtern(List<ExternEntry> pending, Vector3 position)
         {
             int nearestId = -1;
             float nearestDist = ExternMergeDistance;

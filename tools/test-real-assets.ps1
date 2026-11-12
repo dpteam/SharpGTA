@@ -65,9 +65,9 @@ try {
             throw "VC zone/path data changed or was not loaded."
         }
         $graph = if ($game -eq "iii") {
-            "Path-Graph: tiles=2163 nodes=4947 car=1971 ped=2976 water=0 links=7140 crossTile=1634 unpairedExtern=3457 unresolvedExtern=1 externalNext=1745 danglingNext=0 selfNext=0 externalSlots=6726 emptySlots=14691 unknownSlots=0 unresolvedGroups=34"
+            "Path-Graph: mergeDistance=1 tiles=2163 nodes=4947 car=1971 ped=2976 water=0 links=7140 crossTile=1634 unpairedExtern=3457 unresolvedExtern=1 externalNext=1745 danglingNext=0 selfNext=0 externalSlots=6726 emptySlots=14691 unknownSlots=0 unresolvedGroups=34"
         } else {
-            "Path-Graph: tiles=1957 nodes=9642 car=2973 ped=6291 water=378 links=20350 crossTile=2456 unpairedExtern=178 unresolvedExtern=0 externalNext=1619 danglingNext=0 selfNext=0 externalSlots=5090 emptySlots=8752 unknownSlots=0 unresolvedGroups=0"
+            "Path-Graph: mergeDistance=1 tiles=1957 nodes=9642 car=2973 ped=6291 water=378 links=20350 crossTile=2456 unpairedExtern=178 unresolvedExtern=0 externalNext=1619 danglingNext=0 selfNext=0 externalSlots=5090 emptySlots=8752 unknownSlots=0 unresolvedGroups=0"
         }
         if ($standard -notmatch [regex]::Escape($graph)) {
             throw "$game path graph changed: expected '$graph'."

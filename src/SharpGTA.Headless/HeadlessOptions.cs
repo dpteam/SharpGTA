@@ -74,6 +74,8 @@ namespace SharpGTA.Headless
         public float PathNearestZ { get; set; }
         public PathKind PathNearestKind { get; set; }
         public float PathNearestRadius { get; set; }
+        public float PathMergeDistance { get; set; }
+        public bool HasPathMergeDistance { get; set; }
         public bool HasPathKindOption { get; set; }
         public bool HasPathRadiusOption { get; set; }
 
@@ -209,6 +211,12 @@ namespace SharpGTA.Headless
                         options.PathNearestRadius = ParseSingle(Value(args, ref i, argument), argument);
                         options.HasPathRadiusOption = true;
                         break;
+                    case "--path-merge-distance":
+                        // Only changes how the path graph is built from already-requested map
+                        // data, so it must not suppress the implicit --standard load.
+                        options.PathMergeDistance = ParseSingle(Value(args, ref i, argument), argument);
+                        options.HasPathMergeDistance = true;
+                        break;
                     case "--spawn-objects":
                         // Spawning needs a loaded world, not a one-shot asset action, so it
                         // does not suppress the implicit --standard load.
@@ -237,6 +245,8 @@ namespace SharpGTA.Headless
                     throw new CommandLineException("--path-kind and --path-radius require --query-path-nearest.");
                 if (options.HasPathNearestQuery && !(options.PathNearestRadius > 0.0f))
                     throw new CommandLineException("--path-radius must be a positive number.");
+                if (options.HasPathMergeDistance && !(options.PathMergeDistance > 0.0f))
+                    throw new CommandLineException("--path-merge-distance must be a positive number.");
                 if (options.GxtKey != null && options.GxtPath == null)
                     throw new CommandLineException("--gxt-key requires --gxt.");
                 if (options.RenderPreview && options.DffPaths.Count + options.DffEntries.Count == 0)
@@ -249,7 +259,7 @@ namespace SharpGTA.Headless
                     options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
                     options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
                     options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview ||
-                    options.HasPathNearestQuery;
+                    options.HasPathNearestQuery || options.HasPathMergeDistance;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)

@@ -471,6 +471,43 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void MergeDistanceIsConfigurableAndValidated()
+        {
+            // Two external slots 2.5 units apart: the original threshold leaves them apart,
+            // a wider threshold collapses them into one crossing.
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII(
+                "car, -1, unused\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 0, 40, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(10) + "\n"));
+            world.AddGroups(ParseIII(
+                "car, -1, unused\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 0, 0, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(10) + "\n"));
+
+            PathGraph strict = new PathGraph(world);
+            Assert.Near(1.0f, strict.ExternMergeDistance);
+            Assert.Equal(0, strict.CrossTileLinkCount);
+            Assert.Equal(2, strict.UnpairedExternCount);
+
+            PathGraph relaxed = new PathGraph(world, 5.0f);
+            Assert.Near(5.0f, relaxed.ExternMergeDistance);
+            Assert.Equal(1, relaxed.CrossTileLinkCount);
+            Assert.Equal(0, relaxed.UnpairedExternCount);
+            Assert.Equal(1, relaxed.ComponentCount);
+
+            Assert.Throws<ArgumentOutOfRangeException>(delegate { new PathGraph(world, 0.0f); });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate { new PathGraph(world, -1.0f); });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate { new PathGraph(world, float.NaN); });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                new PathGraph(world, float.PositiveInfinity);
+            });
+        }
+
+        [Test]
         public void EmptyWorldBuildsAnEmptyGraph()
         {
             PathGraph graph = new PathGraph(new PathWorld());

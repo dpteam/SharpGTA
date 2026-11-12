@@ -169,7 +169,7 @@ namespace SharpGTA.Tests
                 Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
                     "--query-path-nearest", "0", "0", "0", "--path-radius", "10" }, out output, out error), error);
                 Assert.True(output.IndexOf(
-                    "Path-Graph: tiles=1 nodes=4 car=4 ped=0 water=0 links=6 crossTile=0 unpairedExtern=0 " +
+                    "Path-Graph: mergeDistance=1 tiles=1 nodes=4 car=4 ped=0 water=0 links=6 crossTile=0 unpairedExtern=0 " +
                     "unresolvedExtern=0 externalNext=0 danglingNext=0 selfNext=0 externalSlots=0 " +
                     "emptySlots=8 unknownSlots=0 unresolvedGroups=0",
                     StringComparison.Ordinal) >= 0, output);
@@ -184,6 +184,14 @@ namespace SharpGTA.Tests
                 Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
                     "--query-path-nearest", "500", "0", "0", "--path-radius", "50" }, out output, out error), error);
                 Assert.True(output.IndexOf("found=false", StringComparison.Ordinal) >= 0, output);
+
+                // The merge threshold is a diagnostic knob; --root alone must still load the map.
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path,
+                    "--path-merge-distance", "5" }, out output, out error), error);
+                Assert.True(output.IndexOf(
+                    "Path-Graph: mergeDistance=5 tiles=1 nodes=4", StringComparison.Ordinal) >= 0, output);
+                Assert.True(output.IndexOf(
+                    "Path-Nearest:", StringComparison.Ordinal) < 0, output);
 
                 // The synthetic tree only has car paths, so a ped query must come back empty.
                 Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
@@ -213,6 +221,11 @@ namespace SharpGTA.Tests
             Assert.Equal(2, Invoke(new string[] { "--query-path-nearest", "0", "0" },
                 out output, out error));
             Assert.True(error.IndexOf("--query-path-nearest", StringComparison.Ordinal) >= 0);
+
+            Assert.Equal(2, Invoke(new string[] { "--path-merge-distance", "0" }, out output, out error));
+            Assert.True(error.IndexOf("--path-merge-distance", StringComparison.Ordinal) >= 0);
+            Assert.Equal(2, Invoke(new string[] { "--path-merge-distance", "5" }, out output, out error));
+            Assert.True(error.IndexOf("--root", StringComparison.Ordinal) >= 0);
 
             using (TemporaryDirectory temporary = new TemporaryDirectory())
             {

@@ -249,8 +249,9 @@ namespace SharpGTA.Headless
                 " unresolved=" + loader.Paths.UnresolvedCount.ToString(CultureInfo.InvariantCulture));
             if (loader.Paths.GroupCount != 0)
             {
-                PathGraph graph = loader.PathGraph;
-                output.WriteLine("Path-Graph: tiles=" + graph.TileCount.ToString(CultureInfo.InvariantCulture) +
+                PathGraph graph = CreatePathGraph(loader, options);
+                output.WriteLine("Path-Graph: mergeDistance=" + graph.ExternMergeDistance.ToString("R", CultureInfo.InvariantCulture) +
+                    " tiles=" + graph.TileCount.ToString(CultureInfo.InvariantCulture) +
                     " nodes=" + graph.NodeCount.ToString(CultureInfo.InvariantCulture) +
                     " car=" + graph.CarNodeCount.ToString(CultureInfo.InvariantCulture) +
                     " ped=" + graph.PedNodeCount.ToString(CultureInfo.InvariantCulture) +
@@ -405,7 +406,7 @@ namespace SharpGTA.Headless
                 " radius=" + options.PathNearestRadius.ToString("R", CultureInfo.InvariantCulture);
             PathGraphNode node;
             float distance;
-            if (!loader.PathGraph.TryFindNearestNode(position, options.PathNearestKind,
+            if (!CreatePathGraph(loader, options).TryFindNearestNode(position, options.PathNearestKind,
                 options.PathNearestRadius, out node, out distance))
             {
                 output.WriteLine(prefix + " found=false");
@@ -419,6 +420,17 @@ namespace SharpGTA.Headless
                 " links=" + node.LinkCount.ToString(CultureInfo.InvariantCulture) +
                 " next=" + node.NextNodeIndex.ToString(CultureInfo.InvariantCulture) +
                 " component=" + node.GroupId.ToString(CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>
+        /// Graph with the merge distance requested on the command line; the default keeps the
+        /// original one-unit threshold and the loader's cached instance.
+        /// </summary>
+        private static PathGraph CreatePathGraph(GameDataLoader loader, HeadlessOptions options)
+        {
+            return options.HasPathMergeDistance
+                ? new PathGraph(loader.Paths, options.PathMergeDistance)
+                : loader.PathGraph;
         }
 
         private static string PathKindName(PathKind kind)
@@ -626,6 +638,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --query-zone X Y Z        Query navigation/info/map zones and cull attributes.");
             output.WriteLine("  --query-path GROUP NODE   Print one resolved path node position and next link.");
             output.WriteLine("  --query-path-nearest X Y Z  Find the closest path node; --path-kind car|ped|water, --path-radius R.");
+            output.WriteLine("  --path-merge-distance R   Merge external path slots closer than R units (default 1, the original).");
             output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
             output.WriteLine("  --spawn-objects N [--spawn-model NAME]  Spawn N drifting gameplay objects and tick them.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");
