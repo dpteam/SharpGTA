@@ -261,6 +261,8 @@ namespace SharpGTA.Headless
                     " links=" + graph.LinkCount.ToString(CultureInfo.InvariantCulture) +
                     " crossTile=" + graph.CrossTileLinkCount.ToString(CultureInfo.InvariantCulture) +
                     " crossings=" + graph.CrossingLinkCount.ToString(CultureInfo.InvariantCulture) +
+                    " carLinks=" + graph.CarLinkCount.ToString(CultureInfo.InvariantCulture) +
+                    " laneFallbacks=" + graph.CarLinkLaneFallbackCount.ToString(CultureInfo.InvariantCulture) +
                     " unpairedExtern=" + graph.UnpairedExternCount.ToString(CultureInfo.InvariantCulture) +
                     " unresolvedExtern=" + graph.UnresolvedExternCount.ToString(CultureInfo.InvariantCulture) +
                     " externalNext=" + graph.ExternalNextCount.ToString(CultureInfo.InvariantCulture) +
@@ -391,6 +393,7 @@ namespace SharpGTA.Headless
             output.WriteLine("Path: group=" + options.PathGroupIndex.ToString(CultureInfo.InvariantCulture) +
                 " node=" + options.PathNodeIndex.ToString(CultureInfo.InvariantCulture) +
                 " resolved=true kind=" + group.Kind + " model=" + group.ModelName +
+                " placements=" + (group.InstanceTransforms == null ? 0 : group.InstanceTransforms.Length).ToString(CultureInfo.InvariantCulture) +
                 " position=" + Vector(position) + " next=" + node.NextNodeIndex.ToString(CultureInfo.InvariantCulture));
         }
 

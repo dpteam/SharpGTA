@@ -14,6 +14,8 @@ namespace SharpGTA.World
         private ReadOnlyCollection<int> links = NoLinks;
         private float[] linkDistances = new float[0];
         private bool[] linkCrosses = new bool[0];
+        private int[] linkCarLinks = new int[0];
+        private PathGraph graph;
 
         internal PathGraphNode(int globalIndex, int groupIndex, int tileIndex, PathGroup group,
             PathNode source, int localIndex, Vector3 position)
@@ -87,10 +89,58 @@ namespace SharpGTA.World
             links = value;
         }
 
-        internal void SetLinkData(float[] distances, bool[] crosses)
+        internal void SetLinkData(float[] distances, bool[] crosses, int[] carLinks,
+            PathGraph owner)
         {
             linkDistances = distances;
             linkCrosses = crosses;
+            linkCarLinks = carLinks;
+            graph = owner;
+        }
+
+        /// <summary>True when this connection carries a `CCarPathLink` (car paths only).</summary>
+        public bool HasCarLink(int index)
+        {
+            if (index < 0 || index >= linkCarLinks.Length)
+                throw new ArgumentOutOfRangeException("index");
+            return linkCarLinks[index] >= 0;
+        }
+
+        /// <summary>Lane direction of a car link, normalised in XY and pointing at the lower node.</summary>
+        public Vector3 LinkDirection(int index)
+        {
+            return graph.GetCarLink(GetCarLinkIndex(index)).Direction;
+        }
+
+        /// <summary>XY midpoint between the two nodes of a car link.</summary>
+        public Vector3 LinkMidpoint(int index)
+        {
+            return graph.GetCarLink(GetCarLinkIndex(index)).Midpoint;
+        }
+
+        /// <summary>Left lanes of a car link, inherited from crossings or defaulted to 1.</summary>
+        public int LinkLeftLanes(int index)
+        {
+            return graph.GetCarLink(GetCarLinkIndex(index)).LeftLanes;
+        }
+
+        /// <summary>Right lanes of a car link, inherited from crossings or defaulted to 1.</summary>
+        public int LinkRightLanes(int index)
+        {
+            return graph.GetCarLink(GetCarLinkIndex(index)).RightLanes;
+        }
+
+        private int GetCarLinkIndex(int index)
+        {
+            if (index < 0 || index >= linkCarLinks.Length)
+                throw new ArgumentOutOfRangeException("index");
+            int carLink = linkCarLinks[index];
+            if (carLink < 0)
+            {
+                throw new InvalidOperationException(
+                    "Only car path connections carry a CCarPathLink.");
+            }
+            return carLink;
         }
 
         internal void SetGroupId(int value)
@@ -101,10 +151,13 @@ namespace SharpGTA.World
 
     /// <summary>
     /// Path graph over the parsed IDE/IPL path sections, mirroring the node and link part of
-    /// CPathFind::PreparePathDataForType. Only interior slots (type 2) become nodes, as in the
-    /// original, where `m_pathNodes` receives nothing else; external slots (type 1) are tile
-    /// boundary markers and type-0 slots are padding. Two interior slots of one tile are
-    /// linked when either side's `next` names the other, so the adjacency is symmetric.
+    /// CPathFind::PreparePathDataForType. A tile is one (path block, placement) pair: a model
+    /// with both a car and a ped block owns two tiles per placement, so TileCount is not
+    /// m_numMapObjects and a tile index cannot be compared with it. Only interior slots
+    /// (type 2) become nodes, as in the original, where `m_pathNodes` receives nothing else;
+    /// external slots (type 1) are tile boundary markers and type-0 slots are padding. Two
+    /// interior slots of one tile are linked when either side's `next` names the other, so the
+    /// adjacency is symmetric.
     ///
     /// Neighbouring tiles are joined the way the original does it: two external slots of the
     /// same kind closer than one unit collapse into one connection between the interior nodes
@@ -119,12 +172,23 @@ namespace SharpGTA.World
             internal Vector3 Position;
             internal int NodeIndex;
             internal bool Paired;
+            internal int LeftLanes;
+            internal int RightLanes;
+        }
+
+        /// <summary>One `CCarPathLink`: lane direction, midpoint and lane counts per connection.</summary>
+        internal sealed class CarLink
+        {
+            internal Vector3 Direction;
+            internal Vector3 Midpoint;
+            internal int LeftLanes;
+            internal int RightLanes;
+            internal int NodeIndex;
         }
 
         /// <summary>One placed path tile: a group's twelve slots under one world transform.</summary>
         private sealed class Tile
         {
-            internal int GroupIndex;
             internal PathGroup Group;
             internal Matrix? Transform;
             internal int[] SlotNodes;
@@ -137,6 +201,7 @@ namespace SharpGTA.World
         private readonly List<PathGraphNode> carNodes = new List<PathGraphNode>();
         private readonly List<PathGraphNode> pedNodes = new List<PathGraphNode>();
         private readonly List<PathGraphNode> waterNodes = new List<PathGraphNode>();
+        private readonly List<CarLink> carLinks = new List<CarLink>();
         private readonly ReadOnlyCollection<PathGraphNode> readOnlyNodes;
         private int emptySlots;
         private int externalSlots;
@@ -181,7 +246,6 @@ namespace SharpGTA.World
                 for (int t = 0; t < transforms.Length; t++)
                 {
                     Tile tile = new Tile();
-                    tile.GroupIndex = g;
                     tile.Group = group;
                     tile.Transform = group.IsDetached ? (Matrix?)null : new Matrix?(transforms[t]);
                     tile.SlotNodes = new int[group.Nodes.Length];
@@ -231,10 +295,12 @@ namespace SharpGTA.World
 
             List<int>[] adjacency = new List<int>[nodes.Count];
             List<bool>[] crossing = new List<bool>[nodes.Count];
+            List<int>[] carIndex = new List<int>[nodes.Count];
             for (int i = 0; i < adjacency.Length; i++)
             {
                 adjacency[i] = new List<int>(2);
                 crossing[i] = new List<bool>(2);
+                carIndex[i] = new List<int>(2);
             }
 
             int links = 0;
@@ -264,12 +330,14 @@ namespace SharpGTA.World
                         bool crossesRoad = group.Kind == PathKind.Ped &&
                             ((group.Nodes[a].NextNodeIndex == b && group.Nodes[a].Cross) ||
                              (group.Nodes[b].NextNodeIndex == a && group.Nodes[b].Cross));
-                        Connect(adjacency, crossing, left, right, crossesRoad, ref links);
+                        int carLink = -1;
+                        if (group.Kind == PathKind.Car)
+                            carLink = RegisterIntraTileCarLink(left, right);
+                        Connect(adjacency, crossing, carIndex, left, right, crossesRoad, carLink,
+                            ref links);
                     }
                 }
             }
-            LinkCount = links;
-
             for (int t = 0; t < tiles.Count; t++)
             {
                 PathGroup group = tiles[t].Group;
@@ -301,11 +369,15 @@ namespace SharpGTA.World
                 }
                 List<ExternEntry> pending = Pending(carPending, pedPending, waterPending, group.Kind);
                 int nearestId = FindNearestExtern(pending, position);
+                int leftLanes = group.Nodes[slot].NumLeftLanes;
+                int rightLanes = group.Nodes[slot].NumRightLanes;
                 if (nearestId < 0)
                 {
                     ExternEntry entry = new ExternEntry();
                     entry.Position = position;
                     entry.NodeIndex = interior;
+                    entry.LeftLanes = leftLanes;
+                    entry.RightLanes = rightLanes;
                     pending.Add(entry);
                     continue;
                 }
@@ -314,7 +386,33 @@ namespace SharpGTA.World
                 // The original averages the two collapsed positions and keeps the pair.
                 found.Position = (found.Position + position) * 0.5f;
                 CrossTileLinkCount++;
-                Connect(adjacency, crossing, found.NodeIndex, interior, false, ref links);
+                int crossingCarLink = -1;
+                if (group.Kind == PathKind.Car)
+                {
+                    // The original builds the crossing direction from link1 - link2 and takes
+                    // the lane counts of the first external slot, swapping them in when the
+                    // partner is the one that carries lane data.
+                    Vector3 first = nodes[found.NodeIndex].Position;
+                    Vector3 second = nodes[interior].Position;
+                    float dx = first.X - second.X;
+                    float dy = first.Y - second.Y;
+                    float magnitude = (float)Math.Sqrt(dx * dx + dy * dy);
+                    if (magnitude > 0.0f)
+                    {
+                        dx /= magnitude;
+                        dy /= magnitude;
+                    }
+                    if (found.LeftLanes != 0 && found.RightLanes != 0 &&
+                        (leftLanes == 0 || rightLanes == 0))
+                    {
+                        found.LeftLanes = rightLanes;
+                        found.RightLanes = leftLanes;
+                    }
+                    crossingCarLink = RegisterCarLink(dx, dy, found.Position.X, found.Position.Y,
+                        found.LeftLanes, found.RightLanes, found.NodeIndex);
+                }
+                Connect(adjacency, crossing, carIndex, found.NodeIndex, interior, false,
+                    crossingCarLink, ref links);
             }
             LinkCount = links;
 
@@ -341,16 +439,20 @@ namespace SharpGTA.World
                 node.SetLinks(targets.AsReadOnly());
                 float[] distances = new float[targets.Count];
                 bool[] crosses = new bool[targets.Count];
+                int[] cars = new int[targets.Count];
                 for (int k = 0; k < targets.Count; k++)
                 {
                     distances[k] = (nodes[targets[k]].Position - node.Position).Length();
                     crosses[k] = crossing[i][k];
+                    cars[k] = carIndex[i][k];
                     if (crosses[k])
                         CrossingLinkCount++;
                 }
-                node.SetLinkData(distances, crosses);
+                node.SetLinkData(distances, crosses, cars, this);
             }
 
+            CarLinkCount = carLinks.Count;
+            InheritCarLanes(carIndex);
             AssignFloodFillGroups();
         }
 
@@ -584,6 +686,12 @@ namespace SharpGTA.World
         /// <summary>Adjacency entries whose `bCrossesRoad` flag is set.</summary>
         public int CrossingLinkCount { get; private set; }
 
+        /// <summary>`CCarPathLink` entries: one per physical car connection.</summary>
+        public int CarLinkCount { get; private set; }
+
+        /// <summary>Lane sides that fell back to the default of one lane.</summary>
+        public int CarLinkLaneFallbackCount { get; private set; }
+
         /// <summary>External pairs collapsed into one crossing between two neighbouring tiles.</summary>
         public int CrossTileLinkCount { get; private set; }
 
@@ -735,8 +843,9 @@ namespace SharpGTA.World
             }
         }
 
-        private static void Connect(List<int>[] adjacency, List<bool>[] crossing, int left,
-            int right, bool crossesRoad, ref int links)
+        private static void Connect(List<int>[] adjacency, List<bool>[] crossing,
+            List<int>[] carIndex, int left, int right, bool crossesRoad, int carLink,
+            ref int links)
         {
             if (left < 0 || right < 0 || left == right)
                 return;
@@ -744,14 +853,143 @@ namespace SharpGTA.World
             {
                 adjacency[left].Add(right);
                 crossing[left].Add(crossesRoad);
+                carIndex[left].Add(carLink);
                 links++;
             }
             if (!adjacency[right].Contains(left))
             {
                 adjacency[right].Add(left);
                 crossing[right].Add(crossesRoad);
+                carIndex[right].Add(carLink);
                 links++;
             }
+        }
+
+        /// <summary>
+        /// `CCarPathLink` entry for a tile pair: the original stores the direction toward the
+        /// lower node index, the midpoint of the two nodes, and -1 lane counts that later get
+        /// inherited from the external crossings. Entries are shared by both directions of one
+        /// physical link, exactly like `m_carPathLinks`.
+        /// </summary>
+        private int RegisterIntraTileCarLink(int left, int right)
+        {
+            PathGraphNode first = nodes[left];
+            PathGraphNode second = nodes[right];
+            float posX = (first.Position.X + second.Position.X) * 0.5f;
+            float posY = (first.Position.Y + second.Position.Y) * 0.5f;
+            float dx = second.Position.X - first.Position.X;
+            float dy = second.Position.Y - first.Position.Y;
+            float magnitude = (float)Math.Sqrt(dx * dx + dy * dy);
+            if (magnitude > 0.0f)
+            {
+                dx /= magnitude;
+                dy /= magnitude;
+            }
+            if (left < right)
+            {
+                // The original flips the direction so it always points at the lower index.
+                dx = -dx;
+                dy = -dy;
+            }
+            return RegisterCarLink(dx, dy, posX, posY, -1, -1, left);
+        }
+
+        private int RegisterCarLink(float dirX, float dirY, float posX, float posY,
+            int leftLanes, int rightLanes, int nodeIndex)
+        {
+            for (int k = 0; k < carLinks.Count; k++)
+            {
+                CarLink existing = carLinks[k];
+                if (existing.Direction.X == dirX && existing.Direction.Y == dirY &&
+                    existing.Midpoint.X == posX && existing.Midpoint.Y == posY)
+                    return k;
+            }
+            CarLink link = new CarLink();
+            link.Direction = new Vector3(dirX, dirY, 0.0f);
+            link.Midpoint = new Vector3(posX, posY, 0.0f);
+            link.LeftLanes = leftLanes;
+            link.RightLanes = rightLanes;
+            link.NodeIndex = nodeIndex;
+            carLinks.Add(link);
+            return carLinks.Count - 1;
+        }
+
+        /// <summary>
+        /// Lane counts come only from external crossings, so the original propagates them along
+        /// nodes that own exactly two links (swapping left and right when the source link points
+        /// back at that node) and finally falls back to one lane per side.
+        /// </summary>
+        private void InheritCarLanes(List<int>[] carIndex)
+        {
+            bool done = false;
+            for (int pass = 0; !done && pass < 10; pass++)
+            {
+                done = true;
+                for (int i = 0; i < nodes.Count; i++)
+                {
+                    List<int> indexes = carIndex[i];
+                    if (indexes.Count != 2)
+                        continue;
+                    int firstIndex = indexes[0];
+                    int secondIndex = indexes[1];
+                    if (firstIndex < 0 || secondIndex < 0)
+                        continue;
+                    CarLink first = carLinks[firstIndex];
+                    CarLink second = carLinks[secondIndex];
+                    if (first.LeftLanes == -1 && second.LeftLanes != -1)
+                    {
+                        done = false;
+                        if (second.NodeIndex == i)
+                        {
+                            first.LeftLanes = second.RightLanes;
+                            first.RightLanes = second.LeftLanes;
+                        }
+                        else
+                        {
+                            first.LeftLanes = second.LeftLanes;
+                            first.RightLanes = second.RightLanes;
+                        }
+                        first.NodeIndex = i;
+                    }
+                    else if (first.LeftLanes != -1 && second.LeftLanes == -1)
+                    {
+                        done = false;
+                        if (first.NodeIndex == i)
+                        {
+                            second.LeftLanes = first.RightLanes;
+                            second.RightLanes = first.LeftLanes;
+                        }
+                        else
+                        {
+                            second.LeftLanes = first.LeftLanes;
+                            second.RightLanes = first.RightLanes;
+                        }
+                        second.NodeIndex = i;
+                    }
+                    else if (first.LeftLanes == -1 && second.LeftLanes == -1)
+                    {
+                        done = false;
+                    }
+                }
+            }
+            for (int k = 0; k < carLinks.Count; k++)
+            {
+                if (carLinks[k].LeftLanes < 0)
+                {
+                    carLinks[k].LeftLanes = 1;
+                    CarLinkLaneFallbackCount++;
+                }
+                if (carLinks[k].RightLanes < 0)
+                {
+                    carLinks[k].RightLanes = 1;
+                    CarLinkLaneFallbackCount++;
+                }
+            }
+        }
+
+        internal CarLink GetCarLink(int index)
+        {
+            return carLinks[index];
         }
 
         private void CountNextTarget(PathGroup group, int slot)

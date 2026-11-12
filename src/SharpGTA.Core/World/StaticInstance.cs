@@ -16,10 +16,24 @@ namespace SharpGTA.World
             Area = record.Area;
             HasArea = record.HasArea;
 
-            // Original IPL loading reconstructs a quaternion from the stored axis and w.
-            // Do not use ObjectInstanceRecord.RawRotation as a normalized quaternion.
-            float angle = -2.0f * (float)Math.Acos(record.QuaternionW);
-            Rotation = Quaternion.FromAxisAngle(record.Axis, angle);
+            // The original normalises the axis before rotating: re3 calls
+            // RwMatrixRotate(xform, &axis, -2*acos(w)), and RenderWare normalises the axis
+            // internally. IPL stores the vector part of a unit quaternion, which is generally
+            // not unit length itself (e.g. 0.707107 for a 90 degree turn), so using it raw
+            // would rotate by the wrong angle and scale the result.
+            Vector3 axis = record.Axis;
+            float axisLength = axis.Length();
+            if (axisLength > 0.0f)
+                axis = axis / axisLength;
+            float quaternionW = record.QuaternionW;
+            if (quaternionW > 1.0f)
+                quaternionW = 1.0f;
+            else if (quaternionW < -1.0f)
+                quaternionW = -1.0f;
+            float angle = -2.0f * (float)Math.Acos(quaternionW);
+            Rotation = axisLength > 0.0f
+                ? Quaternion.FromAxisAngle(axis, angle)
+                : Quaternion.Identity;
             Matrix transform = Matrix.CreateFromQuaternion(Rotation);
             transform.Position = record.Position;
             Transform = transform;

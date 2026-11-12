@@ -65,15 +65,15 @@ try {
             throw "VC zone/path data changed or was not loaded."
         }
         $graph = if ($game -eq "iii") {
-            "Path-Graph: mergeDistance=1 tiles=2163 nodes=4947 car=1971 ped=2976 water=0 links=7140 crossTile=1634 crossings=512 unpairedExtern=3457 unresolvedExtern=1 externalNext=1745 danglingNext=0 selfNext=0 externalSlots=6726 emptySlots=14691 unknownSlots=0 unresolvedGroups=34"
+            "Path-Graph: mergeDistance=1 tiles=2163 nodes=4947 car=1971 ped=2976 water=0 links=10272 crossTile=3200 crossings=512 carLinks=2079 laneFallbacks=4 unpairedExtern=325 unresolvedExtern=1 externalNext=1745 danglingNext=0 selfNext=0 externalSlots=6726 emptySlots=14691 unknownSlots=0 unresolvedGroups=34"
         } else {
-            "Path-Graph: mergeDistance=1 tiles=1957 nodes=9642 car=2973 ped=6291 water=378 links=20350 crossTile=2456 crossings=36 unpairedExtern=178 unresolvedExtern=0 externalNext=1619 danglingNext=0 selfNext=0 externalSlots=5090 emptySlots=8752 unknownSlots=0 unresolvedGroups=0"
+            "Path-Graph: mergeDistance=1 tiles=1957 nodes=9642 car=2973 ped=6291 water=378 links=20350 crossTile=2456 crossings=36 carLinks=3064 laneFallbacks=4 unpairedExtern=178 unresolvedExtern=0 externalNext=1619 danglingNext=0 selfNext=0 externalSlots=5090 emptySlots=8752 unknownSlots=0 unresolvedGroups=0"
         }
         if ($standard -notmatch [regex]::Escape($graph)) {
             throw "$game path graph changed: expected '$graph'."
         }
         $groups = if ($game -eq "iii") {
-            "Path-Groups: components=1480 car=482 ped=998 water=0 singles=936 largest=254"
+            "Path-Groups: components=109 car=3 ped=106 water=0 singles=20 largest=1967"
         } else {
             "Path-Groups: components=42 car=4 ped=32 water=6 singles=0 largest=5102"
         }
@@ -101,8 +101,8 @@ try {
         } else {
             Invoke-Case "vc path route" $net40 ($common + @("--standard", "--query-path-route", "-864", "-575", "10", "-700", "-400", "10", "--path-kind", "ped", "--path-radius", "300", "--ticks", "0")) $false
         }
-        if ($game -eq "iii" -and $route -notmatch "Path-Route: kind=car .*found=false reason=disconnected startComponent=977 endComponent=728") {
-            throw "III path route no longer reports the expected disconnected components."
+        if ($game -eq "iii" -and $route -notmatch "Path-Route: kind=car .*found=true hops=26 length=728\.49") {
+            throw "III path route did not find the expected 26-hop drive."
         }
         if ($game -eq "vc" -and $route -notmatch "Path-Route: kind=ped .*found=true hops=282 length=4847\.98") {
             throw "VC path route did not find the expected 282-hop walk."

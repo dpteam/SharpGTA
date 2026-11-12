@@ -642,6 +642,141 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void CarLinksCarryLaneDataFromCrossings()
+        {
+            // Tile A: interior 0 names interior 2 (intra link, no lane data) and its external
+            // slot 1 carries 2/1 lanes; tile B sits at the same crossing point with 2/2.
+            ModelRegistry registry = new ModelRegistry(new PathTestDefinition());
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n10, roadA, generic, 1, 100, 0\n11, roadB, generic, 1, 100, 0\nend\n"));
+            IplDocument placements = new IplReader(DataSchema.III).Read(
+                "inst\n" +
+                "10, roadA, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "11, roadB, 10, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "end\n");
+            StaticWorld staticWorld = new StaticWorld();
+            staticWorld.Bind(placements, registry, new LoadReport());
+
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII(
+                "car, 10, roadA\n" +
+                "2, 2, 0, 0, 0, 0, 160, 1, 1\n" +      // interior at the origin
+                "1, 0, 0, 160, 0, 0, 160, 2, 1\n" +   // external at (10,0,0), 2/1 lanes
+                "2, -1, 0, 0, 160, 0, 160, 1, 1\n" +   // interior at (0,10,0)
+                EmptyNodes(9) + "\n"));
+            world.AddGroups(ParseIII(
+                "car, 11, roadB\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 0, 0, 0, 0, 160, 2, 2\n" +
+                EmptyNodes(10) + "\n"));
+            world.BindInstances(staticWorld.Instances);
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(2, graph.CarLinkCount);
+            Assert.Equal(0, graph.CarLinkLaneFallbackCount);
+            Assert.Equal(1, graph.CrossTileLinkCount);
+
+            // Node 0 owns the intra-tile link (index 0) and the crossing (index 1).
+            PathGraphNode first = graph.Nodes[0];
+            Assert.Equal(2, first.LinkCount);
+            Assert.True(first.HasCarLink(0));
+            Assert.True(first.HasCarLink(1));
+
+            // The intra link starts without lane data, so it inherits the crossing's counts and
+            // swaps left/right because the source link points back at this node.
+            Assert.Equal(1, first.LinkLeftLanes(0));
+            Assert.Equal(2, first.LinkRightLanes(0));
+            Assert.Near(0.0f, first.LinkMidpoint(0).X, 0.0001f);
+            Assert.Near(5.0f, first.LinkMidpoint(0).Y, 0.0001f);
+            // Direction points at the lower node index, so it runs back along -Y.
+            Assert.Near(0.0f, first.LinkDirection(0).X, 0.0001f);
+            Assert.Near(-1.0f, first.LinkDirection(0).Y, 0.0001f);
+
+            // The crossing keeps the external slot's own counts and the averaged position of
+            // the two collapsed externals, with the direction running from link1 to link2.
+            Assert.Equal(2, first.LinkLeftLanes(1));
+            Assert.Equal(1, first.LinkRightLanes(1));
+            Assert.Near(10.0f, first.LinkMidpoint(1).X, 0.0001f);
+            Assert.Near(0.0f, first.LinkMidpoint(1).Y, 0.0001f);
+            Assert.Near(-1.0f, first.LinkDirection(1).X, 0.0001f);
+            Assert.Near(0.0f, first.LinkDirection(1).Y, 0.0001f);
+
+            Assert.Throws<ArgumentOutOfRangeException>(delegate { first.HasCarLink(2); });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate { first.LinkLeftLanes(-1); });
+        }
+
+        [Test]
+        public void CarLanesFallBackToOnePerSideWithoutCrossings()
+        {
+            PathWorld world = DetachedIII(
+                "2, 1, 0, 0, 0, 0, 160, 1, 1",
+                "2, 0, 0, 160, 0, 0, 160, 1, 1",
+                EmptyNodes(10));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(1, graph.CarLinkCount);
+            Assert.Equal(2, graph.CarLinkLaneFallbackCount);
+            Assert.Equal(1, graph.Nodes[0].LinkLeftLanes(0));
+            Assert.Equal(1, graph.Nodes[0].LinkRightLanes(0));
+        }
+
+        [Test]
+        public void PedLinksDoNotCarryCarLinkData()
+        {
+            PathWorld world = DetachedIIIPed(
+                "2, 1, 0, 0, 0, 0, 160",
+                "2, 0, 0, 160, 0, 0, 160",
+                EmptyPedNodes(10));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(0, graph.CarLinkCount);
+            Assert.False(graph.Nodes[0].HasCarLink(0));
+            Assert.Throws<InvalidOperationException>(delegate { graph.Nodes[0].LinkLeftLanes(0); });
+            Assert.Throws<InvalidOperationException>(delegate { graph.Nodes[0].LinkDirection(0); });
+        }
+
+        [Test]
+        public void OneGroupPlacedTwiceProducesTwoTiles()
+        {
+            ModelRegistry registry = new ModelRegistry(new PathTestDefinition());
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n10, road, generic, 1, 100, 0\nend\n"));
+            IplDocument placements = new IplReader(DataSchema.III).Read(
+                "inst\n" +
+                "10, road, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "10, road, 500, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "end\n");
+            StaticWorld staticWorld = new StaticWorld();
+            staticWorld.Bind(placements, registry, new LoadReport());
+
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII(
+                "car, 10, road\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 0, 160, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(10) + "\n"));
+            world.BindInstances(staticWorld.Instances);
+
+            Assert.Equal(2, world.Groups[0].InstanceTransforms.Length);
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(2, graph.TileCount);
+            Assert.Equal(2, graph.NodeCount);
+            Assert.Equal(0, graph.Nodes[0].GroupIndex);
+            Assert.Equal(0, graph.Nodes[1].GroupIndex);
+            Assert.Equal(0, graph.Nodes[0].TileIndex);
+            Assert.Equal(1, graph.Nodes[1].TileIndex);
+            // Both tiles are congruent, so their externals never coincide: five hundred units
+            // apart is far beyond the one unit merge threshold.
+            Assert.Equal(0, graph.CrossTileLinkCount);
+            Assert.Equal(2, graph.UnpairedExternCount);
+        }
+
+        [Test]
         public void EmptyWorldBuildsAnEmptyGraph()
         {
             PathGraph graph = new PathGraph(new PathWorld());
