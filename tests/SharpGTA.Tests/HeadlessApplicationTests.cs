@@ -174,8 +174,11 @@ namespace SharpGTA.Tests
                     "emptySlots=8 unknownSlots=0 unresolvedGroups=0",
                     StringComparison.Ordinal) >= 0, output);
                 Assert.True(output.IndexOf(
+                    "Path-Groups: components=1 car=1 ped=0 water=0 singles=0 largest=4",
+                    StringComparison.Ordinal) >= 0, output);
+                Assert.True(output.IndexOf(
                     "Path-Nearest: kind=car position=(0,0,0) radius=10 found=true node=0 group=0 local=0 " +
-                    "nodePosition=(0,0,0) distance=0 links=1 next=1", StringComparison.Ordinal) >= 0, output);
+                    "nodePosition=(0,0,0) distance=0 links=1 next=1 component=1", StringComparison.Ordinal) >= 0, output);
 
                 // The same coordinates five hundred units away have no node inside the limit.
                 Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",

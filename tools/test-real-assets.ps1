@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Building:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -71,6 +71,14 @@ try {
         }
         if ($standard -notmatch [regex]::Escape($graph)) {
             throw "$game path graph changed: expected '$graph'."
+        }
+        $groups = if ($game -eq "iii") {
+            "Path-Groups: components=1480 car=482 ped=998 water=0 singles=936 largest=254"
+        } else {
+            "Path-Groups: components=42 car=4 ped=32 water=6 singles=0 largest=5102"
+        }
+        if ($standard -notmatch [regex]::Escape($groups)) {
+            throw "$game flood-fill groups changed: expected '$groups'."
         }
         $nearestNode = if ($game -eq "iii") { "node=1969 group=87 local=1" } else { "node=139 group=31 local=3" }
         $nearest = "Path-Nearest: kind=car position=($($ground[0]),$($ground[1]),$zoneZ) radius=200 found=true $nearestNode"

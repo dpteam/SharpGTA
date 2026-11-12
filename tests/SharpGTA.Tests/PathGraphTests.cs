@@ -57,6 +57,10 @@ namespace SharpGTA.Tests
             AssertVector(Vector3.Zero, first.Position);
             AssertVector(new Vector3(30.0f, 0.0f, 0.0f), graph.Nodes[3].Position);
             Assert.Equal(3, graph.Nodes[3].LocalIndex);
+            Assert.Equal(1, graph.ComponentCount);
+            Assert.Equal(4, graph.LargestComponentSize);
+            Assert.Equal(0, graph.SingleNodeComponentCount);
+            Assert.Equal(1, graph.Nodes[3].GroupId);
         }
 
         [Test]
@@ -104,6 +108,9 @@ namespace SharpGTA.Tests
             Assert.Equal(2, graph.DanglingNextCount);
             Assert.Equal(1, graph.SelfNextCount);
             Assert.Equal(0, graph.ExternalNextCount);
+            Assert.Equal(4, graph.ComponentCount);
+            Assert.Equal(4, graph.SingleNodeComponentCount);
+            Assert.Equal(1, graph.LargestComponentSize);
             for (int i = 0; i < graph.NodeCount; i++)
                 Assert.Equal(0, graph.Nodes[i].LinkCount);
         }
@@ -258,6 +265,13 @@ namespace SharpGTA.Tests
             Assert.Equal(PathKind.Car, graph.Nodes[0].Kind);
             Assert.Equal(PathKind.Ped, graph.Nodes[12].Kind);
             Assert.Equal(PathKind.Water, graph.Nodes[24].Kind);
+            // Every slot has next = -1 here, so each node is its own component.
+            Assert.Equal(36, graph.ComponentCount);
+            Assert.Equal(12, graph.CarComponentCount);
+            Assert.Equal(12, graph.PedComponentCount);
+            Assert.Equal(12, graph.WaterComponentCount);
+            Assert.Equal(36, graph.SingleNodeComponentCount);
+            Assert.Equal(1, graph.LargestComponentSize);
 
             PathGraphNode node;
             float distance;
@@ -362,6 +376,8 @@ namespace SharpGTA.Tests
             Assert.Equal(1, graph.Nodes[0].LinkCount);
             Assert.Equal(1, graph.Nodes[0].Links[0]);
             Assert.Equal(0, graph.Nodes[1].Links[0]);
+            Assert.Equal(1, graph.ComponentCount);
+            Assert.Equal(2, graph.LargestComponentSize);
 
             PathGraphNode node;
             float distance;
@@ -421,6 +437,37 @@ namespace SharpGTA.Tests
             Assert.Equal(2, graph.UnresolvedExternCount);
             Assert.Equal(0, graph.CrossTileLinkCount);
             Assert.Equal(0, graph.LinkCount);
+        }
+
+        [Test]
+        public void FloodFillGroupsFollowLinksAndKeepSinglesApart()
+        {
+            // Chain 0 -> 1, an isolated slot 2, and chain 3 -> 4 -> 5.
+            PathWorld world = DetachedIII(
+                "2, 1, 0, 0, 0, 0, 160, 1, 1",
+                "2, 1, 0, 160, 0, 0, 160, 1, 1",
+                "2, -1, 0, 320, 0, 0, 160, 1, 1",
+                "2, 4, 0, 480, 0, 0, 160, 1, 1",
+                "2, 5, 0, 640, 0, 0, 160, 1, 1",
+                "2, 5, 0, 800, 0, 0, 160, 1, 1",
+                EmptyNodes(6));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(6, graph.NodeCount);
+            Assert.Equal(3, graph.ComponentCount);
+            Assert.Equal(3, graph.CarComponentCount);
+            Assert.Equal(0, graph.PedComponentCount);
+            Assert.Equal(0, graph.WaterComponentCount);
+            Assert.Equal(1, graph.SingleNodeComponentCount);
+            Assert.Equal(3, graph.LargestComponentSize);
+            // Ids are assigned in node order, so the first chain is 1, the single is 2.
+            Assert.Equal(1, graph.Nodes[0].GroupId);
+            Assert.Equal(1, graph.Nodes[1].GroupId);
+            Assert.Equal(2, graph.Nodes[2].GroupId);
+            Assert.Equal(3, graph.Nodes[3].GroupId);
+            Assert.Equal(3, graph.Nodes[4].GroupId);
+            Assert.Equal(3, graph.Nodes[5].GroupId);
         }
 
         [Test]

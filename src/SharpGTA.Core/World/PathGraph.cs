@@ -56,9 +56,17 @@ namespace SharpGTA.World
 
         public int LinkCount { get { return links.Count; } }
 
+        /// <summary>1-based connected component id, like `m_pathNodes[i].group`.</summary>
+        public int GroupId { get; private set; }
+
         internal void SetLinks(ReadOnlyCollection<int> value)
         {
             links = value;
+        }
+
+        internal void SetGroupId(int value)
+        {
+            GroupId = value;
         }
     }
 
@@ -275,6 +283,52 @@ namespace SharpGTA.World
 
             for (int i = 0; i < nodes.Count; i++)
                 nodes[i].SetLinks(adjacency[i].AsReadOnly());
+
+            AssignFloodFillGroups();
+        }
+
+        /// <summary>
+        /// Labels connected components the way CPathFind::CountFloodFillGroups does: walk the
+        /// symmetric links from the first unvisited node, one component id per kind, and leave
+        /// link-less nodes as single-node components. The traversal order only affects ids, not
+        /// membership, and ids are assigned in node order so they stay deterministic.
+        /// </summary>
+        private void AssignFloodFillGroups()
+        {
+            int[] sizes = new int[3];
+            Stack<int> pending = new Stack<int>();
+            int next = 0;
+            for (int start = 0; start < nodes.Count; start++)
+            {
+                if (nodes[start].GroupId != 0)
+                    continue;
+                next++;
+                pending.Push(start);
+                nodes[start].SetGroupId(next);
+                int size = 0;
+                while (pending.Count != 0)
+                {
+                    PathGraphNode node = nodes[pending.Pop()];
+                    size++;
+                    IList<int> links = node.Links;
+                    for (int i = 0; i < links.Count; i++)
+                    {
+                        if (nodes[links[i]].GroupId != 0)
+                            continue;
+                        nodes[links[i]].SetGroupId(next);
+                        pending.Push(links[i]);
+                    }
+                }
+                ComponentCount++;
+                sizes[(int)nodes[start].Kind]++;
+                if (size == 1)
+                    SingleNodeComponentCount++;
+                if (size > LargestComponentSize)
+                    LargestComponentSize = size;
+            }
+            CarComponentCount = sizes[(int)PathKind.Car];
+            PedComponentCount = sizes[(int)PathKind.Ped];
+            WaterComponentCount = sizes[(int)PathKind.Water];
         }
 
         public int NodeCount { get { return nodes.Count; } }
@@ -284,6 +338,18 @@ namespace SharpGTA.World
 
         /// <summary>Placed tiles: one per bound instance, or one per detached group.</summary>
         public int TileCount { get; private set; }
+
+        /// <summary>Connected components over the symmetric links, like CountFloodFillGroups.</summary>
+        public int ComponentCount { get; private set; }
+
+        public int CarComponentCount { get; private set; }
+        public int PedComponentCount { get; private set; }
+        public int WaterComponentCount { get; private set; }
+
+        /// <summary>Components holding exactly one node, i.e. a lane with no link at all.</summary>
+        public int SingleNodeComponentCount { get; private set; }
+
+        public int LargestComponentSize { get; private set; }
 
         /// <summary>Adjacency entries, including both directions of every tile and external link.</summary>
         public int LinkCount { get; private set; }

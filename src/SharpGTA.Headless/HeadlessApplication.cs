@@ -266,6 +266,12 @@ namespace SharpGTA.Headless
                     " emptySlots=" + graph.EmptySlotCount.ToString(CultureInfo.InvariantCulture) +
                     " unknownSlots=" + graph.UnknownSlotCount.ToString(CultureInfo.InvariantCulture) +
                     " unresolvedGroups=" + graph.UnresolvedGroupCount.ToString(CultureInfo.InvariantCulture));
+                output.WriteLine("Path-Groups: components=" + graph.ComponentCount.ToString(CultureInfo.InvariantCulture) +
+                    " car=" + graph.CarComponentCount.ToString(CultureInfo.InvariantCulture) +
+                    " ped=" + graph.PedComponentCount.ToString(CultureInfo.InvariantCulture) +
+                    " water=" + graph.WaterComponentCount.ToString(CultureInfo.InvariantCulture) +
+                    " singles=" + graph.SingleNodeComponentCount.ToString(CultureInfo.InvariantCulture) +
+                    " largest=" + graph.LargestComponentSize.ToString(CultureInfo.InvariantCulture));
             }
             output.WriteLine("Asset-Issues: total=" + loader.Report.TotalIssueCount.ToString(CultureInfo.InvariantCulture) +
                 " retained=" + loader.Report.Count.ToString(CultureInfo.InvariantCulture) +
@@ -411,7 +417,8 @@ namespace SharpGTA.Headless
                 " nodePosition=" + Vector(node.Position) +
                 " distance=" + distance.ToString("R", CultureInfo.InvariantCulture) +
                 " links=" + node.LinkCount.ToString(CultureInfo.InvariantCulture) +
-                " next=" + node.NextNodeIndex.ToString(CultureInfo.InvariantCulture));
+                " next=" + node.NextNodeIndex.ToString(CultureInfo.InvariantCulture) +
+                " component=" + node.GroupId.ToString(CultureInfo.InvariantCulture));
         }
 
         private static string PathKindName(PathKind kind)
