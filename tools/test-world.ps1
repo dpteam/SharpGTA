@@ -76,20 +76,24 @@ function Assert-WorldLog([string]$name, [string]$text) {
     if (-not $entities.Success) {
         throw "$name did not print entity-pool diagnostics."
     }
-    [int]$entityTotal = 0
+    [int]$placementTotal = 0
     for ($group = 1; $group -le 7; $group += 2) {
         $used = [int]$entities.Groups[$group].Value
         $capacity = [int]$entities.Groups[$group + 1].Value
         if ($used -gt $capacity) {
             throw "$name overflowed an entity pool: $($entities.Value)."
         }
-        $entityTotal += $used
+        # Buildings, dummies and treadables come from the map; objects are spawned.
+        if ($group -le 5) { $placementTotal += $used }
     }
     if ([int]$entities.Groups[9].Value -ne 0) {
         throw "$name left placements without a pool handle: $($entities.Value)."
     }
-    if ($entityTotal -ne $allInstances) {
-        throw "$name entity pools do not cover every placement: $($entities.Value)."
+    if ($placementTotal -ne $allInstances) {
+        throw "$name placement pools do not cover every instance: $($entities.Value)."
+    }
+    if ($name -ne "spawn" -and [int]$entities.Groups[7].Value -ne 0) {
+        throw "$name spawned gameplay objects without asking: $($entities.Value)."
     }
     Write-Host "$name entities: $($entities.Value)"
 
@@ -363,6 +367,66 @@ function Test-WorldTime {
     Write-Host "PASS invalid --time is rejected"
 }
 
+function Test-DynamicEntities([string]$reference) {
+    Write-Host "=== Dynamic gameplay entities ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    $first = Join-Path $root "artifacts/world-smoke/world-spawn-a.bmp"
+    $second = Join-Path $root "artifacts/world-smoke/world-spawn-b.bmp"
+    $logs = @()
+    foreach ($screenshot in @($first, $second)) {
+        [string[]]$lines = @(& $exe --world --game iii --root $gameRootFull `
+            --hidden --frames 3 --spawn 8 --verify-sectors --screenshot $screenshot 2>&1 |
+            ForEach-Object { $_.ToString() })
+        if ($LASTEXITCODE -ne 0) { throw "Spawn probe failed with code $LASTEXITCODE." }
+        $logs += ,$lines
+        Assert-WorldLog "spawn" ([string]::Join("`n", $lines))
+        Assert-WorldFinal "spawn" ([string]::Join("`n", $lines))
+    }
+    $text = [string]::Join("`n", $logs[0])
+    $dynamic = [regex]::Match($text,
+        "World-Dynamic: spawned=(\d+) alive=(\d+) drawn=(\d+) rejected=(\d+) sectorMoves=(\d+) deferred=(\d+)")
+    if (-not $dynamic.Success) {
+        throw "Spawn probe did not print dynamic diagnostics."
+    }
+    if ([int]$dynamic.Groups[1].Value -ne 8 -or
+        [int]$dynamic.Groups[2].Value -ne 8 -or
+        [int]$dynamic.Groups[3].Value -le 0 -or
+        [int]$dynamic.Groups[4].Value -ne 0 -or
+        [int]$dynamic.Groups[6].Value -ne 0) {
+        throw "Spawn probe has invalid dynamic state: $($dynamic.Value)."
+    }
+    if ($text -notmatch 'World-Entities: .* objects=8/450 ') {
+        throw "Spawned objects are missing from the object pool."
+    }
+    if ((Get-FileHash $first).Hash -ne (Get-FileHash $second).Hash) {
+        throw "Spawned entity frames are not deterministic."
+    }
+    if ((Get-FileHash $first).Hash -eq (Get-FileHash $reference).Hash) {
+        throw "Spawned entities did not change the rendered frame."
+    }
+    Write-Host "PASS dynamic entities are simulated and rendered: $($dynamic.Value)"
+
+    # A starved budget must still show the gameplay entities: they take the frame's first pick.
+    [string[]]$tight = @(& $exe --world --game iii --root $gameRootFull `
+        --hidden --frames 4 --stream-budget 20 --txd-budget 4 --spawn 8 2>&1 |
+        ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Dynamic capacity-pressure probe failed." }
+    $tightText = [string]::Join("`n", $tight)
+    $tightDynamic = [regex]::Match($tightText,
+        "World-Dynamic: spawned=8 alive=8 drawn=([1-9]\d*) rejected=0")
+    if (-not $tightDynamic.Success) {
+        throw "Gameplay entities were starved out by the static world: $tightText"
+    }
+    Write-Host "PASS gameplay entities survive a starved streaming budget: $($tightDynamic.Value)"
+
+    [string[]]$plain = @(& $exe --world --game iii --root $gameRootFull `
+        --hidden --frames 2 2>&1 | ForEach-Object { $_.ToString() })
+    if (($plain -join "`n") -match 'World-Dynamic:') {
+        throw "World-Dynamic is printed without --spawn."
+    }
+    Write-Host "PASS no dynamic diagnostics without --spawn"
+}
+
 function Test-MenuAndInput {
     Write-Host "=== New Game -> world and live input ==="
     $stdout = Join-Path $root "artifacts/world-smoke/menu-input.stdout.log"
@@ -609,6 +673,7 @@ try {
     Write-Host "Reset preserves the world BMP exactly."
     Test-ByteBudget $reset
     Test-WorldTime
+    Test-DynamicEntities $baseline
 
     Invoke-World "net9.0-windows" "dotnet" `
         @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `

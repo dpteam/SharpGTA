@@ -43,6 +43,7 @@ namespace SharpGTA.D3D9
         private readonly HashSet<string> missingTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private D3D9ModelRenderer renderer;
         private StreamingLoadReport lastLoad;
+        private StreamingLoadReport lastDynamicLoad;
         private bool waitForBytes;
         private bool disposed;
 
@@ -120,6 +121,7 @@ namespace SharpGTA.D3D9
         internal int ModelEvictionCount { get { return models.EvictedCount; } }
         internal int TxdEvictionCount { get { return txds.EvictedCount; } }
         internal StreamingLoadReport LastLoadReport { get { return lastLoad; } }
+        internal StreamingLoadReport LastDynamicLoadReport { get { return lastDynamicLoad; } }
         internal string[] MissingTextureDetails
         {
             get
@@ -214,6 +216,19 @@ namespace SharpGTA.D3D9
             return BuildVisible(instances, center, radius, waitForBytes, null);
         }
 
+        /// <summary>
+        /// Starts a frame: drops last frame's references and drains async completions. Static
+        /// and dynamic passes in the same frame must share one reset, otherwise they evict each
+        /// other's models depending on call order.
+        /// </summary>
+        internal void BeginFrame()
+        {
+            if (disposed)
+                throw new ObjectDisposedException("WorldResourceManager");
+            bytes.Pump();
+            models.ReleaseAll();
+        }
+
         internal RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
             Vector3 center, float radius, bool waitForBytes, TimeObjectController timeObjects)
         {
@@ -224,8 +239,6 @@ namespace SharpGTA.D3D9
             if (disposed)
                 throw new ObjectDisposedException("WorldResourceManager");
 
-            bytes.Pump();
-            models.ReleaseAll();
             this.waitForBytes = waitForBytes;
             try
             {
@@ -279,6 +292,70 @@ namespace SharpGTA.D3D9
             }
             return StaticWorldScene.BuildVisible(instances, center, radius, Resolve, ResolveTransforms,
                 IsModelLoaded, timeObjects);
+        }
+
+        /// <summary>
+        /// Draw calls for gameplay entities. Their models use the same streaming pools as map
+        /// models, so a moving object reuses the decoded clump and GPU buffers of its model.
+        /// </summary>
+        internal RenderSceneSnapshot BuildDynamic(IList<WorldEntity> entities, Vector3 center,
+            float radius, bool waitForBytes)
+        {
+            if (entities == null)
+                throw new ArgumentNullException("entities");
+            if (disposed)
+                throw new ObjectDisposedException("WorldResourceManager");
+            if (entities.Count == 0)
+            {
+                lastDynamicLoad = new StreamingLoadReport();
+                return new RenderSceneSnapshot(new List<RenderDrawCall>());
+            }
+
+            this.waitForBytes = waitForBytes;
+            try
+            {
+                List<string> requested = new List<string>();
+                for (int i = 0; i < entities.Count; i++)
+                {
+                    WorldEntity entity = entities[i];
+                    if (!StaticWorldScene.IsEntityVisible(entity, center, radius) ||
+                        knownFailures.Contains(entity.Model.Name))
+                        continue;
+                    if (!requested.Contains(entity.Model.Name))
+                        requested.Add(entity.Model.Name);
+                    models.Request(entity.Model.Name, 2, false);
+                }
+                // Feed the byte pipe for every dynamic model, not just the one the loader is
+                // currently blocked on, so a set of distinct models streams in parallel.
+                RequestBytesForNames(requested);
+                lastDynamicLoad = models.LoadAllRequested();
+                for (int i = 0; i < requested.Count; i++)
+                {
+                    string name = requested[i];
+                    if (models.GetState(name) != StreamingState.Failed)
+                        continue;
+                    knownFailures.Add(name);
+                    failures[name] = name + ": " + models.GetFailure(name);
+                }
+            }
+            finally
+            {
+                this.waitForBytes = false;
+            }
+            return StaticWorldScene.BuildVisibleEntities(entities, center, radius,
+                ResolveEntity, ResolveEntityTransforms);
+        }
+
+        private GeometryRenderData[] ResolveEntity(WorldEntity entity)
+        {
+            ModelResource model;
+            return models.TryGetResource(entity.Model.Name, out model) ? model.Atomics : null;
+        }
+
+        private Matrix[] ResolveEntityTransforms(WorldEntity entity)
+        {
+            ModelResource model;
+            return models.TryGetResource(entity.Model.Name, out model) ? model.Transforms : null;
         }
 
         private bool IsModelLoaded(ModelDefinition model)

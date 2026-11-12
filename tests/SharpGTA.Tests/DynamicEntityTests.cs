@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using SharpGTA.Assets;
 using SharpGTA.Data;
 using SharpGTA.Mathematics;
+using SharpGTA.Rendering;
 using SharpGTA.Runtime;
 using SharpGTA.World;
 
@@ -252,6 +253,62 @@ namespace SharpGTA.Tests
             Assert.True(Contains(entities, entity));
             Assert.Equal(handle, entity.Handle);
             Assert.Equal(1, world.Entities.Count(WorldEntityKind.Vehicle));
+        }
+
+        [Test]
+        public void EntityVisibilityUsesRadiusAndModelDrawDistance()
+        {
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry);
+            DynamicEntity entity;
+            Assert.True(world.TrySpawnEntity(WorldEntityKind.Object, registry.Find("plain"),
+                Vector3.Zero, Vector3.Zero, out entity));
+            // "plain" advertises a 300 unit draw distance.
+            Assert.True(StaticWorldScene.IsEntityVisible(entity, Vector3.Zero, 100.0f));
+            Assert.False(StaticWorldScene.IsEntityVisible(entity, new Vector3(500.0f, 0.0f, 0.0f), 100.0f));
+            Assert.True(StaticWorldScene.IsEntityVisible(entity, new Vector3(200.0f, 0.0f, 0.0f), 1000.0f));
+            Assert.False(StaticWorldScene.IsEntityVisible(entity, new Vector3(400.0f, 0.0f, 0.0f), 1000.0f));
+            Assert.False(StaticWorldScene.IsEntityVisible(null, Vector3.Zero, 100.0f));
+
+            // A model with draw distance below 2 is never visible, like the original.
+            ModelRegistry zeroRegistry = new ModelRegistry(
+                new WorldTestDefinition(GameId.III, DataSchema.III, 16));
+            zeroRegistry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n1, zero, generic, 1, 0, 0\nend\n"));
+            StaticWorld zeroWorld = new StaticWorld();
+            zeroWorld.Bind(new IplReader(DataSchema.III).Read(
+                "inst\n1, zero, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1\nend\n"),
+                zeroRegistry, new LoadReport());
+            DynamicEntity zero;
+            Assert.True(zeroWorld.TrySpawnEntity(WorldEntityKind.Object, zeroRegistry.Find("zero"),
+                Vector3.Zero, Vector3.Zero, out zero));
+            Assert.False(StaticWorldScene.IsEntityVisible(zero, Vector3.Zero, 100.0f));
+
+            int resolved = 0;
+            RenderSceneSnapshot snapshot = StaticWorldScene.BuildVisibleEntities(
+                new List<WorldEntity> { entity }, Vector3.Zero, 100.0f,
+                delegate(WorldEntity e) { resolved++; return null; },
+                delegate(WorldEntity e) { return new Matrix[0]; });
+            Assert.Equal(1, resolved);
+            Assert.Equal(0, snapshot.DrawCalls.Count);
+
+            Assert.Throws<ArgumentNullException>(delegate
+            {
+                StaticWorldScene.BuildVisibleEntities(null, Vector3.Zero, 100.0f,
+                    delegate(WorldEntity e) { return null; },
+                    delegate(WorldEntity e) { return new Matrix[0]; });
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                StaticWorldScene.BuildVisibleEntities(new List<WorldEntity> { entity }, Vector3.Zero, 0.0f,
+                    delegate(WorldEntity e) { return null; },
+                    delegate(WorldEntity e) { return new Matrix[0]; });
+            });
+            Assert.Throws<ArgumentNullException>(delegate
+            {
+                StaticWorldScene.BuildVisibleEntities(new List<WorldEntity> { entity }, Vector3.Zero, 100.0f,
+                    null, delegate(WorldEntity e) { return new Matrix[0]; });
+            });
         }
 
         private static bool Contains(IList<WorldEntity> list, WorldEntity entity)

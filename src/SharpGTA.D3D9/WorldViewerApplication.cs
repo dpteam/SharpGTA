@@ -29,6 +29,10 @@ namespace SharpGTA.D3D9
         private readonly List<StaticInstance> verifyBuffer = new List<StaticInstance>();
         private readonly HashSet<StaticInstance> verifySet = new HashSet<StaticInstance>();
         private readonly bool verifySectors;
+        private int dynamicSpawned;
+        private int dynamicDrawn;
+        private int dynamicRejected;
+        private readonly List<RenderDrawCall> mergedCalls = new List<RenderDrawCall>();
         private bool verifySectorsFailed;
         private bool verifySectorsDone;
         private bool sectorsPrinted;
@@ -44,7 +48,7 @@ namespace SharpGTA.D3D9
 
         internal WorldViewerApplication(Win32Window window, D3D9Device device,
             GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget, int startHour,
-            bool verifySectors)
+            bool verifySectors, int spawnCount, string spawnModel)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
@@ -67,6 +71,50 @@ namespace SharpGTA.D3D9
             this.verifySectors = verifySectors;
             spawn = new Vector3(812.0f, -936.0f, 36.0f);
             ResetCamera();
+            if (spawnCount > 0)
+                SpawnDynamicEntities(spawnCount, spawnModel);
+        }
+
+        /// <summary>
+        /// Spawns objects in front of the spawn point so the preview actually shows gameplay
+        /// entities. They drift along X through the shared sector grid every frame.
+        /// </summary>
+        private void SpawnDynamicEntities(int count, string modelName)
+        {
+            if (loader.World.Count == 0)
+                throw new ArgumentException("--spawn requires loaded map data.");
+            ModelDefinition model = modelName == null
+                ? loader.World.Instances[0].Model
+                : loader.Models.Find(modelName);
+            if (model == null)
+            {
+                Console.Error.WriteLine("--spawn-model '" + modelName +
+                    "' is not registered; spawning the first placement's model instead.");
+                model = loader.World.Instances[0].Model;
+            }
+            // Place the row in front of the camera, spread sideways, standing on the ground.
+            Vector3 forward = camera.Forward;
+            Vector3 right = camera.Right;
+            Vector3 origin = camera.Position + forward * 20.0f;
+            int spawned = 0;
+            for (int i = 0; i < count; i++)
+            {
+                DynamicEntity entity;
+                Vector3 position = origin + right * ((i % 8) * 4.0f - 14.0f) +
+                    forward * ((i / 8) * 8.0f);
+                StaticWorldHit hit;
+                if (loader.World.QueryVertical(position.X, position.Y,
+                    position.Z + 20.0f, position.Z - 40.0f, out hit))
+                    position.Z = hit.Position.Z;
+                if (loader.World.TrySpawnEntity(WorldEntityKind.Object, model, position,
+                    new Vector3(0.0f, 2.0f, 0.0f), out entity))
+                    spawned++;
+                else
+                    break;
+            }
+            dynamicSpawned = spawned;
+            dynamicRejected = loader.World.DynamicRejectedCount;
+            runtime.AddModule(new DynamicEntityModule(loader.World));
         }
 
         internal int Run(int frames, string screenshot, bool exerciseReset)
@@ -120,14 +168,40 @@ namespace SharpGTA.D3D9
                         " instances=" + loader.World.Count +
                         " unindexed=" + loader.World.UnindexedCount);
                 }
-                RenderSceneSnapshot snapshot = resources.BuildVisible(candidates,
+                resources.BeginFrame();
+                // Gameplay entities get the frame's first pick of streaming capacity: they are
+                // the objects the player is looking at, and a starved budget must not hide them
+                // behind map models. Draw calls stay static-first to keep the previous order.
+                RenderSceneSnapshot dynamicSnapshot = null;
+                if (dynamicSpawned > 0)
+                    dynamicSnapshot = resources.BuildDynamic(loader.World.DynamicEntities,
+                        camera.Position, ViewRadius, frame == 0);
+                RenderSceneSnapshot staticSnapshot = resources.BuildVisible(candidates,
                     camera.Position, ViewRadius, frame == 0, timeObjects);
+                RenderSceneSnapshot snapshot = staticSnapshot;
+                if (dynamicSnapshot != null)
+                {
+                    mergedCalls.Clear();
+                    mergedCalls.AddRange(staticSnapshot.DrawCalls);
+                    mergedCalls.AddRange(dynamicSnapshot.DrawCalls);
+                    dynamicDrawn = dynamicSnapshot.DrawCalls.Count;
+                    snapshot = new RenderSceneSnapshot(mergedCalls);
+                }
                 renderer.Prepare(snapshot);
                 if (!diagnosticsPrinted && snapshot.DrawCalls.Count > 0)
                 {
                     diagnosticsPrinted = true;
 
                     Console.WriteLine("World-Entities: " + EntitySummary());
+                    if (dynamicSpawned > 0)
+                    {
+                        Console.WriteLine("World-Dynamic: spawned=" + dynamicSpawned +
+                            " alive=" + loader.World.DynamicEntities.Count +
+                            " drawn=" + dynamicDrawn +
+                            " rejected=" + dynamicRejected +
+                            " sectorMoves=" + loader.World.SectorMoves +
+                            " deferred=" + resources.LastDynamicLoadReport.DeferredCount);
+                    }
                     Console.WriteLine("World-Time: hour=" + clock.Hours.ToString("00", CultureInfo.InvariantCulture) +
                         ":" + clock.Minutes.ToString("00", CultureInfo.InvariantCulture) +
                         " day=" + clock.DaysPassed +

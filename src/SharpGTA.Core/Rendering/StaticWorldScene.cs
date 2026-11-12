@@ -66,6 +66,50 @@ namespace SharpGTA.Rendering
                 distance <= instance.Model.LargestLodDistance;
         }
 
+        /// <summary>
+        /// Visibility for a gameplay entity: inside the view radius and inside the model's own
+        /// draw distance. Gameplay entities have no LOD proxy or hour window of their own.
+        /// </summary>
+        public static bool IsEntityVisible(WorldEntity entity, Vector3 center, float radius)
+        {
+            if (entity == null || entity.Model == null)
+                return false;
+            float distanceSquared = (entity.Position - center).LengthSquared();
+            if (distanceSquared > radius * radius)
+                return false;
+            float largestDistance = entity.Model.LargestLodDistance;
+            return largestDistance >= 2.0f &&
+                (float)Math.Sqrt(distanceSquared) <= largestDistance;
+        }
+
+        /// <summary>Draw calls for gameplay entities, which carry no LOD or time filtering.</summary>
+        public static RenderSceneSnapshot BuildVisibleEntities(IList<WorldEntity> entities,
+            Vector3 center, float radius, Func<WorldEntity, GeometryRenderData[]> modelResolver,
+            Func<WorldEntity, Matrix[]> transformResolver)
+        {
+            if (entities == null)
+                throw new ArgumentNullException("entities");
+            if (modelResolver == null)
+                throw new ArgumentNullException("modelResolver");
+            if (transformResolver == null)
+                throw new ArgumentNullException("transformResolver");
+            if (radius <= 0.0f || float.IsNaN(radius) || float.IsInfinity(radius))
+                throw new ArgumentOutOfRangeException("radius");
+            List<RenderDrawCall> calls = new List<RenderDrawCall>();
+            for (int i = 0; i < entities.Count; i++)
+            {
+                WorldEntity entity = entities[i];
+                if (!IsEntityVisible(entity, center, radius))
+                    continue;
+                GeometryRenderData[] atomics = modelResolver(entity);
+                if (atomics == null)
+                    continue;
+                calls.AddRange(DffRenderSceneBuilder.Build(atomics,
+                    transformResolver(entity), entity.Transform).DrawCalls);
+            }
+            return new RenderSceneSnapshot(calls);
+        }
+
         public static RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
             Vector3 center, float radius, Func<StaticInstance, GeometryRenderData[]> modelResolver,
             Func<StaticInstance, Matrix[]> transformResolver)
