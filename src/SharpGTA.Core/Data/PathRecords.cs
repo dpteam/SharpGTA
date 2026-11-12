@@ -37,6 +37,13 @@ namespace SharpGTA.Data
         /// <summary>The explicitly bound IPL transform; detached groups do not need one.</summary>
         public Matrix? ObjectTransform { get; internal set; }
         public bool HasTransform { get { return ObjectTransform.HasValue; } }
+
+        /// <summary>
+        /// Every bound instance transform, in instance order. The original builds one path
+        /// tile per placed treadable, so a model placed twice owns two tiles. Null when the
+        /// group was never bound; the first entry matches <see cref="ObjectTransform"/>.
+        /// </summary>
+        public Matrix[] InstanceTransforms { get; internal set; }
     }
 
     public sealed class PathNode

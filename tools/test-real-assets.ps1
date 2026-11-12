@@ -65,14 +65,14 @@ try {
             throw "VC zone/path data changed or was not loaded."
         }
         $graph = if ($game -eq "iii") {
-            "Path-Graph: nodes=2518 car=1120 ped=1398 water=0 links=2724 externalNext=1054 danglingNext=0 selfNext=0 externalSlots=2485 emptySlots=5437 unknownSlots=0 unresolvedGroups=34"
+            "Path-Graph: tiles=2163 nodes=4947 car=1971 ped=2976 water=0 links=7140 crossTile=1634 unpairedExtern=3457 unresolvedExtern=1 externalNext=1745 danglingNext=0 selfNext=0 externalSlots=6726 emptySlots=14691 unknownSlots=0 unresolvedGroups=34"
         } else {
-            "Path-Graph: nodes=9642 car=2973 ped=6291 water=378 links=15438 externalNext=1619 danglingNext=0 selfNext=0 externalSlots=5090 emptySlots=8752 unknownSlots=0 unresolvedGroups=0"
+            "Path-Graph: tiles=1957 nodes=9642 car=2973 ped=6291 water=378 links=20350 crossTile=2456 unpairedExtern=178 unresolvedExtern=0 externalNext=1619 danglingNext=0 selfNext=0 externalSlots=5090 emptySlots=8752 unknownSlots=0 unresolvedGroups=0"
         }
         if ($standard -notmatch [regex]::Escape($graph)) {
             throw "$game path graph changed: expected '$graph'."
         }
-        $nearestNode = if ($game -eq "iii") { "node=221 group=87 local=1" } else { "node=139 group=31 local=3" }
+        $nearestNode = if ($game -eq "iii") { "node=1969 group=87 local=1" } else { "node=139 group=31 local=3" }
         $nearest = "Path-Nearest: kind=car position=($($ground[0]),$($ground[1]),$zoneZ) radius=200 found=true $nearestNode"
         if ($standard -notmatch [regex]::Escape($nearest)) {
             throw "$game car path lookup did not find the expected node."
@@ -83,7 +83,7 @@ try {
             throw "$game path lookup invented a node far away from any path."
         }
         $pedPath = Invoke-Case "$game ped path lookup" $net40 ($common + @("--standard", "--query-path-nearest", $ground[0], $ground[1], $zoneZ, "--path-kind", "ped", "--path-radius", "200", "--ticks", "0")) $false
-        $pedNode = if ($game -eq "iii") { "node=495 group=165 local=0" } else { "node=9176 group=1885 local=4" }
+        $pedNode = if ($game -eq "iii") { "node=2245 group=165 local=0" } else { "node=9176 group=1885 local=4" }
         if ($pedPath -notmatch "Path-Nearest: kind=ped .*found=true $pedNode ") {
             throw "$game ped path lookup did not find the expected node."
         }

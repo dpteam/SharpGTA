@@ -13,19 +13,26 @@ namespace SharpGTA.World
             new ReadOnlyCollection<int>(new int[0]);
         private ReadOnlyCollection<int> links = NoLinks;
 
-        internal PathGraphNode(int globalIndex, int groupIndex, PathGroup group,
+        internal PathGraphNode(int globalIndex, int groupIndex, int tileIndex, PathGroup group,
             PathNode source, int localIndex, Vector3 position)
         {
             GlobalIndex = globalIndex;
             GroupIndex = groupIndex;
+            TileIndex = tileIndex;
             Group = group;
             Source = source;
             LocalIndex = localIndex;
             Position = position;
         }
 
-        /// <summary>Index in <see cref="PathGraph.Nodes"/>, in group and slot order.</summary>
+        /// <summary>Index in <see cref="PathGraph.Nodes"/>, in tile and slot order.</summary>
         public int GlobalIndex { get; private set; }
+
+        /// <summary>
+        /// One placed tile per instance, like the original's `m_mapObjects`; a model placed
+        /// twice produces two tiles with the same <see cref="GroupIndex"/>.
+        /// </summary>
+        public int TileIndex { get; private set; }
 
         /// <summary>Tile slot this node occupies; `next` values are this same index space.</summary>
         public int LocalIndex { get; private set; }
@@ -56,18 +63,39 @@ namespace SharpGTA.World
     }
 
     /// <summary>
-    /// Intra-tile path graph over the parsed IDE/IPL path sections, mirroring the node and
-    /// link part of CPathFind::PreparePathDataForType. Only interior slots (type 2) become
-    /// nodes, as in the original, where `m_pathNodes` receives nothing else; external slots
-    /// (type 1) and empty slots (type 0) are not nodes. A pair of interior slots in one tile
-    /// is linked when either side's `next` names the other, so the adjacency is symmetric.
-    /// External slots exist to join neighbouring tiles: the original collapses two externals
-    /// closer than one unit and links the interior nodes behind them. That merge, the tile
-    /// union-find groups, `m_connections` flags and any route search are not reproduced yet,
-    /// so a connection never leaves its tile and no path is computed.
+    /// Path graph over the parsed IDE/IPL path sections, mirroring the node and link part of
+    /// CPathFind::PreparePathDataForType. Only interior slots (type 2) become nodes, as in the
+    /// original, where `m_pathNodes` receives nothing else; external slots (type 1) are tile
+    /// boundary markers and type-0 slots are padding. Two interior slots of one tile are
+    /// linked when either side's `next` names the other, so the adjacency is symmetric.
+    ///
+    /// Neighbouring tiles are joined the way the original does it: two external slots of the
+    /// same kind closer than one unit collapse into one connection between the interior nodes
+    /// behind them. Tile union-find groups, `m_connections` flags (`bCrossesRoad`,
+    /// `bTrafficLight`), the collapsed lane direction/lane counts and any route search are not
+    /// reproduced yet, so the graph is connected but no path is computed.
     /// </summary>
     public sealed class PathGraph
     {
+        private sealed class ExternEntry
+        {
+            internal Vector3 Position;
+            internal int NodeIndex;
+            internal bool Paired;
+        }
+
+        /// <summary>One placed path tile: a group's twelve slots under one world transform.</summary>
+        private sealed class Tile
+        {
+            internal int GroupIndex;
+            internal PathGroup Group;
+            internal Matrix? Transform;
+            internal int[] SlotNodes;
+        }
+
+        /// <summary>Original `maxdist` passed to PreparePathDataForType for both path types.</summary>
+        private const float ExternMergeDistance = 1.0f;
+
         private readonly List<PathGraphNode> nodes = new List<PathGraphNode>();
         private readonly List<PathGraphNode> carNodes = new List<PathGraphNode>();
         private readonly List<PathGraphNode> pedNodes = new List<PathGraphNode>();
@@ -85,15 +113,13 @@ namespace SharpGTA.World
             if (world == null)
                 throw new ArgumentNullException("world");
 
-            int[][] internNodes = new int[world.GroupCount][];
+            List<Tile> tiles = new List<Tile>();
+            List<int[]> externSlots = new List<int[]>();
             for (int g = 0; g < world.GroupCount; g++)
             {
                 PathGroup group = world.Groups[g];
-                int[] map = new int[group.Nodes.Length];
-                for (int i = 0; i < map.Length; i++)
-                    map[i] = -1;
-                internNodes[g] = map;
-                if (!group.IsDetached && !group.HasTransform)
+                Matrix[] transforms = TileTransforms(group);
+                if (transforms == null)
                 {
                     // No bound instance and no explicit transform: the tile origin is
                     // unknown, so its slots stay out of the graph instead of being guessed.
@@ -101,39 +127,52 @@ namespace SharpGTA.World
                     emptySlots += group.Nodes.Length;
                     continue;
                 }
-                for (int n = 0; n < group.Nodes.Length; n++)
+                for (int t = 0; t < transforms.Length; t++)
                 {
-                    PathNode source = group.Nodes[n];
-                    if (source.Type == 0)
+                    Tile tile = new Tile();
+                    tile.GroupIndex = g;
+                    tile.Group = group;
+                    tile.Transform = group.IsDetached ? (Matrix?)null : new Matrix?(transforms[t]);
+                    tile.SlotNodes = new int[group.Nodes.Length];
+                    for (int i = 0; i < tile.SlotNodes.Length; i++)
+                        tile.SlotNodes[i] = -1;
+                    tiles.Add(tile);
+                    TileCount++;
+                    for (int n = 0; n < group.Nodes.Length; n++)
                     {
-                        emptySlots++;
-                        continue;
-                    }
-                    if (source.Type == 1)
-                    {
-                        externalSlots++;
-                        continue;
-                    }
-                    if (source.Type != 2)
-                    {
-                        unknownSlots++;
-                        continue;
-                    }
-                    PathGraphNode node = new PathGraphNode(nodes.Count, g, group, source, n,
-                        world.GetWorldPosition(group, source));
-                    map[n] = nodes.Count;
-                    nodes.Add(node);
-                    switch (group.Kind)
-                    {
-                        case PathKind.Car:
-                            carNodes.Add(node);
-                            break;
-                        case PathKind.Ped:
-                            pedNodes.Add(node);
-                            break;
-                        case PathKind.Water:
-                            waterNodes.Add(node);
-                            break;
+                        PathNode source = group.Nodes[n];
+                        if (source.Type == 0)
+                        {
+                            emptySlots++;
+                            continue;
+                        }
+                        if (source.Type == 1)
+                        {
+                            externalSlots++;
+                            externSlots.Add(new int[] { tiles.Count - 1, n });
+                            continue;
+                        }
+                        if (source.Type != 2)
+                        {
+                            unknownSlots++;
+                            continue;
+                        }
+                        PathGraphNode node = new PathGraphNode(nodes.Count, g, tiles.Count - 1, group, source, n,
+                            world.GetWorldPosition(group, source, tile.Transform));
+                        tile.SlotNodes[n] = nodes.Count;
+                        nodes.Add(node);
+                        switch (group.Kind)
+                        {
+                            case PathKind.Car:
+                                carNodes.Add(node);
+                                break;
+                            case PathKind.Ped:
+                                pedNodes.Add(node);
+                                break;
+                            case PathKind.Water:
+                                waterNodes.Add(node);
+                                break;
+                        }
                     }
                 }
             }
@@ -144,16 +183,16 @@ namespace SharpGTA.World
                 adjacency[i] = new List<int>(2);
 
             int links = 0;
-            for (int g = 0; g < world.GroupCount; g++)
+            for (int t = 0; t < tiles.Count; t++)
             {
-                int[] map = internNodes[g];
-                PathGroup group = world.Groups[g];
+                Tile tile = tiles[t];
+                int[] map = tile.SlotNodes;
+                PathGroup group = tile.Group;
                 for (int a = 0; a < map.Length; a++)
                 {
                     int left = map[a];
                     if (left < 0)
                         continue;
-                    CountNextTarget(group, a);
                     for (int b = 0; b < map.Length; b++)
                     {
                         int right = map[b];
@@ -164,20 +203,75 @@ namespace SharpGTA.World
                         if (group.Nodes[a].NextNodeIndex != b &&
                             group.Nodes[b].NextNodeIndex != a)
                             continue;
-                        if (!adjacency[left].Contains(right))
-                        {
-                            adjacency[left].Add(right);
-                            links++;
-                        }
-                        if (!adjacency[right].Contains(left))
-                        {
-                            adjacency[right].Add(left);
-                            links++;
-                        }
+                        Connect(adjacency, left, right, ref links);
                     }
                 }
             }
             LinkCount = links;
+
+            for (int t = 0; t < tiles.Count; t++)
+            {
+                PathGroup group = tiles[t].Group;
+                for (int a = 0; a < tiles[t].SlotNodes.Length; a++)
+                {
+                    if (tiles[t].SlotNodes[a] >= 0)
+                        CountNextTarget(group, a);
+                }
+            }
+
+            // Join neighbouring tiles: two same-kind external slots closer than one unit are
+            // one crossing, so the interior nodes behind them become neighbours.
+            List<ExternEntry> carPending = new List<ExternEntry>();
+            List<ExternEntry> pedPending = new List<ExternEntry>();
+            List<ExternEntry> waterPending = new List<ExternEntry>();
+            for (int e = 0; e < externSlots.Count; e++)
+            {
+                Tile tile = tiles[externSlots[e][0]];
+                PathGroup group = tile.Group;
+                int slot = externSlots[e][1];
+                Vector3 position = world.GetWorldPosition(group, group.Nodes[slot], tile.Transform);
+                int interior = ResolveExternInterior(group, tile.SlotNodes, slot);
+                if (interior < 0)
+                {
+                    // The original would index m_nodeIndices[-1] here; the data is expected to
+                    // be consistent, so a broken tile is reported instead of guessed.
+                    UnresolvedExternCount++;
+                    continue;
+                }
+                List<ExternEntry> pending = Pending(carPending, pedPending, waterPending, group.Kind);
+                int nearestId = FindNearestExtern(pending, position);
+                if (nearestId < 0)
+                {
+                    ExternEntry entry = new ExternEntry();
+                    entry.Position = position;
+                    entry.NodeIndex = interior;
+                    pending.Add(entry);
+                    continue;
+                }
+                ExternEntry found = pending[nearestId];
+                found.Paired = true;
+                // The original averages the two collapsed positions and keeps the pair.
+                found.Position = (found.Position + position) * 0.5f;
+                CrossTileLinkCount++;
+                Connect(adjacency, found.NodeIndex, interior, ref links);
+            }
+            LinkCount = links;
+
+            for (int i = 0; i < carPending.Count; i++)
+            {
+                if (!carPending[i].Paired)
+                    UnpairedExternCount++;
+            }
+            for (int i = 0; i < pedPending.Count; i++)
+            {
+                if (!pedPending[i].Paired)
+                    UnpairedExternCount++;
+            }
+            for (int i = 0; i < waterPending.Count; i++)
+            {
+                if (!waterPending[i].Paired)
+                    UnpairedExternCount++;
+            }
 
             for (int i = 0; i < nodes.Count; i++)
                 nodes[i].SetLinks(adjacency[i].AsReadOnly());
@@ -188,8 +282,20 @@ namespace SharpGTA.World
         public int PedNodeCount { get { return pedNodes.Count; } }
         public int WaterNodeCount { get { return waterNodes.Count; } }
 
-        /// <summary>Adjacency entries; symmetric, so this is twice the number of tile links.</summary>
+        /// <summary>Placed tiles: one per bound instance, or one per detached group.</summary>
+        public int TileCount { get; private set; }
+
+        /// <summary>Adjacency entries, including both directions of every tile and external link.</summary>
         public int LinkCount { get; private set; }
+
+        /// <summary>External pairs collapsed into one crossing between two neighbouring tiles.</summary>
+        public int CrossTileLinkCount { get; private set; }
+
+        /// <summary>External slots that never found a partner within one unit.</summary>
+        public int UnpairedExternCount { get; private set; }
+
+        /// <summary>External slots whose interior node could not be resolved from `next`.</summary>
+        public int UnresolvedExternCount { get; private set; }
 
         /// <summary>Interior nodes whose `next` names an external slot: their lane leaves the tile.</summary>
         public int ExternalNextCount { get { return externalNexts; } }
@@ -250,6 +356,103 @@ namespace SharpGTA.World
             }
             distance = best;
             return true;
+        }
+
+        /// <summary>
+        /// Interior node behind an external slot: the slot it names with `next`, or, when the
+        /// external does not name one (the normal VC case), the slot whose `next` names this
+        /// external. Returns -1 when neither side resolves to an interior slot.
+        /// </summary>
+        private static int ResolveExternInterior(PathGroup group, int[] internNodes, int slot)
+        {
+            int next = group.Nodes[slot].NextNodeIndex;
+            if (next < 0)
+            {
+                next = -1;
+                for (int k = 0; k < group.Nodes.Length; k++)
+                {
+                    if (k != slot && group.Nodes[k].NextNodeIndex == slot)
+                    {
+                        next = k;
+                        break;
+                    }
+                }
+            }
+            if (next < 0 || next >= group.Nodes.Length)
+                return -1;
+            return group.Nodes[next].Type == 2 ? internNodes[next] : -1;
+        }
+
+        /// <summary>
+        /// Nearest waiting external of the same kind, reproducing the original's search: a
+        /// candidate must beat the current best on both |dx| and |dy|, and the best shrinks to
+        /// Max(|dx|, |dy|). Strictly nearer only, so ties keep the earlier slot.
+        /// </summary>
+        private static int FindNearestExtern(List<ExternEntry> pending, Vector3 position)
+        {
+            int nearestId = -1;
+            float nearestDist = ExternMergeDistance;
+            for (int k = 0; k < pending.Count; k++)
+            {
+                if (pending[k].Paired)
+                    continue;
+                float dx = Math.Abs(pending[k].Position.X - position.X);
+                if (!(dx < nearestDist))
+                    continue;
+                float dy = Math.Abs(pending[k].Position.Y - position.Y);
+                if (!(dy < nearestDist))
+                    continue;
+                nearestDist = Math.Max(dx, dy);
+                nearestId = k;
+            }
+            return nearestId;
+        }
+
+        /// <summary>
+        /// Transforms to build tiles from: one per bound instance, a single transform when only
+        /// the explicit one is known, or null when an attached group has no placement at all.
+        /// </summary>
+        private static Matrix[] TileTransforms(PathGroup group)
+        {
+            if (group.IsDetached)
+                return new Matrix[1];
+            if (group.InstanceTransforms != null && group.InstanceTransforms.Length != 0)
+                return group.InstanceTransforms;
+            if (group.HasTransform)
+                return new Matrix[] { group.ObjectTransform.Value };
+            return null;
+        }
+
+        private static List<ExternEntry> Pending(List<ExternEntry> car, List<ExternEntry> ped,
+            List<ExternEntry> water, PathKind kind)
+        {
+            switch (kind)
+            {
+                case PathKind.Car:
+                    return car;
+                case PathKind.Ped:
+                    return ped;
+                case PathKind.Water:
+                    return water;
+                default:
+                    throw new ArgumentOutOfRangeException("kind");
+            }
+        }
+
+        private static void Connect(List<int>[] adjacency, int left, int right, ref int links)
+        {
+            if (left < 0 || right < 0 || left == right)
+                return;
+            if (!adjacency[left].Contains(right))
+            {
+                adjacency[left].Add(right);
+                links++;
+            }
+            if (!adjacency[right].Contains(left))
+            {
+                adjacency[right].Add(left);
+                links++;
+            }
         }
 
         private void CountNextTarget(PathGroup group, int slot)

@@ -77,14 +77,31 @@ namespace SharpGTA.World
         }
 
         /// <summary>
-        /// Binds attached groups to the first instance with the same raw model ID and,
-        /// when present, a case-insensitively equal model name. Detached groups are
-        /// resolved without an instance. Returns the number of unresolved groups.
+        /// Binds attached groups to every instance with the same raw model ID and, when
+        /// present, a case-insensitively equal model name. Detached groups are resolved
+        /// without an instance. Returns the number of unresolved groups.
         /// </summary>
         public int BindInstances(IList<StaticInstance> instances)
         {
             if (instances == null)
                 throw new ArgumentNullException("instances");
+
+            // Index once: a per-group scan of every instance would be quadratic on real maps.
+            Dictionary<int, List<StaticInstance>> byModelId =
+                new Dictionary<int, List<StaticInstance>>();
+            for (int i = 0; i < instances.Count; i++)
+            {
+                StaticInstance instance = instances[i];
+                if (instance == null || instance.Model == null)
+                    continue;
+                List<StaticInstance> list;
+                if (!byModelId.TryGetValue(instance.Model.Id, out list))
+                {
+                    list = new List<StaticInstance>();
+                    byModelId.Add(instance.Model.Id, list);
+                }
+                list.Add(instance);
+            }
 
             for (int i = 0; i < groups.Count; i++)
             {
@@ -92,13 +109,14 @@ namespace SharpGTA.World
                 if (group.IsDetached)
                 {
                     group.ObjectTransform = null;
+                    group.InstanceTransforms = null;
                     continue;
                 }
 
-                StaticInstance instance = FindFirstInstance(group, instances);
-                group.ObjectTransform = instance == null
-                    ? null
-                    : new Matrix?(instance.Transform);
+                group.InstanceTransforms = CollectTransforms(group, byModelId);
+                group.ObjectTransform = group.InstanceTransforms.Length == 0
+                    ? (Matrix?)null
+                    : new Matrix?(group.InstanceTransforms[0]);
             }
             RefreshCounts();
             Version++;
@@ -150,20 +168,22 @@ namespace SharpGTA.World
             return result;
         }
 
-        private static StaticInstance FindFirstInstance(PathGroup group,
-            IList<StaticInstance> instances)
+        private static Matrix[] CollectTransforms(PathGroup group,
+            Dictionary<int, List<StaticInstance>> byModelId)
         {
-            for (int i = 0; i < instances.Count; i++)
+            List<StaticInstance> candidates;
+            if (!byModelId.TryGetValue(group.ModelId, out candidates))
+                return new Matrix[0];
+            List<Matrix> transforms = new List<Matrix>(candidates.Count);
+            for (int i = 0; i < candidates.Count; i++)
             {
-                StaticInstance instance = instances[i];
-                if (instance == null || instance.Model == null || instance.Model.Id != group.ModelId)
-                    continue;
+                StaticInstance instance = candidates[i];
                 if (!string.IsNullOrEmpty(group.ModelName) &&
                     !string.Equals(instance.Model.Name, group.ModelName, StringComparison.OrdinalIgnoreCase))
                     continue;
-                return instance;
+                transforms.Add(instance.Transform);
             }
-            return null;
+            return transforms.ToArray();
         }
 
         private void RefreshCounts()

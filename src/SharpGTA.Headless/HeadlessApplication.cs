@@ -250,11 +250,15 @@ namespace SharpGTA.Headless
             if (loader.Paths.GroupCount != 0)
             {
                 PathGraph graph = loader.PathGraph;
-                output.WriteLine("Path-Graph: nodes=" + graph.NodeCount.ToString(CultureInfo.InvariantCulture) +
+                output.WriteLine("Path-Graph: tiles=" + graph.TileCount.ToString(CultureInfo.InvariantCulture) +
+                    " nodes=" + graph.NodeCount.ToString(CultureInfo.InvariantCulture) +
                     " car=" + graph.CarNodeCount.ToString(CultureInfo.InvariantCulture) +
                     " ped=" + graph.PedNodeCount.ToString(CultureInfo.InvariantCulture) +
                     " water=" + graph.WaterNodeCount.ToString(CultureInfo.InvariantCulture) +
                     " links=" + graph.LinkCount.ToString(CultureInfo.InvariantCulture) +
+                    " crossTile=" + graph.CrossTileLinkCount.ToString(CultureInfo.InvariantCulture) +
+                    " unpairedExtern=" + graph.UnpairedExternCount.ToString(CultureInfo.InvariantCulture) +
+                    " unresolvedExtern=" + graph.UnresolvedExternCount.ToString(CultureInfo.InvariantCulture) +
                     " externalNext=" + graph.ExternalNextCount.ToString(CultureInfo.InvariantCulture) +
                     " danglingNext=" + graph.DanglingNextCount.ToString(CultureInfo.InvariantCulture) +
                     " selfNext=" + graph.SelfNextCount.ToString(CultureInfo.InvariantCulture) +

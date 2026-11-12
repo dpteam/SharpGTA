@@ -28,12 +28,14 @@
 | Path groups / nodes | 870 / 10440 | 1957 / 23484 |
 | Detached / water path groups | 0 / 0 | 1957 / 108 |
 | Unresolved attached path groups | 34 | 0 |
-| Path graph nodes (car / ped / water) | 2518 (1120 / 1398 / 0) | 9642 (2973 / 6291 / 378) |
-| Path graph adjacency entries | 2724 | 15438 |
-| Path graph extern slots / external `next` | 2485 / 1054 | 5090 / 1619 |
-| Path graph empty slots / unresolved groups | 5437 / 34 | 8752 / 0 |
-| Nearest car node at the ground probe | 221 `(808.9525,-942.0005,36.4859)` | 139 `(-833.21875,-565.6431,9.885688)` |
-| Nearest ped node at the ground probe | 495 `(843.9595,-847.0115,14.0577)` | 9176 `(-863.1125,-571.675,10.0465622)` |
+| Path tiles (one per bound instance) | 2163 | 1957 |
+| Path graph nodes (car / ped / water) | 4947 (1971 / 2976 / 0) | 9642 (2973 / 6291 / 378) |
+| Path graph adjacency entries | 7140 | 20350 |
+| Cross-tile crossings / unpaired externals | 1634 / 3457 | 2456 / 178 |
+| Path graph extern slots / empty slots | 6726 / 14691 | 5090 / 8752 |
+| Unresolved path groups | 34 | 0 |
+| Nearest car node at the ground probe | 1969 `(808.9525,-942.0005,36.4859)` | 139 `(-833.21875,-565.6431,9.885688)` |
+| Nearest ped node at the ground probe | 2245 `(843.9595,-847.0115,14.0577)` | 9176 `(-863.1125,-571.675,10.0465622)` |
 | GXT main keys | 2649 | 2449 |
 | GXT mission tables | 0 | 78 |
 | `PLAYER.DFF` RW chunks | 329 | 103 |
@@ -78,7 +80,9 @@ Entity-пулы заполняются из IPL по правилам ориги
 
 `MAPZONE` III теперь загружается. III unresolved paths — attached groups без соответствующего instance, выводятся через `--verbose`; это не ошибка parser. Полного `CPathFind.PreparePathData` ещё нет.
 
-`PathGraph` собран на обеих играх и проверен real-asset probes: III даёт 2518 узлов (1120 car / 1398 ped), 2724 записи симметричных связей, 2485 extern-слотов, 5437 пустых слотов и 34 unresolved groups; VC — 9642 узла (2973 / 6291 / 378 water), 15438 записей, 5090 extern-слотов и 0 unresolved groups. `--query-path-nearest` возвращает ожидаемые intern-узлы рядом с ground probe: III car 221 на `(808.9525,-942.0005,36.4859)` и ped 495, VC car 139 на `(-833.21875,-565.6431,9.885688)`, ped 9176 и water 7027 на `(-744.0563,-530.2438,6)`. Пустой участок карты честно даёт `found=false`. Эти node id — индексы текущей реализации (порядок группы/слота), а не `m_pathNodes` оригинала: extern-слоты узлами не считаются, но схлопывание extern-пар и межтайловые connections ещё не реализованы.
+`PathGraph` собран на обеих играх и проверен real-asset probes: III даёт 2163 тайла, 4947 узлов (1971 car / 2976 ped), 7140 записей симметричных связей, 1634 межтайловых перехода и 3457 непарных extern'ов; VC — 1957 тайлов, 9642 узла (2973 / 6291 / 378 water), 20350 записей, 2456 переходов и 178 непарных extern'ов. `--query-path-nearest` возвращает ожидаемые intern-узлы рядом с ground probe: III car 1969 на `(808.9525,-942.0005,36.4859)` и ped 2245, VC car 139 на `(-833.21875,-565.6431,9.885688)`, ped 9176 и water 7027 на `(-744.0563,-530.2438,6)`. Пустой участок карты честно даёт `found=false`.
+
+Extern-слияние faithful по порогу: в VC 4918 из 5090 extern'ов имеют соседа ближе 1 unit и 2456 переходов покрывают почти все возможные пары; в III таких extern'ов 3295 из 6726, поэтому 3457 остаются непарными — это состояние данных и greedy-слияния оригинала, а не скрытая ошибка. Один extern в III не разрешается в intern-узел (`unresolvedExtern=1`). Flood-fill groups, `m_connections`-флаги, lane direction/counts и route search не реализованы, поэтому граф связный локально, но маршруты не строятся.
 
 ## Важные границы проверки
 

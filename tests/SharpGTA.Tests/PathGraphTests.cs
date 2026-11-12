@@ -317,6 +317,113 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void NeighbouringTilesJoinThroughCoincidentExternals()
+        {
+            // Two road models, each placed once: road A's external slot lands on the origin of
+            // the tile road B, whose external slot also sits there. That coincidence is what
+            // the original collapses into one crossing between the interior nodes.
+            ModelRegistry registry = new ModelRegistry(new PathTestDefinition());
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n10, roadA, generic, 1, 100, 0\n11, roadB, generic, 1, 100, 0\nend\n"));
+            IplDocument placements = new IplReader(DataSchema.III).Read(
+                "inst\n" +
+                "10, roadA, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "11, roadB, 100, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "end\n");
+            StaticWorld staticWorld = new StaticWorld();
+            staticWorld.Bind(placements, registry, new LoadReport());
+
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII(
+                "car, 10, roadA\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +     // interior at the tile origin
+                "1, 0, 0, 1600, 0, 0, 160, 1, 1\n" +  // external 100 units out
+                EmptyNodes(10) + "\n"));
+            world.AddGroups(ParseIII(
+                "car, 11, roadB\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 0, 0, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(10) + "\n"));
+            world.BindInstances(staticWorld.Instances);
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(2, graph.TileCount);
+            Assert.Equal(2, graph.NodeCount);
+            Assert.Equal(1, graph.CrossTileLinkCount);
+            Assert.Equal(0, graph.UnpairedExternCount);
+            Assert.Equal(0, graph.UnresolvedExternCount);
+            Assert.Equal(2, graph.LinkCount);
+            Assert.Equal(0, graph.Nodes[0].TileIndex);
+            Assert.Equal(1, graph.Nodes[1].TileIndex);
+            // Tile A's interior (0,0,0) now neighbours tile B's interior (100,0,0).
+            AssertVector(Vector3.Zero, graph.Nodes[0].Position);
+            AssertVector(new Vector3(100.0f, 0.0f, 0.0f), graph.Nodes[1].Position);
+            Assert.Equal(1, graph.Nodes[0].LinkCount);
+            Assert.Equal(1, graph.Nodes[0].Links[0]);
+            Assert.Equal(0, graph.Nodes[1].Links[0]);
+
+            PathGraphNode node;
+            float distance;
+            Assert.True(graph.TryFindNearestNode(new Vector3(99.0f, 0.0f, 0.0f), PathKind.Car,
+                5.0f, out node, out distance));
+            Assert.Equal(1, node.GlobalIndex);
+        }
+
+        [Test]
+        public void ExternalSlotsOutOfRangeStayUnpaired()
+        {
+            ModelRegistry registry = new ModelRegistry(new PathTestDefinition());
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n10, roadA, generic, 1, 100, 0\n11, roadB, generic, 1, 100, 0\nend\n"));
+            IplDocument placements = new IplReader(DataSchema.III).Read(
+                "inst\n" +
+                "10, roadA, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "11, roadB, 400, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "end\n");
+            StaticWorld staticWorld = new StaticWorld();
+            staticWorld.Bind(placements, registry, new LoadReport());
+
+            PathWorld world = new PathWorld();
+            world.AddGroups(ParseIII(
+                "car, 10, roadA\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 0, 1600, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(10) + "\n"));
+            world.AddGroups(ParseIII(
+                "car, 11, roadB\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "1, 0, 0, 0, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(10) + "\n"));
+            world.BindInstances(staticWorld.Instances);
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(2, graph.TileCount);
+            Assert.Equal(0, graph.CrossTileLinkCount);
+            Assert.Equal(2, graph.UnpairedExternCount);
+            Assert.Equal(0, graph.LinkCount);
+            Assert.Equal(0, graph.Nodes[0].LinkCount);
+        }
+
+        [Test]
+        public void ExternalWithoutAnInteriorNeighbourIsReportedUnresolved()
+        {
+            PathWorld world = DetachedIII(
+                "2, -1, 0, 0, 0, 0, 160, 1, 1",
+                "1, 2, 0, 1600, 0, 0, 160, 1, 1", // external naming another external
+                "1, -1, 0, 3200, 0, 0, 160, 1, 1",
+                EmptyNodes(9));
+
+            PathGraph graph = new PathGraph(world);
+
+            Assert.Equal(1, graph.NodeCount);
+            Assert.Equal(2, graph.UnresolvedExternCount);
+            Assert.Equal(0, graph.CrossTileLinkCount);
+            Assert.Equal(0, graph.LinkCount);
+        }
+
+        [Test]
         public void EmptyWorldBuildsAnEmptyGraph()
         {
             PathGraph graph = new PathGraph(new PathWorld());

@@ -227,6 +227,7 @@ namespace SharpGTA.Tests
                 // The graph is built lazily from the bound path world: twelve interior car slots,
                 // each naming node 0, so the whole tile is one star with symmetric adjacency.
                 PathGraph graph = loader.PathGraph;
+                Assert.Equal(1, graph.TileCount);
                 Assert.Equal(12, graph.NodeCount);
                 Assert.Equal(12, graph.CarNodeCount);
                 Assert.Equal(0, graph.PedNodeCount);
