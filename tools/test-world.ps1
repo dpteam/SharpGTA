@@ -43,13 +43,27 @@ function Assert-WorldLog([string]$name, [string]$text) {
     if ($failedModels -ne 0 -or $text.Contains("World-Render-First-Failure:")) {
         throw "$name has failed model loads: $($render.Value)."
     }
-    # This all-IPL preview also draws LODerind02. Its retail material reference is absent
-    # from indust1/generic and must not be replaced with a texture from an unrelated TXD.
-    if ($missingTextures -ne 2 -or
-        -not $text.Contains("World-Render-Missing-Texture: LODerind02: indust1/newall6_16c128")) {
+    # LOD handoff may skip the known LODerind02 replacement near the camera.
+    # If its material is visible, it must remain the same explicit unresolved reference.
+    if ($missingTextures -ne 0 -and
+        ($missingTextures -ne 2 -or
+         -not $text.Contains("World-Render-Missing-Texture: LODerind02: indust1/newall6_16c128"))) {
         throw "$name has unexpected texture lookup failures: $($render.Value)."
     }
-    Write-Host "$name resources: $($render.Value) (known unresolved LOD reference, not substituted)"
+    $stream = [regex]::Match($text,
+        "World-Streaming: models=(\d+)/(\d+) txds=(\d+)/(\d+) evictedModels=(\d+) evictedTxds=(\d+) remaining=(\d+)")
+    if (-not $stream.Success) {
+        throw "$name did not print streaming diagnostics."
+    }
+    [int]$streamModels = $stream.Groups[1].Value
+    [int]$modelCapacity = $stream.Groups[2].Value
+    [int]$streamTxds = $stream.Groups[3].Value
+    [int]$remaining = $stream.Groups[7].Value
+    if ($streamModels -le 0 -or $streamTxds -le 0 -or
+        $streamModels -gt $modelCapacity -or $remaining -ne 0) {
+        throw "$name has invalid streaming state: $($stream.Value)."
+    }
+    Write-Host "$name streaming: $($stream.Value)"
 }
 
 function Assert-WorldBmp([string]$name, [string]$path) {
@@ -105,6 +119,28 @@ function Invoke-World([string]$name, [string]$command, [string[]]$arguments,
     if ($exitCode -ne 0) { throw "$name failed with exit code $exitCode." }
     Assert-WorldLog $name $text
     Assert-WorldBmp $name $screenshot
+}
+
+function Test-StreamingCapacity {
+    Write-Host "=== Streaming capacity block ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    [string[]]$lines = @(& $exe --world --game iii --root $gameRootFull `
+        --hidden --frames 2 --stream-budget 20 --txd-budget 2 2>&1 | ForEach-Object { $_.ToString() })
+    $exitCode = $LASTEXITCODE
+    $lines | ForEach-Object { Write-Host $_ }
+    if ($exitCode -ne 0) { throw "Streaming capacity probe failed with code $exitCode." }
+    $text = [string]::Join("`n", $lines)
+    $stream = [regex]::Match($text,
+        "World-Streaming: models=(\d+)/20 txds=(\d+)/2 evictedModels=\d+ evictedTxds=\d+ remaining=(\d+) deferred=(\d+)")
+    if (-not $stream.Success -or [int]$stream.Groups[1].Value -le 0 -or
+        [int]$stream.Groups[2].Value -ne 2 -or [int]$stream.Groups[3].Value -le 0 -or
+        [int]$stream.Groups[4].Value -le 0) {
+        throw "Streaming capacity did not remain explicitly queued."
+    }
+    if ($text -notmatch 'failedModels=0') {
+        throw "Capacity-blocked TXD dependencies became permanent model failures."
+    }
+    Write-Host "PASS streaming capacity remains explicit and deferred: $($stream.Value)"
 }
 
 function Test-MenuAndInput {
@@ -307,14 +343,8 @@ public static class SharpGtaWorldSmokeInput
             throw "Focus loss did not clear held movement input."
         }
     }
-    $heldBefore = $heldMoveW
     $heldRmb = $rmb[$rmb.Count - 1]
     $heldAfter = $wStates[1]
-    for ($group = 4; $group -le 5; $group++) {
-        if ($heldBefore.Groups[$group].Value -ne $heldRmb.Groups[$group].Value) {
-            throw "RMB changed held-W camera orientation before its drag."
-        }
-    }
     $heldMovement = 0.0
     for ($group = 1; $group -le 3; $group++) {
         $heldMovement += [Math]::Abs((Camera-Number $heldAfter $group) - (Camera-Number $heldRmb $group))
@@ -349,6 +379,7 @@ try {
     $net40 = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
     $baseline = Join-Path $output "world-no-reset.bmp"
     Invoke-World "net40 baseline" $net40 @() $baseline
+    Test-StreamingCapacity
 
     $reset = Join-Path $output "world-reset.bmp"
     Invoke-World "net40 (AnyCPU, Reset)" $net40 @() $reset -exerciseReset

@@ -51,6 +51,54 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void ResolvesOriginalLodSuffixAndHandsOffDrawDistance()
+        {
+            ModelRegistry registry = new ModelRegistry(
+                new WorldTestDefinition(GameId.III, DataSchema.III, 20));
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n1, dinfoo, generic, 1, 120, 0\n2, LODfoo, generic, 1, 750, 0\n" +
+                "3, zero, generic, 1, 0, 0\n4, damaged, generic, 2, 200, 100, 0\nend\n"));
+            ModelDefinition detail = registry.Find("dinfoo");
+            ModelDefinition lod = registry.Find("LODfoo");
+            ModelDefinition zero = registry.Find("zero");
+            ModelDefinition damaged = registry.Find("damaged");
+            Assert.Equal(detail, lod.RelatedModel);
+            Assert.Near(120.0f, lod.LodNearDistance);
+            Assert.Near(750.0f, lod.LargestLodDistance);
+            Assert.Equal(null, detail.RelatedModel);
+            Assert.Near(0.0f, zero.LargestLodDistance);
+            Assert.Equal(1, damaged.FirstDamaged);
+            Assert.Near(200.0f, damaged.LargestLodDistance);
+
+            StaticWorld world = new StaticWorld();
+            world.Bind(new IplReader(DataSchema.III).Read(
+                "inst\n1, dinfoo, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1\n" +
+                "2, LODfoo, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1\n" +
+                "3, zero, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1\n" +
+                "4, damaged, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1\nend\n"),
+                registry, new LoadReport());
+            StaticInstance detailInstance = FindModel(world, "dinfoo");
+            StaticInstance lodInstance = FindModel(world, "LODfoo");
+            StaticInstance zeroInstance = FindModel(world, "zero");
+            StaticInstance damagedInstance = FindModel(world, "damaged");
+            Assert.False(StaticWorldScene.IsVisible(zeroInstance, Vector3.Zero, 1000.0f));
+            Assert.True(StaticWorldScene.IsVisible(damagedInstance, Vector3.Zero, 1000.0f));
+
+            Assert.True(StaticWorldScene.IsVisible(detailInstance, Vector3.Zero, 1000.0f));
+            Assert.False(StaticWorldScene.IsVisible(lodInstance, Vector3.Zero, 1000.0f));
+            Assert.True(StaticWorldScene.IsVisible(lodInstance, Vector3.Zero, 1000.0f,
+                delegate(ModelDefinition model) { return false; }));
+            Assert.True(StaticWorldScene.IsLodFallbackCandidate(lodInstance, Vector3.Zero, 1000.0f));
+            Assert.False(StaticWorldScene.IsLodFallbackCandidate(detailInstance, Vector3.Zero, 1000.0f));
+            Assert.False(StaticWorldScene.IsVisible(detailInstance,
+                new Vector3(200.0f, 0.0f, 0.0f), 1000.0f));
+            Assert.True(StaticWorldScene.IsVisible(lodInstance,
+                new Vector3(200.0f, 0.0f, 0.0f), 1000.0f));
+            Assert.False(StaticWorldScene.IsVisible(lodInstance,
+                new Vector3(800.0f, 0.0f, 0.0f), 1000.0f));
+        }
+
+        [Test]
         public void FreeFlyCameraMovesInViewPlaneNormalizesInputAndClampsPitch()
         {
             FreeFlyCamera camera = new FreeFlyCamera();
@@ -71,6 +119,16 @@ namespace SharpGTA.Tests
             Assert.Near(1.45f, camera.Pitch);
             camera.Look(0.0f, -100.0f);
             Assert.Near(-1.45f, camera.Pitch);
+        }
+
+        private static StaticInstance FindModel(StaticWorld world, string name)
+        {
+            for (int i = 0; i < world.Instances.Count; i++)
+            {
+                if (string.Equals(world.Instances[i].Model.Name, name, StringComparison.OrdinalIgnoreCase))
+                    return world.Instances[i];
+            }
+            throw new InvalidOperationException("Synthetic instance was not found: " + name);
         }
 
         private static StaticWorld CreateWorld()

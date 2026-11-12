@@ -90,6 +90,44 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void RemovedDictionaryDropsContextCacheAndFallsBackToGeneric()
+        {
+            RenderResourceManager resources = new RenderResourceManager();
+            TxdArchive generic = TxdReader.Read(TxdTestData.CreateArchive(
+                TxdTestData.CreateTexture("shared", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 9, 255 } })));
+            resources.AddFallbackDictionary(generic);
+            resources.AddDictionary("first", TxdReader.Read(TxdTestData.CreateArchive(
+                TxdTestData.CreateTexture("shared", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 1, 255 } }))));
+            resources.AddDictionary("second", TxdReader.Read(TxdTestData.CreateArchive(
+                TxdTestData.CreateTexture("shared", 1, 1, TxdCompression.Uncompressed,
+                    0x0500u, new byte[][] { new byte[] { 3, 2, 2, 255 } }))));
+            Assert.Equal((byte)1, resources.GetTexture("first", "shared").Rgba[0]);
+            Assert.Equal((byte)2, resources.GetTexture("second", "shared").Rgba[0]);
+
+            Assert.True(resources.RemoveDictionary("first"));
+            Assert.False(resources.RemoveDictionary("first"));
+            Assert.Equal((byte)9, resources.GetTexture("first", "shared").Rgba[0]);
+            Assert.Equal((byte)2, resources.GetTexture("second", "shared").Rgba[0]);
+            Assert.Equal((byte)2, resources.GetTexture("shared").Rgba[0]);
+        }
+
+        [Test]
+        public void RemovedModelIsNoLongerReturnedFromTheClumpCache()
+        {
+            RenderResourceManager resources = new RenderResourceManager();
+            DffDocument document = DffReader.Read(DffTestData.Create(0x34003u));
+            GeometryRenderData[] first = resources.GetClump("model", document);
+            Assert.True(ReferenceEquals(first, resources.GetClump("model", document)));
+            Assert.True(resources.RemoveModel("model"));
+            Assert.False(resources.RemoveModel("model"));
+            GeometryRenderData[] second = resources.GetClump("model", document);
+            Assert.False(ReferenceEquals(first, second));
+            Assert.Equal(first.Length, second.Length);
+        }
+
+        [Test]
         public void NullRendererValidatesSceneAndDoesNotUseNativeApis()
         {
             DffGeometry geometry = DffReader.ReadClump(DffTestData.Create(0x34003u)).Geometries[0];

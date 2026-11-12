@@ -13,6 +13,8 @@ namespace SharpGTA.D3D9
             new Dictionary<MeshData, D3D9ModelMesh>();
         private readonly Dictionary<TextureResourceKey, D3D9Texture> textures =
             new Dictionary<TextureResourceKey, D3D9Texture>();
+        private readonly HashSet<TextureResourceKey> missingTextures =
+            new HashSet<TextureResourceKey>();
         private bool disposed;
 
         internal D3D9ModelRenderer(D3D9Device device, RenderResourceManager resources)
@@ -99,6 +101,55 @@ namespace SharpGTA.D3D9
             }
         }
 
+        internal void ReleaseGeometry(GeometryRenderData[] atomics)
+        {
+            if (atomics == null)
+                throw new ArgumentNullException("atomics");
+            for (int i = 0; i < atomics.Length; i++)
+            {
+                MeshData[] geometryMeshes = atomics[i].Meshes;
+                for (int j = 0; j < geometryMeshes.Length; j++)
+                {
+                    MeshData mesh = geometryMeshes[j];
+                    D3D9ModelMesh gpuMesh;
+                    if (!meshes.TryGetValue(mesh, out gpuMesh))
+                        continue;
+                    meshes.Remove(mesh);
+                    VertexCount -= mesh.Vertices.Length;
+                    IndexCount -= mesh.Indices.Length;
+                    gpuMesh.Dispose();
+                }
+            }
+        }
+
+        internal void ReleaseTextureDictionary(string dictionaryName)
+        {
+            if (dictionaryName == null)
+                throw new ArgumentNullException("dictionaryName");
+            List<TextureResourceKey> keys = new List<TextureResourceKey>();
+            foreach (KeyValuePair<TextureResourceKey, D3D9Texture> pair in textures)
+            {
+                if (string.Equals(pair.Key.Dictionary, dictionaryName,
+                    StringComparison.OrdinalIgnoreCase))
+                    keys.Add(pair.Key);
+            }
+            for (int i = 0; i < keys.Count; i++)
+            {
+                D3D9Texture texture = textures[keys[i]];
+                textures.Remove(keys[i]);
+                missingTextures.Remove(keys[i]);
+                texture.Dispose();
+            }
+            List<TextureResourceKey> missing = new List<TextureResourceKey>();
+            foreach (TextureResourceKey key in missingTextures)
+            {
+                if (string.Equals(key.Dictionary, dictionaryName, StringComparison.OrdinalIgnoreCase))
+                    missing.Add(key);
+            }
+            for (int i = 0; i < missing.Count; i++)
+                missingTextures.Remove(missing[i]);
+        }
+
         public void Dispose()
         {
             if (disposed)
@@ -110,9 +161,12 @@ namespace SharpGTA.D3D9
                     texture.Dispose();
             }
             textures.Clear();
+            missingTextures.Clear();
             foreach (D3D9ModelMesh mesh in meshes.Values)
                 mesh.Dispose();
             meshes.Clear();
+            VertexCount = 0;
+            IndexCount = 0;
         }
 
         private D3D9Texture GetTexture(GeometryRenderData geometry, MaterialData material)
@@ -124,11 +178,17 @@ namespace SharpGTA.D3D9
             D3D9Texture texture;
             if (textures.TryGetValue(key, out texture))
                 return texture;
+            if (missingTextures.Contains(key))
+                return null;
             TextureData data = string.IsNullOrEmpty(geometry.TextureDictionary)
                 ? resources.GetTexture(material.TextureName)
                 : resources.GetTexture(geometry.TextureDictionary, material.TextureName);
-            if (data != null)
-                texture = device.CreateTextureRgba(data.Width, data.Height, data.Rgba);
+            if (data == null)
+            {
+                missingTextures.Add(key);
+                return null;
+            }
+            texture = device.CreateTextureRgba(data.Width, data.Height, data.Rgba);
             textures.Add(key, texture);
             return texture;
         }

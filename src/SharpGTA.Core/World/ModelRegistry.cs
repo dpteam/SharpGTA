@@ -13,6 +13,7 @@ namespace SharpGTA.World
     /// </summary>
     public sealed class ModelRegistry
     {
+        private const float BigBuildingLodDistance = 300.0f;
         private static readonly float[] NoLodDistances = new float[0];
         private readonly ModelDefinition[] models;
         private readonly Dictionary<string, ModelDefinition> byName =
@@ -115,6 +116,38 @@ namespace SharpGTA.World
                 if (collisions.TryGetValue(model.Name, out collision))
                     model.Collision = collision;
             }
+            ResolveLodRelationships();
+        }
+
+        private void ResolveLodRelationships()
+        {
+            for (int i = 0; i < models.Length; i++)
+            {
+                ModelDefinition model = models[i];
+                if (model == null || model.Kind != ModelKind.Simple ||
+                    model.LodDistances.Count == 0 ||
+                    model.LodDistances[0] <= BigBuildingLodDistance ||
+                    model.RelatedModel != null)
+                    continue;
+                for (int j = 0; j < models.Length; j++)
+                {
+                    ModelDefinition candidate = models[j];
+                    if (candidate == null || candidate == model ||
+                        candidate.Kind != ModelKind.Simple ||
+                        !SameLodSuffix(model.Name, candidate.Name))
+                        continue;
+                    model.RelatedModel = candidate;
+                    model.LodNearDistance = candidate.LargestLodDistance;
+                    break;
+                }
+            }
+        }
+
+        private static bool SameLodSuffix(string left, string right)
+        {
+            if (left.Length < 3 || right.Length < 3 || left.Length != right.Length)
+                return false;
+            return string.CompareOrdinal(left, 3, right, 3, left.Length - 3) == 0;
         }
 
         /// <summary>

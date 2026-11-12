@@ -14,6 +14,7 @@ namespace SharpGTA.Rendering
             new Dictionary<string, TxdArchive>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, TxdArchive> namedDictionaries =
             new Dictionary<string, TxdArchive>(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> namedDictionaryOrder = new List<string>();
         private readonly Dictionary<string, TextureData> textures =
             new Dictionary<string, TextureData>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<TextureResourceKey, TextureData> contextualTextures =
@@ -39,6 +40,8 @@ namespace SharpGTA.Rendering
                 throw new ArgumentException("A texture dictionary name is required.", "dictionaryName");
             if (archive == null)
                 throw new ArgumentNullException("archive");
+            if (!namedDictionaries.ContainsKey(dictionaryName))
+                namedDictionaryOrder.Add(dictionaryName);
             namedDictionaries[dictionaryName] = archive;
             AddDictionary(archive);
         }
@@ -121,6 +124,71 @@ namespace SharpGTA.Rendering
             TextureData decoded = new TextureData(texture.Name, image.Width, image.Height, image.Rgba);
             TextureBytes += decoded.Rgba.Length;
             return decoded;
+        }
+
+        public bool RemoveModel(string name)
+        {
+            if (name == null)
+                throw new ArgumentNullException("name");
+            return models.Remove(name);
+        }
+
+        /// <summary>Removes one named TXD plus its decoded texture cache entries.</summary>
+        public bool RemoveDictionary(string dictionaryName)
+        {
+            if (dictionaryName == null)
+                throw new ArgumentNullException("dictionaryName");
+            TxdArchive archive;
+            if (!namedDictionaries.TryGetValue(dictionaryName, out archive))
+                return false;
+            namedDictionaries.Remove(dictionaryName);
+            for (int i = namedDictionaryOrder.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(namedDictionaryOrder[i], dictionaryName,
+                    StringComparison.OrdinalIgnoreCase))
+                    namedDictionaryOrder.RemoveAt(i);
+            }
+
+            List<string> fallbackNames = new List<string>();
+            foreach (KeyValuePair<string, TxdArchive> pair in fallbackDictionaries)
+            {
+                if (ReferenceEquals(pair.Value, archive))
+                    fallbackNames.Add(pair.Key);
+            }
+            for (int i = 0; i < fallbackNames.Count; i++)
+                fallbackDictionaries.Remove(fallbackNames[i]);
+
+            foreach (TextureData legacy in textures.Values)
+                TextureBytes -= legacy.Rgba.Length;
+            textures.Clear();
+            dictionaries.Clear();
+            for (int i = 0; i < namedDictionaryOrder.Count; i++)
+            {
+                TxdArchive remaining;
+                if (!namedDictionaries.TryGetValue(namedDictionaryOrder[i], out remaining))
+                    continue;
+                for (int j = 0; j < remaining.Textures.Length; j++)
+                {
+                    TxdTexture texture = remaining.Textures[j];
+                    if (!string.IsNullOrEmpty(texture.Name) && !dictionaries.ContainsKey(texture.Name))
+                        dictionaries.Add(texture.Name, remaining);
+                }
+            }
+
+            List<TextureResourceKey> contextualKeys = new List<TextureResourceKey>();
+            foreach (KeyValuePair<TextureResourceKey, TextureData> pair in contextualTextures)
+            {
+                if (string.Equals(pair.Key.Dictionary, dictionaryName,
+                    StringComparison.OrdinalIgnoreCase))
+                    contextualKeys.Add(pair.Key);
+            }
+            for (int i = 0; i < contextualKeys.Count; i++)
+            {
+                TextureData contextual = contextualTextures[contextualKeys[i]];
+                TextureBytes -= contextual.Rgba.Length;
+                contextualTextures.Remove(contextualKeys[i]);
+            }
+            return true;
         }
 
         public GeometryRenderData[] GetClump(string name, DffDocument document)

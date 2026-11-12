@@ -4,7 +4,7 @@
 
 Управляемый движок на C# для данных и игровой логики **GTA III** и **GTA Vice City**. Целевая поставка — **.NET Framework 4.0 / Windows XP SP3**, без сторонних runtime-библиотек. Исходные игровые ресурсы не входят в репозиторий и должны принадлежать пользователю.
 
-> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, полного игрового renderer и звука пока нет; уже есть MSHTML Launcher, интерактивное меню GTA III и static world preview на оригинальных данных. См. [дорожную карту](docs/ROADMAP.md).
+> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, полного игрового renderer и звука пока нет; уже есть MSHTML Launcher, интерактивное меню GTA III и streamed static world preview с draw-distance/LOD на оригинальных данных. См. [дорожную карту](docs/ROADMAP.md).
 
 ## Сборка
 
@@ -82,7 +82,9 @@ Launcher использует системный **MSHTML** (`WebBrowser`), embe
 src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --world --game iii --root "D:\Games\GTA III"
 ```
 
-Viewer строит оригинальные IPL placements и lazy-load DFF/TXD из `GTA3.IMG`/`TXD.IMG`. Материалы используют IDE TXD своей модели, затем `GENERIC.TXD` как fallback; чужие одноимённые textures не подставляются, а unresolved LOD-ссылки выводятся в diagnostics. Работают `WASD` для движения, `Q/E` для высоты, обзор с RMB, `F` для возврата к исходной точке, `G` для COLL ground query, `Home` для сброса и Esc. Это free-fly camera без player physics, dynamic entities, LOD и gameplay streaming. `tools/test-world.ps1` проверяет resources/BMP/Reset, переход из меню и управление на `net40` AnyCPU/x86 и `net9.0-windows`.
+Viewer строит оригинальные IPL placements, применяет model draw distance и оригинальный suffix LOD handoff, затем streamed DFF/TXD slots из `GTA3.IMG`/`TXD.IMG`. Материалы используют IDE TXD своей модели, затем `GENERIC.TXD` как fallback; чужие одноимённые textures не подставляются. Slots имеют refcount/приоритет/LRU/Deferred, а `--stream-budget N`/`--txd-budget N` задают capacities моделей/TXD (defaults 512/96). Нехватка capacity явно оставляет requests в queue и не превращает их в permanent failed models; near LOD используется как fallback, если detailed model недоступен.
+
+Работают `WASD` для движения, `Q/E` для высоты, обзор с RMB, `F` для возврата к исходной точке, `G` для COLL ground query, `Home` для сброса и Esc. Это free-fly camera без player physics, dynamic entities, async I/O и gameplay streaming. `tools/test-world.ps1` проверяет streamed resources, LOD-сцену, capacity block, BMP/Reset, переход из меню и управление на `net40` AnyCPU/x86 и `net9.0-windows`.
 
 Для отдельной отладки DFF сохранён model preview:
 
@@ -112,7 +114,7 @@ src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --menu --import-settings "
 src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --hidden --frames 2 --exercise-reset --screenshot artifacts\d3d9-reset.bmp
 ```
 
-D3D9 textures и static 3D vertex/index buffers используют managed pool; meshes рисуются через `DrawIndexedPrimitive` с оригинальными shared vertices/indices. Screen-space triangle/UI используют `DrawPrimitiveUP`, directional light и D24S8 работают для 3D. Menu/glyph rendering, frontend state/layout и hitboxes разделены; Headless по-прежнему не создаёт GPU/окно. Это не полноценный GTA renderer и не Windows XP VM test.
+D3D9 textures и static 3D vertex/index buffers используют managed pool; meshes рисуются через `DrawIndexedPrimitive` с оригинальными shared vertices/indices. Screen-space triangle/UI используют `DrawPrimitiveUP`, directional light и D24S8 работают для 3D. World models/TXD проходят через Core streaming slots с refcount/LRU; eviction освобождает GPU buffers/textures и CPU caches. Это синхронный пул ресурсов, не полный async `CStreaming` и не byte-memory budget. Menu/glyph rendering, frontend state/layout и hitboxes разделены; Headless по-прежнему не создаёт GPU/окно. Это не полноценный GTA renderer и не Windows XP VM test.
 
 ## Проекты
 

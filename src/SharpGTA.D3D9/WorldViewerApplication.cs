@@ -27,17 +27,20 @@ namespace SharpGTA.D3D9
         private bool disposed;
 
         internal WorldViewerApplication(Win32Window window, D3D9Device device,
-            GameDataLoader loader)
+            GameDataLoader loader, int modelBudget, int txdBudget)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
             if (loader == null) throw new ArgumentNullException("loader");
+            if (modelBudget <= 0) throw new ArgumentOutOfRangeException("modelBudget");
+            if (txdBudget <= 0) throw new ArgumentOutOfRangeException("txdBudget");
             this.window = window;
             this.device = device;
             this.loader = loader;
             loader.LoadStandard();
-            resources = new WorldResourceManager(loader);
+            resources = new WorldResourceManager(loader, modelBudget, txdBudget);
             renderer = new D3D9ModelRenderer(device, resources.Textures);
+            resources.AttachRenderer(renderer);
             spawn = new Vector3(812.0f, -936.0f, 36.0f);
             ResetCamera();
         }
@@ -79,6 +82,12 @@ namespace SharpGTA.D3D9
                         " failedModels=" + resources.FailedModelCount + " missingTextures=" + resources.MissingTextureCount +
                         " gpuMeshes=" + renderer.MeshCount + " gpuVertices=" + renderer.VertexCount +
                         " gpuIndices=" + renderer.IndexCount + " backend=indexed-managed");
+                    Console.WriteLine("World-Streaming: models=" + resources.ModelCount + "/" + resources.ModelCapacity +
+                        " txds=" + resources.TextureDictionaryCount + "/" + resources.TxdCapacity +
+                        " evictedModels=" + resources.ModelEvictionCount +
+                        " evictedTxds=" + resources.TxdEvictionCount +
+                        " remaining=" + resources.LastLoadReport.RemainingRequestedCount +
+                        " deferred=" + resources.LastLoadReport.DeferredCount);
                     if (resources.FirstFailure != null)
                         Console.WriteLine("World-Render-First-Failure: " + resources.FirstFailure);
                     string[] missingTextures = resources.MissingTextureDetails;
@@ -106,11 +115,11 @@ namespace SharpGTA.D3D9
             disposed = true;
             try
             {
-                renderer.Dispose();
+                resources.Dispose();
             }
             finally
             {
-                resources.Dispose();
+                renderer.Dispose();
             }
         }
 

@@ -27,6 +27,8 @@ namespace SharpGTA.D3D9
             string resolutionText = null;
             bool noVSync = false;
             bool noFrameLimit = false;
+            int streamBudget = 512;
+            int txdBudget = 96;
             int frames = 1;
             for (int i = 0; i < args.Length; i++)
             {
@@ -52,6 +54,24 @@ namespace SharpGTA.D3D9
                     noVSync = true;
                 else if (args[i] == "--no-frame-limit")
                     noFrameLimit = true;
+                else if (args[i] == "--stream-budget" && i + 1 < args.Length)
+                {
+                    if (!int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                        out streamBudget) || streamBudget <= 0)
+                    {
+                        Console.Error.WriteLine("Invalid --stream-budget value; expected a positive model count.");
+                        return 2;
+                    }
+                }
+                else if (args[i] == "--txd-budget" && i + 1 < args.Length)
+                {
+                    if (!int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                        out txdBudget) || txdBudget <= 0)
+                    {
+                        Console.Error.WriteLine("Invalid --txd-budget value; expected a positive TXD count.");
+                        return 2;
+                    }
+                }
                 else if (args[i] == "--import-settings" && i + 1 < args.Length)
                     importSettings = args[++i];
                 else if (args[i] == "--export-settings" && i + 1 < args.Length)
@@ -166,7 +186,7 @@ namespace SharpGTA.D3D9
                 Console.WriteLine("Device: " + device.Description);
                 if (worldMode)
                     return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
-                        frames, screenshot, exerciseReset);
+                        frames, screenshot, exerciseReset, streamBudget, txdBudget);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -188,7 +208,7 @@ namespace SharpGTA.D3D9
                         }
                         Console.WriteLine("Frontend: shutdown completed.");
                         if (frontend.Menu.WorldPreviewRequested)
-                            return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset);
+                            return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget);
                         return result;
                     }
                 }
@@ -240,12 +260,14 @@ namespace SharpGTA.D3D9
         }
 
         private static int RunWorldViewer(Win32Window window, D3D9Device device,
-            IGameFileSystem files, int frames, string screenshot, bool exerciseReset)
+            IGameFileSystem files, int frames, string screenshot, bool exerciseReset,
+            int streamBudget, int txdBudget)
         {
             using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
             {
                 loader.LoadInitialImage();
-                using (WorldViewerApplication viewer = new WorldViewerApplication(window, device, loader))
+                using (WorldViewerApplication viewer =
+                    new WorldViewerApplication(window, device, loader, streamBudget, txdBudget))
                     return viewer.Run(frames, screenshot, exerciseReset);
             }
         }
@@ -292,6 +314,7 @@ namespace SharpGTA.D3D9
             Console.WriteLine("  Menu controls: mouse, arrows, Enter, Esc; Left/Right changes settings.");
             Console.WriteLine("  --frames 0 keeps the menu open; screenshots require a finite positive count.");
             Console.WriteLine("  --language 0..4, --resolution WxH, --no-vsync, --no-frame-limit.");
+            Console.WriteLine("  --stream-budget N / --txd-budget N: world model/TXD capacities (defaults 512/96).");
             Console.WriteLine("  --import-settings FILE and --export-settings FILE share launcher settings.");
             Console.WriteLine("  --exercise-reset releases cached surfaces and resets between frames.");
             Console.WriteLine("  No D3DX, external DLL or game data is required for triangle mode.");
