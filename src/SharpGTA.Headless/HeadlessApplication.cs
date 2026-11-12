@@ -262,6 +262,7 @@ namespace SharpGTA.Headless
                     " crossTile=" + graph.CrossTileLinkCount.ToString(CultureInfo.InvariantCulture) +
                     " crossings=" + graph.CrossingLinkCount.ToString(CultureInfo.InvariantCulture) +
                     " carLinks=" + graph.CarLinkCount.ToString(CultureInfo.InvariantCulture) +
+                    " deadEnds=" + graph.CarDeadEndCount.ToString(CultureInfo.InvariantCulture) +
                     " laneFallbacks=" + graph.CarLinkLaneFallbackCount.ToString(CultureInfo.InvariantCulture) +
                     " unpairedExtern=" + graph.UnpairedExternCount.ToString(CultureInfo.InvariantCulture) +
                     " unresolvedExtern=" + graph.UnresolvedExternCount.ToString(CultureInfo.InvariantCulture) +

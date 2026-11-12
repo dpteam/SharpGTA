@@ -777,6 +777,32 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void CarDeadEndsArePeeledBackFromOpenLanes()
+        {
+            // A three-node chain has no 2-core, so every node ends up a dead end.
+            PathGraph chain = new PathGraph(DetachedIII(
+                "2, 1, 0, 0, 0, 0, 160, 1, 1",
+                "2, 2, 0, 160, 0, 0, 160, 1, 1",
+                "2, -1, 0, 320, 0, 0, 160, 1, 1",
+                EmptyNodes(9)));
+            Assert.Equal(3, chain.CarDeadEndCount);
+            Assert.True(chain.Nodes[1].IsDeadEnd);
+
+            // A closed triangle survives, and a spur hanging off it is peeled away.
+            PathGraph triangle = new PathGraph(DetachedIII(
+                "2, 2, 0, 0, 0, 0, 160, 1, 1",
+                "2, 0, 0, 160, 0, 0, 160, 1, 1",
+                "2, 1, 0, 80, 160, 0, 160, 1, 1",
+                "2, 2, 0, 80, -160, 0, 160, 1, 1",
+                EmptyNodes(8)));
+            // Node 3 names node 2, and node 2 also sits on the triangle through nodes 0 and 1,
+            // so only the spur is a dead end.
+            Assert.Equal(1, triangle.CarDeadEndCount);
+            Assert.False(triangle.Nodes[0].IsDeadEnd);
+            Assert.True(triangle.Nodes[3].IsDeadEnd);
+        }
+
+        [Test]
         public void EmptyWorldBuildsAnEmptyGraph()
         {
             PathGraph graph = new PathGraph(new PathWorld());

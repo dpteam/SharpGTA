@@ -147,6 +147,17 @@ namespace SharpGTA.World
         {
             GroupId = value;
         }
+
+        /// <summary>
+        /// `m_pathNodes[i].bDeadEnd`: a car node with fewer than two live neighbours. Marking
+        /// propagates, so a lane is peeled back from its open ends until only the 2-core holds.
+        /// </summary>
+        public bool IsDeadEnd { get; private set; }
+
+        internal void SetDeadEnd()
+        {
+            IsDeadEnd = true;
+        }
     }
 
     /// <summary>
@@ -453,6 +464,7 @@ namespace SharpGTA.World
 
             CarLinkCount = carLinks.Count;
             InheritCarLanes(carIndex);
+            MarkCarDeadEnds();
             AssignFloodFillGroups();
         }
 
@@ -688,6 +700,9 @@ namespace SharpGTA.World
 
         /// <summary>`CCarPathLink` entries: one per physical car connection.</summary>
         public int CarLinkCount { get; private set; }
+
+        /// <summary>Car nodes marked as dead ends by the original's peeling loop.</summary>
+        public int CarDeadEndCount { get; private set; }
 
         /// <summary>Lane sides that fell back to the default of one lane.</summary>
         public int CarLinkLaneFallbackCount { get; private set; }
@@ -990,6 +1005,38 @@ namespace SharpGTA.World
         internal CarLink GetCarLink(int index)
         {
             return carLinks[index];
+        }
+
+        /// <summary>
+        /// Reproduces the car flag loop of PreparePathDataForType: a node whose live neighbours
+        /// number fewer than two becomes a dead end, and the pass repeats until nothing changes.
+        /// </summary>
+        private void MarkCarDeadEnds()
+        {
+            bool changed;
+            do
+            {
+                changed = false;
+                for (int i = 0; i < nodes.Count; i++)
+                {
+                    PathGraphNode node = nodes[i];
+                    if (node.Kind != PathKind.Car || node.IsDeadEnd)
+                        continue;
+                    int alive = 0;
+                    IList<int> nodeLinks = node.Links;
+                    for (int k = 0; k < nodeLinks.Count; k++)
+                    {
+                        if (!nodes[nodeLinks[k]].IsDeadEnd)
+                            alive++;
+                    }
+                    if (alive < 2)
+                    {
+                        node.SetDeadEnd();
+                        CarDeadEndCount++;
+                        changed = true;
+                    }
+                }
+            } while (changed);
         }
 
         private void CountNextTarget(PathGroup group, int slot)

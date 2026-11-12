@@ -82,6 +82,39 @@ namespace SharpGTA.Tests
     public sealed class WorldTests
     {
         [Test]
+        public void IplRotationsUseANormalisedAxis()
+        {
+            WorldTestDefinition definition = new WorldTestDefinition(GameId.III, DataSchema.III, 200);
+            ModelRegistry registry = new ModelRegistry(definition);
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n10, corner, generic, 1, 100, 0\nend\n"));
+            // IPL stores a unit quaternion: a quarter turn about Z is (0, 0, 0.707107, 0.707107),
+            // whose vector part is not unit length on its own.
+            IplDocument placements = new IplReader(DataSchema.III).Read(
+                "inst\n" +
+                "10, corner, 100, 200, 300, 1, 1, 1, 0, 0, 0.707107, 0.707107\n" +
+                "10, corner, 0, 0, 0, 1, 1, 1, 0, 0, 0.382683, 0.92388\n" +
+                "end\n");
+            StaticWorld world = new StaticWorld();
+            world.Bind(placements, registry, new LoadReport());
+
+            Assert.Equal(2, world.Instances.Count);
+            StaticInstance quarter = world.Instances[0];
+            Vector3 right = quarter.Transform.TransformPoint(new Vector3(1.0f, 0.0f, 0.0f));
+            Assert.Near(100.0f, right.X, 0.001f);
+            Assert.Near(199.0f, right.Y, 0.001f);
+            Assert.Near(300.0f, right.Z, 0.001f);
+            // No XY squash: the radius stays one unit.
+            Assert.Near(1.0f, (right - new Vector3(100.0f, 200.0f, 300.0f)).Length(), 0.001f);
+
+            StaticInstance eighth = world.Instances[1];
+            Vector3 diagonal = eighth.Transform.TransformPoint(new Vector3(1.0f, 0.0f, 0.0f));
+            Assert.Near(0.707107f, diagonal.X, 0.001f);
+            Assert.Near(-0.707107f, diagonal.Y, 0.001f);
+            Assert.Near(0.0f, diagonal.Z, 0.001f);
+        }
+
+        [Test]
         public void BindsRawIdsAndAllModelKindsIndependently()
         {
             WorldTestDefinition definition = new WorldTestDefinition(GameId.ViceCity, DataSchema.VC, 200);
