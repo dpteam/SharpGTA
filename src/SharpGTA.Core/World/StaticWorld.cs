@@ -23,8 +23,10 @@ namespace SharpGTA.World
         private const int SectorCount = SectorSide * SectorSide;
         private readonly List<StaticInstance> instances = new List<StaticInstance>();
         private readonly ReadOnlyCollection<StaticInstance> readOnlyInstances;
-        private readonly List<StaticInstance>[] sectors = new List<StaticInstance>[SectorCount];
+        private readonly List<StaticInstance>[] sectorMain = new List<StaticInstance>[SectorCount];
+        private readonly List<StaticInstance>[] sectorOverlap = new List<StaticInstance>[SectorCount];
         private readonly List<StaticInstance> unindexed = new List<StaticInstance>();
+        private int scanCode;
         private readonly List<ModelRegistry> registries = new List<ModelRegistry>();
         private readonly List<int> collisionRevisions = new List<int>();
 
@@ -90,18 +92,190 @@ namespace SharpGTA.World
             bool found = false;
             float closest = float.PositiveInfinity;
             int sectorIndex;
+            int code = NextScanCode();
             if (TryGetSector(x, y, out sectorIndex))
             {
-                List<StaticInstance> candidates = sectors[sectorIndex];
-                if (candidates != null)
-                {
-                    for (int i = 0; i < candidates.Count; i++)
-                        TestInstance(candidates[i], x, y, minZ, maxZ, ref found, ref closest, ref hit);
-                }
+                TestSectorList(sectorMain[sectorIndex], code, x, y, minZ, maxZ, ref found, ref closest, ref hit);
+                TestSectorList(sectorOverlap[sectorIndex], code, x, y, minZ, maxZ, ref found, ref closest, ref hit);
             }
             for (int i = 0; i < unindexed.Count; i++)
                 TestInstance(unindexed[i], x, y, minZ, maxZ, ref found, ref closest, ref hit);
             return found;
+        }
+
+        /// <summary>
+        /// Collects instances whose bound rect touches a sector overlapped by the square
+        /// around the view point. This is a sector-level candidate set: callers still apply
+        /// their own distance and visibility tests, exactly like CWorld sector scanning.
+        /// </summary>
+        public int QuerySectors(Vector3 center, float radius, IList<StaticInstance> result)
+        {
+            if (result == null)
+                throw new ArgumentNullException("result");
+            if (!(radius > 0.0f) || float.IsNaN(radius) || float.IsInfinity(radius))
+                throw new ArgumentOutOfRangeException("radius");
+            result.Clear();
+            if (float.IsNaN(center.X) || float.IsNaN(center.Y) ||
+                float.IsInfinity(center.X) || float.IsInfinity(center.Y))
+                return 0;
+
+            // Collision can arrive after the IPLs, which changes WorldBounds and therefore
+            // sector membership; refresh before reading the grid, as QueryVertical does.
+            EnsureCollisionBounds();
+            int code = NextScanCode();
+            int xstart = CoordinateToCell(center.X - radius);
+            int xend = CoordinateToCell(center.X + radius);
+            int ystart = CoordinateToCell(center.Y - radius);
+            int yend = CoordinateToCell(center.Y + radius);
+            for (int y = ystart; y <= yend; y++)
+            {
+                for (int x = xstart; x <= xend; x++)
+                {
+                    int index = y * SectorSide + x;
+                    AppendSectorList(sectorMain[index], code, result);
+                    AppendSectorList(sectorOverlap[index], code, result);
+                }
+            }
+            for (int i = 0; i < unindexed.Count; i++)
+                AppendInstance(unindexed[i], code, result);
+            return result.Count;
+        }
+
+        /// <summary>Sector column of a world coordinate, clamped to the original grid.</summary>
+        public static int SectorIndexX(float x)
+        {
+            return CoordinateToCell(x);
+        }
+
+        /// <summary>Sector row of a world coordinate, clamped to the original grid.</summary>
+        public static int SectorIndexY(float y)
+        {
+            return CoordinateToCell(y);
+        }
+
+        /// <summary>World X of a sector column's minimum edge.</summary>
+        public static float SectorOriginX(int column)
+        {
+            if (column < 0 || column >= SectorSide)
+                throw new ArgumentOutOfRangeException("column");
+            return GridMinimum + column * SectorSize;
+        }
+
+        /// <summary>World Y of a sector row's minimum edge.</summary>
+        public static float SectorOriginY(int row)
+        {
+            if (row < 0 || row >= SectorSide)
+                throw new ArgumentOutOfRangeException("row");
+            return GridMinimum + row * SectorSize;
+        }
+
+        /// <summary>
+        /// The sector's main or overlap list, or null when nothing touches that cell.
+        /// Mirrors CWorld::GetSector(x, y)->m_lists[ENTITYLIST_*]. The returned list is
+        /// read-only; callers must not mutate sector contents.
+        /// </summary>
+        public IList<StaticInstance> GetSectorList(int column, int row, bool overlap)
+        {
+            if (column < 0 || column >= SectorSide)
+                throw new ArgumentOutOfRangeException("column");
+            if (row < 0 || row >= SectorSide)
+                throw new ArgumentOutOfRangeException("row");
+            List<StaticInstance> list = (overlap ? sectorOverlap : sectorMain)[row * SectorSide + column];
+            return list == null ? null : list.AsReadOnly();
+        }
+
+        /// <summary>
+        /// Linear-scan equivalent of <see cref="QuerySectors"/> with the same candidate
+        /// predicate: instances whose bound rect touches the covered sector square, plus
+        /// every instance outside the grid. Used by tests and `--verify-sectors`, not per
+        /// frame. Cell overlap is compared with the same helper the index uses, so a rect
+        /// exactly on a sector seam cannot disagree between the two paths.
+        /// </summary>
+        public int QuerySectorsLinear(Vector3 center, float radius, IList<StaticInstance> result)
+        {
+            if (result == null)
+                throw new ArgumentNullException("result");
+            if (!(radius > 0.0f) || float.IsNaN(radius) || float.IsInfinity(radius))
+                throw new ArgumentOutOfRangeException("radius");
+            result.Clear();
+            if (float.IsNaN(center.X) || float.IsNaN(center.Y) ||
+                float.IsInfinity(center.X) || float.IsInfinity(center.Y))
+                return 0;
+
+            EnsureCollisionBounds();
+            int xstart = CoordinateToCell(center.X - radius);
+            int xend = CoordinateToCell(center.X + radius);
+            int ystart = CoordinateToCell(center.Y - radius);
+            int yend = CoordinateToCell(center.Y + radius);
+            for (int i = 0; i < instances.Count; i++)
+            {
+                StaticInstance instance = instances[i];
+                BoundingBox bounds = instance.WorldBounds;
+                if (!IsFullyInsideGrid(bounds))
+                {
+                    result.Add(instance);
+                    continue;
+                }
+                // The index stores an instance in every cell from cell(Min) to cell(Max)
+                // inclusive, so cell overlap is the exact predicate.
+                if (CoordinateToCell(bounds.Max.X) < xstart ||
+                    CoordinateToCell(bounds.Min.X) > xend)
+                    continue;
+                if (CoordinateToCell(bounds.Max.Y) < ystart ||
+                    CoordinateToCell(bounds.Min.Y) > yend)
+                    continue;
+                result.Add(instance);
+            }
+            return result.Count;
+        }
+
+        private int NextScanCode()
+        {
+            // A wrapped stamp could otherwise match an old one and silently skip instances,
+            // so clear every stamp before reusing the counter space.
+            if (scanCode == int.MaxValue)
+            {
+                for (int i = 0; i < instances.Count; i++)
+                    instances[i].ScanCode = 0;
+                scanCode = 0;
+            }
+            scanCode++;
+            return scanCode;
+        }
+
+        private static void AppendSectorList(List<StaticInstance> list, int code,
+            IList<StaticInstance> result)
+        {
+            if (list == null)
+                return;
+            for (int i = 0; i < list.Count; i++)
+                AppendInstance(list[i], code, result);
+        }
+
+        private static void AppendInstance(StaticInstance instance, int code,
+            IList<StaticInstance> result)
+        {
+            // An instance spanning several sectors appears in several overlap lists; the
+            // scan code keeps one entry per query, like CEntity::m_scanCode.
+            if (instance.ScanCode == code)
+                return;
+            instance.ScanCode = code;
+            result.Add(instance);
+        }
+
+        private static void TestSectorList(List<StaticInstance> list, int code, float x, float y,
+            float minZ, float maxZ, ref bool found, ref float closest, ref StaticWorldHit closestHit)
+        {
+            if (list == null)
+                return;
+            for (int i = 0; i < list.Count; i++)
+            {
+                StaticInstance instance = list[i];
+                if (instance.ScanCode == code)
+                    continue;
+                instance.ScanCode = code;
+                TestInstance(instance, x, y, minZ, maxZ, ref found, ref closest, ref closestHit);
+            }
         }
 
         private void Add(StaticInstance instance)
@@ -119,18 +293,24 @@ namespace SharpGTA.World
                 return;
             }
 
-            int minX = CoordinateToCell(bounds.Min.X);
-            int maxX = CoordinateToCell(bounds.Max.X);
-            int minY = CoordinateToCell(bounds.Min.Y);
-            int maxY = CoordinateToCell(bounds.Max.Y);
+            // CEntity::Add puts the entity into every sector its bound rect touches, in the
+            // main list only for the middle sector and in the overlap list everywhere else.
+            int minX = SectorIndexX(bounds.Min.X);
+            int maxX = SectorIndexX(bounds.Max.X);
+            int middleX = SectorIndexX((bounds.Min.X + bounds.Max.X) * 0.5f);
+            int minY = SectorIndexY(bounds.Min.Y);
+            int maxY = SectorIndexY(bounds.Max.Y);
+            int middleY = SectorIndexY((bounds.Min.Y + bounds.Max.Y) * 0.5f);
             for (int y = minY; y <= maxY; y++)
             {
                 for (int x = minX; x <= maxX; x++)
                 {
                     int index = y * SectorSide + x;
-                    if (sectors[index] == null)
-                        sectors[index] = new List<StaticInstance>();
-                    sectors[index].Add(instance);
+                    List<StaticInstance>[] lists =
+                        (x == middleX && y == middleY) ? sectorMain : sectorOverlap;
+                    if (lists[index] == null)
+                        lists[index] = new List<StaticInstance>();
+                    lists[index].Add(instance);
                 }
             }
         }
@@ -149,8 +329,11 @@ namespace SharpGTA.World
             if (!rebuild)
                 return;
 
-            for (int i = 0; i < sectors.Length; i++)
-                sectors[i] = null;
+            for (int i = 0; i < SectorCount; i++)
+            {
+                sectorMain[i] = null;
+                sectorOverlap[i] = null;
+            }
             unindexed.Clear();
             for (int i = 0; i < instances.Count; i++)
             {
@@ -231,14 +414,16 @@ namespace SharpGTA.World
 
         private static int CoordinateToCell(float coordinate)
         {
-            if (coordinate == GridMaximum)
-                return SectorSide - 1;
-            int cell = (int)Math.Floor((coordinate - GridMinimum) / SectorSize);
-            if (cell < 0)
+            if (float.IsNaN(coordinate))
+                return 0;
+            // Work in double and clamp before the cast: a huge or infinite radius must not
+            // reach an out-of-range integer conversion.
+            double cell = ((double)coordinate - GridMinimum) / SectorSize;
+            if (cell <= 0.0)
                 return 0;
             if (cell >= SectorSide)
                 return SectorSide - 1;
-            return cell;
+            return (int)Math.Floor(cell);
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Threading;
@@ -17,10 +18,21 @@ namespace SharpGTA.D3D9
         private readonly GameDataLoader loader;
         private readonly WorldResourceManager resources;
         private readonly D3D9ModelRenderer renderer;
+        private const float ViewRadius = 260.0f;
+        private const float StreamRadius = ViewRadius * 1.5f;
+        private const int VerifyFrameLimit = 30;
         private readonly FreeFlyCamera camera = new FreeFlyCamera();
         private readonly SimulationRuntime runtime;
         private readonly GameClock clock;
         private readonly TimeObjectController timeObjects = new TimeObjectController();
+        private readonly List<StaticInstance> candidates = new List<StaticInstance>();
+        private readonly List<StaticInstance> verifyBuffer = new List<StaticInstance>();
+        private readonly HashSet<StaticInstance> verifySet = new HashSet<StaticInstance>();
+        private readonly bool verifySectors;
+        private bool verifySectorsFailed;
+        private bool verifySectorsDone;
+        private bool sectorsPrinted;
+        private int verifyFrameCount;
         private readonly Vector3 spawn;
         private readonly bool[] keys = new bool[256];
         private bool exitRequested;
@@ -31,7 +43,8 @@ namespace SharpGTA.D3D9
         private bool disposed;
 
         internal WorldViewerApplication(Win32Window window, D3D9Device device,
-            GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget, int startHour)
+            GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget, int startHour,
+            bool verifySectors)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
@@ -51,6 +64,7 @@ namespace SharpGTA.D3D9
             renderer = new D3D9ModelRenderer(device, resources.Textures);
             resources.AttachRenderer(renderer);
             clock.SetTime(startHour, 0);
+            this.verifySectors = verifySectors;
             spawn = new Vector3(812.0f, -936.0f, 36.0f);
             ResetCamera();
         }
@@ -86,12 +100,33 @@ namespace SharpGTA.D3D9
                 if (exerciseReset && frame > 0)
                     device.Reset(window.Handle, device.Width, device.Height);
 
-                RenderSceneSnapshot snapshot = resources.BuildVisible(loader.World.Instances,
-                    camera.Position, 260.0f, frame == 0, timeObjects);
+                // Sector candidates cover the streaming radius, so the prefetch ring just
+                // outside the view radius stays inside one sector query.
+                int candidateCount = loader.World.QuerySectors(camera.Position, StreamRadius, candidates);
+                if (verifySectors && verifyFrameCount < VerifyFrameLimit)
+                {
+                    // The candidate set changes as the camera moves, so several frames are
+                    // verified. Only the first result is printed; a long menu-driven run
+                    // stops verifying after the limit to keep the debug cost bounded.
+                    if (!VerifySectorQuery(candidateCount, !verifySectorsDone))
+                        verifySectorsFailed = true;
+                    verifySectorsDone = true;
+                    verifyFrameCount++;
+                }
+                if (!sectorsPrinted)
+                {
+                    sectorsPrinted = true;
+                    Console.WriteLine("World-Sectors: candidates=" + candidateCount +
+                        " instances=" + loader.World.Count +
+                        " unindexed=" + loader.World.UnindexedCount);
+                }
+                RenderSceneSnapshot snapshot = resources.BuildVisible(candidates,
+                    camera.Position, ViewRadius, frame == 0, timeObjects);
                 renderer.Prepare(snapshot);
                 if (!diagnosticsPrinted && snapshot.DrawCalls.Count > 0)
                 {
                     diagnosticsPrinted = true;
+
                     Console.WriteLine("World-Time: hour=" + clock.Hours.ToString("00", CultureInfo.InvariantCulture) +
                         ":" + clock.Minutes.ToString("00", CultureInfo.InvariantCulture) +
                         " day=" + clock.DaysPassed +
@@ -157,7 +192,33 @@ namespace SharpGTA.D3D9
                     " failed=" + resources.ByteCacheFailures +
                     " oversize=" + resources.ByteCacheOversized);
             }
-            return 0;
+            return verifySectorsFailed ? 3 : 0;
+        }
+
+        /// <summary>
+        /// Cross-checks the sector index against a linear scan with the same candidate
+        /// predicate, so a broken grid can never silently drop world geometry.
+        /// </summary>
+        private bool VerifySectorQuery(int candidateCount, bool print)
+        {
+            int expected = loader.World.QuerySectorsLinear(camera.Position, StreamRadius, verifyBuffer);
+            verifySet.Clear();
+            for (int i = 0; i < candidates.Count; i++)
+                verifySet.Add(candidates[i]);
+            int extra = 0;
+            for (int i = 0; i < verifyBuffer.Count; i++)
+            {
+                if (!verifySet.Contains(verifyBuffer[i]))
+                    extra++;
+            }
+            int missing = candidates.Count - (expected - extra);
+            bool matched = missing == 0 && extra == 0;
+            if (print || !matched)
+            {
+                Console.WriteLine("World-Sectors-Verify: sectors=" + candidateCount +
+                    " linear=" + expected + " missing=" + missing + " extra=" + extra);
+            }
+            return matched;
         }
 
         public void Dispose()

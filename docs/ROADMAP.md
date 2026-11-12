@@ -39,7 +39,7 @@
 - [~] Model/TXD streaming slots: states/refcount/priority/Deferred, sync `LoadAllRequested`, visible-scene requests, LRU eviction и CPU/GPU unload hooks; полный `CStreaming` lifecycle и channel states ещё нет.
 - [~] Два async I/O channel (`AsyncByteCache`, 2 background threads) доставляют только bytes для DFF/TXD с bounded byte LRU (`--byte-budget`); decode/binding/mutation остаются на simulation thread, prefetch ring работает. IDE/IPL/COL/IMG loading и gameplay streaming пока синхронны.
 - [ ] III level collision loading и VC slot-based streamed collision как отдельные modules.
-- [~] Entity pools/handles, sector lists, buildings/objects/dummies, LOD/time visibility. Готовы fixed `EntityPool` с оригинальным handle/generation encoding, `GameClock`-driven `TimeObjectController` для IDE tobj (аллокация по часовому окну, `_nt`/`_dy` пары) и `--time`; sector lists, buildings/objects/dummies и gameplay entities (peds/vehicles) ещё нет.
+- [~] Entity pools/handles, sector lists, buildings/objects/dummies, LOD/time visibility. Готовы fixed `EntityPool` с оригинальным handle/generation encoding, `GameClock`-driven `TimeObjectController` для IDE tobj (аллокация по часовому окну, `_nt`/`_dy` пары), `--time` и оригинальная сетка `CWorld` (100×100×40, main/overlap, scan codes, `QuerySectors` + linear-verify); buildings/objects/dummies как entities и gameplay entities (peds/vehicles) ещё нет.
 - [ ] Полный CPhysical, collision response, moving entities, vertical line/LOS, dynamic objects.
 - [ ] Path graph preparation, population/car generators, zones/interiors.
 - [ ] Canonical world snapshot, stable iteration/IDs, replay и divergence dumps.
@@ -59,7 +59,7 @@
 - [x] Managed mesh/material/texture DTO, DFF converter, lazy texture cache и NullRenderer с `--render-preview`; реальные PLAYER модели проходят без native APIs.
 - [~] D3D9 COM interop без D3DX/D3DCompiler: vtable/HRESULT/layout/import tests, fixed-function triangle/3D meshes, managed vertex/index buffers и `DrawIndexedPrimitive`, managed A8R8G8B8 textures, alpha-blended quads/glyphs, directional light и D24S8; shaders/state cache ещё нет.
 - [~] Explicit Reset, COM/surface ownership, managed x86/x64 ABI tests и живой D3D9 triangle/readback/present smoke проходят; автоматическое device-loss recovery и полный игровой renderer ещё впереди.
-- [~] GTA frontend: MSHTML Launcher + III start/options/exit, мышь/клавиатура, настройки, разрешение и 5 языков работают на оригинальных TXD/GXT; VC frontend, saves и gameplay bootstrap ещё не подключены. III static DFF model preview и streamed static IPL world preview с free-fly/COLL query, draw-distance/LOD handoff, timed-object `GameClock` visibility, bounded LRU pools и async DFF/TXD byte delivery работают, но dynamic peds/vehicles/HUD passes, полный уровень streaming и полный renderer не реализованы.
+- [~] GTA frontend: MSHTML Launcher + III start/options/exit, мышь/клавиатура, настройки, разрешение и 5 языков работают на оригинальных TXD/GXT; VC frontend, saves и gameplay bootstrap ещё не подключены. III static DFF model preview и streamed static IPL world preview с free-fly/COLL query, sector-list candidates, draw-distance/LOD handoff, timed-object `GameClock` visibility, bounded LRU pools и async DFF/TXD byte delivery работают, но dynamic peds/vehicles/HUD passes, полный уровень streaming и полный renderer не реализованы.
 - [ ] Audio decoding/mixing и XP-compatible backend, NullAudio для simulation tests.
 - [ ] Installer/packaging без сторонних DLL, оригинальные assets остаются у пользователя.
 

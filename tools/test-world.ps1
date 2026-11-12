@@ -50,6 +50,27 @@ function Assert-WorldLog([string]$name, [string]$text) {
          -not $text.Contains("World-Render-Missing-Texture: LODerind02: indust1/newall6_16c128"))) {
         throw "$name has unexpected texture lookup failures: $($render.Value)."
     }
+    $sectors = [regex]::Match($text,
+        "World-Sectors: candidates=(\d+) instances=(\d+) unindexed=(\d+)")
+    if (-not $sectors.Success) {
+        throw "$name did not print sector diagnostics."
+    }
+    [int]$candidates = $sectors.Groups[1].Value
+    [int]$allInstances = $sectors.Groups[2].Value
+    if ($candidates -le 0 -or $candidates -ge $allInstances) {
+        throw "$name sector query did not narrow the instance scan: $($sectors.Value)."
+    }
+    $verify = [regex]::Match($text,
+        "World-Sectors-Verify: sectors=(\d+) linear=(\d+) missing=(\d+) extra=(\d+)")
+    if (-not $verify.Success) {
+        throw "$name did not verify the sector index."
+    }
+    if ([int]$verify.Groups[1].Value -ne [int]$verify.Groups[2].Value -or
+        [int]$verify.Groups[3].Value -ne 0 -or [int]$verify.Groups[4].Value -ne 0) {
+        throw "$name sector index disagrees with a linear scan: $($verify.Value)."
+    }
+    Write-Host "$name sectors: $($sectors.Value) (verified against linear scan)"
+
     $stream = [regex]::Match($text,
         "World-Streaming: models=(\d+)/(\d+) txds=(\d+)/(\d+) evictedModels=(\d+) evictedTxds=(\d+) remaining=(\d+) deferred=(\d+)")
     if (-not $stream.Success) {
@@ -145,7 +166,7 @@ function Invoke-World([string]$name, [string]$command, [string[]]$arguments,
     Write-Host "=== D3D9 world $name ==="
     [string[]]$allArgs = @($arguments) + @(
         "--world", "--game", "iii", "--root", $gameRootFull,
-        "--hidden", "--frames", "2", "--screenshot", $screenshot)
+        "--hidden", "--frames", "2", "--verify-sectors", "--screenshot", $screenshot)
     if ($exerciseReset) { $allArgs += "--exercise-reset" }
     [string[]]$lines = @(& $command @allArgs 2>&1 | ForEach-Object { $_.ToString() })
     $exitCode = $LASTEXITCODE
@@ -162,7 +183,8 @@ function Test-StreamingCapacity {
     Write-Host "=== Streaming capacity block ==="
     $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
     [string[]]$lines = @(& $exe --world --game iii --root $gameRootFull `
-        --hidden --frames 2 --stream-budget 20 --txd-budget 2 2>&1 | ForEach-Object { $_.ToString() })
+        --hidden --frames 2 --verify-sectors --stream-budget 20 --txd-budget 2 2>&1 |
+        ForEach-Object { $_.ToString() })
     $exitCode = $LASTEXITCODE
     $lines | ForEach-Object { Write-Host $_ }
     if ($exitCode -ne 0) { throw "Streaming capacity probe failed with code $exitCode." }
@@ -185,7 +207,7 @@ function Test-ByteBudget([string]$reference) {
     $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
     $small = Join-Path $root "artifacts/world-smoke/byte-budget-small.bmp"
     [string[]]$lines = @(& $exe --world --game iii --root $gameRootFull `
-        --hidden --frames 30 --exercise-reset --byte-budget 1 `
+        --hidden --frames 30 --exercise-reset --verify-sectors --byte-budget 1 `
         --screenshot $small 2>&1 | ForEach-Object { $_.ToString() })
     $exitCode = $LASTEXITCODE
     $lines | ForEach-Object { Write-Host $_ }
@@ -231,7 +253,8 @@ function Test-ByteBudget([string]$reference) {
 
     # Steady state: a large budget must settle instead of re-reading the same ring.
     [string[]]$steadyLines = @(& $exe --world --game iii --root $gameRootFull `
-        --hidden --frames 30 --exercise-reset 2>&1 | ForEach-Object { $_.ToString() })
+        --hidden --frames 30 --exercise-reset --verify-sectors 2>&1 |
+        ForEach-Object { $_.ToString() })
     if ($LASTEXITCODE -ne 0) { throw "Byte steady-state probe failed." }
     $steadyText = [string]::Join("`n", $steadyLines)
     $steady = [regex]::Match($steadyText,
@@ -270,7 +293,7 @@ function Test-WorldTime {
     foreach ($hour in $hours) {
         $screenshot = Join-Path $root "artifacts/world-smoke/world-time-$hour.bmp"
         [string[]]$lines = @(& $exe --world --game iii --root $gameRootFull `
-            --hidden --frames 3 --time $hour --screenshot $screenshot 2>&1 |
+            --hidden --frames 3 --verify-sectors --time $hour --screenshot $screenshot 2>&1 |
             ForEach-Object { $_.ToString() })
         $exitCode = $LASTEXITCODE
         $lines | ForEach-Object { Write-Host $_ }
@@ -323,7 +346,7 @@ function Test-MenuAndInput {
     $stdout = Join-Path $root "artifacts/world-smoke/menu-input.stdout.log"
     $stderr = Join-Path $root "artifacts/world-smoke/menu-input.stderr.log"
     $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
-    $arguments = "--menu --game iii --root `"$gameRootFull`" --frames 100000"
+    $arguments = "--menu --game iii --root `"$gameRootFull`" --frames 100000 --verify-sectors"
     $process = Start-Process -FilePath $exe -ArgumentList $arguments -WorkingDirectory $root `
         -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
     try {

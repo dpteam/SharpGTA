@@ -31,6 +31,7 @@ namespace SharpGTA.D3D9
             int txdBudget = 96;
             int byteBudgetMiB = 64;
             int startHour = 12;
+            bool verifySectors = false;
             int frames = 1;
             for (int i = 0; i < args.Length; i++)
             {
@@ -74,6 +75,8 @@ namespace SharpGTA.D3D9
                         return 2;
                     }
                 }
+                else if (args[i] == "--verify-sectors")
+                    verifySectors = true;
                 else if (args[i] == "--byte-budget" && i + 1 < args.Length)
                 {
                     // The value becomes a byte count in an int; cap it so a large MiB
@@ -208,7 +211,7 @@ namespace SharpGTA.D3D9
                 Console.WriteLine("Device: " + device.Description);
                 if (worldMode)
                     return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
-                        frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour);
+                        frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -230,7 +233,7 @@ namespace SharpGTA.D3D9
                         }
                         Console.WriteLine("Frontend: shutdown completed.");
                         if (frontend.Menu.WorldPreviewRequested)
-                            return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour);
+                            return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors);
                         return result;
                     }
                 }
@@ -283,14 +286,14 @@ namespace SharpGTA.D3D9
 
         private static int RunWorldViewer(Win32Window window, D3D9Device device,
             IGameFileSystem files, int frames, string screenshot, bool exerciseReset,
-            int streamBudget, int txdBudget, int byteBudgetMiB, int startHour)
+            int streamBudget, int txdBudget, int byteBudgetMiB, int startHour, bool verifySectors)
         {
             using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
             {
                 loader.LoadInitialImage();
                 using (WorldViewerApplication viewer =
                     new WorldViewerApplication(window, device, loader, streamBudget, txdBudget,
-                        byteBudgetMiB * 1024 * 1024, startHour))
+                        byteBudgetMiB * 1024 * 1024, startHour, verifySectors))
                     return viewer.Run(frames, screenshot, exerciseReset);
             }
         }
@@ -340,6 +343,7 @@ namespace SharpGTA.D3D9
             Console.WriteLine("  --stream-budget N / --txd-budget N: world model/TXD capacities (defaults 512/96).");
             Console.WriteLine("  --byte-budget N: async DFF/TXD byte cache size in MiB (default 64).");
             Console.WriteLine("  --time H: start the world clock at game hour 0..23 (default 12).");
+            Console.WriteLine("  --verify-sectors: cross-check the sector index against a linear scan (exit 3 on mismatch).");
             Console.WriteLine("  --import-settings FILE and --export-settings FILE share launcher settings.");
             Console.WriteLine("  --exercise-reset releases cached surfaces and resets between frames.");
             Console.WriteLine("  No D3DX, external DLL or game data is required for triangle mode.");

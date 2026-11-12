@@ -59,6 +59,16 @@ World host кодирует ключи как `dff:NAME` / `txd:NAME`, prefetch-
 
 `StaticWorldScene` учитывает time-фильтр до draw distance и LOD handoff, поэтому скрытые timed-модели не запрашиваются у стримера и не попадают в draw calls. Timed-модели участвуют в suffix LOD-парах и draw-distance handoff так же, как обычные, потому что оригинальный `IsSimple()` включает `MITYPE_TIME`. Неtimed placements всегда видимы; pool overflow не скрывает остальной мир, а считается в diagnostics. `OtherTimeModel` уже разрешён, но потребителя в renderer'е ещё нет.
 
+## Sector lists
+
+`StaticWorld` раскладывает инстансы по оригинальной сетке `CWorld`: 100×100 секторов по 40 units, начало в -2000, то есть мир -2000..2000. Инстанс попадает в каждый сектор, которого касается его `WorldBounds`; только в middle-секторе (`xmid/ymid` по центру bounds) он лежит в main-листе, во всех остальных покрытых ячейках — в overlap-листе, как `CEntity::Add`. Инстансы, чьи bounds выходят за сетку, идут в `unindexed` и всегда попадают в выборку.
+
+Запрос `QuerySectors(center, radius, results)` обходит только сектора вокруг точки и склеивает main+overlap; повторные попадания одного инстанса отсекаются scan code (`CEntity::m_scanCode`), поэтому разложение по нескольким секторам не даёт дублей ни в рендере, ни в collision-запросе. Это candidate set уровня секторов: distance, LOD и time-фильтры применяются вызывающим кодом, как в `CWorld`.
+
+`QuerySectorsLinear` повторяет тот же предикат линейным сканом (сравнение по индексам ячеек, поэтому seam-границы не дают расхождений), и `--verify-sectors` сверяет множества (`missing`/`extra`) на нескольких кадрах, поэтому сломанная сетка не может тихо потерять геометрию. Оба запроса вызывают `EnsureCollisionBounds`, потому что COL может прийти после IPL и изменить bounds. World preview запрашивает кандидатов с запасом на streaming-радиус (1.5× view radius), чтобы prefetch-кольцо оставалось внутри одной выборки.
+
+Draw order теперь следует порядку секторов, то есть зависит от позиции камеры: при переходе между секторами alpha-blended перекрытия могут «прыгать», потому что сортировки прозрачности в renderer'е нет. Набор геометрии от этого не меняется, но это отличие от прежнего IPL-порядка, а не просто другой порядок.
+
 ## Zones и path data
 
 `ZoneWorld` хранит III/VC roots и исходные raw level IDs внутри выбранного profile. III `MAPZONE` заполняет отдельный map-level array; normal/navigation zones строят иерархию по алгоритму `CTheZones`. VC info/navigation/map arrays раздельны. Cull query объединяет флаги всех подходящих zones и берёт maximum wanted drop. VC occlusion сохраняет center после `z + height/2`, angle и quantized angle; это ещё не render-culling runtime.
@@ -109,7 +119,7 @@ Synthetic D3D9 tests фиксируют slots, HRESULT, layouts, imports и BMP 
 - Animation/skinning runtime, D3D8 pre-instanced geometry, PAL4/DXT2/DXT4 и PS2-specific asset decoders;
 - IFP/SCM, full paths/zones/timecycle/handling/weapons configs;
 - byte-memory eviction tuning для нескольких каналов, полный `CStreaming` lifecycle и gameplay streaming;
-- sector lists, gameplay entities (peds/vehicles/objects) и dynamic LOD, full CPhysical/Collision/CWorld, weapons/AI;
+- gameplay entities (peds/vehicles/objects) и dynamic LOD, полный CPhysical/Collision/CWorld, weapons/AI;
 - gameplay camera/HUD/audio, полный игровой renderer/saves и frontend за пределами III;
 - VC frontend, gameplay bootstrap/save profiles и полный D3D9 streaming/LOD/dynamic renderer.
 

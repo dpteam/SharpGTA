@@ -36,6 +36,12 @@ namespace SharpGTA.World
         public bool HasArea { get; private set; }
         public BoundingBox WorldBounds { get; private set; }
 
+        /// <summary>
+        /// Last sector-scan stamp; mirrors CEntity::m_scanCode, 0 means unscanned. Sector
+        /// queries mutate it, so they are neither reentrant nor safe to call concurrently.
+        /// </summary>
+        public int ScanCode { get; internal set; }
+
         internal void RefreshWorldBounds()
         {
             WorldBounds = CalculateWorldBounds(this);
