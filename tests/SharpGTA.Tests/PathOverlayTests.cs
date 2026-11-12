@@ -84,6 +84,55 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void RouteAndConcatProducePolylineSegments()
+        {
+            PathGraph graph = Graph(ParseIII(
+                "car, -1, unused\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "2, 2, 0, 160, 0, 0, 160, 1, 1\n" +
+                "2, -1, 0, 320, 0, 0, 160, 1, 1\n" +
+                EmptyNodes(9) + "\n"));
+
+            RenderLineBatch route = PathOverlayBuilder.BuildRoute(graph, new int[] { 0, 1, 2 });
+            Assert.Equal(2, route.SegmentCount);
+            Assert.Equal(PathOverlayBuilder.RouteColor, route.Colors[0]);
+            AssertVector(Vector3.Zero, route.Positions[0]);
+            AssertVector(new Vector3(10.0f, 0.0f, 0.0f), route.Positions[1]);
+
+            // A single node is a valid (empty) route, not an error.
+            Assert.Equal(0, PathOverlayBuilder.BuildRoute(graph, new int[] { 0 }).SegmentCount);
+
+            RenderLineBatch graphBatch = PathOverlayBuilder.Build(graph, Vector3.Zero, 1000.0f, 100);
+            RenderLineBatch joined = PathOverlayBuilder.Concat(graphBatch, route);
+            Assert.Equal(graphBatch.SegmentCount + route.SegmentCount, joined.SegmentCount);
+
+            // Joining with an empty batch returns the other batch unchanged.
+            Assert.Equal(route.SegmentCount,
+                PathOverlayBuilder.Concat(new RenderLineBatch(new Vector3[0], new uint[0]), route)
+                    .SegmentCount);
+            Assert.Equal(route.SegmentCount,
+                PathOverlayBuilder.Concat(route, new RenderLineBatch(new Vector3[0], new uint[0]))
+                    .SegmentCount);
+
+            Assert.Throws<ArgumentNullException>(delegate
+            {
+                PathOverlayBuilder.BuildRoute(null, new int[] { 0, 1 });
+            });
+            Assert.Throws<ArgumentNullException>(delegate
+            {
+                PathOverlayBuilder.BuildRoute(graph, null);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                PathOverlayBuilder.BuildRoute(graph, new int[] { 0, 5 });
+            });
+            Assert.Throws<ArgumentNullException>(delegate
+            {
+                PathOverlayBuilder.Concat(null, route);
+            });
+        }
+
+        [Test]
         public void LineBatchRejectsMismatchedCounts()
         {
             Assert.Throws<ArgumentNullException>(delegate

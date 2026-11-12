@@ -101,5 +101,57 @@ namespace SharpGTA.Rendering
                     throw new ArgumentOutOfRangeException("kind");
             }
         }
+
+        /// <summary>Route segments use one bright colour so they stand out over the graph.</summary>
+        public const uint RouteColor = 0xFFFFFFFFu;
+
+        /// <summary>Builds the polyline of an already resolved node chain.</summary>
+        public static RenderLineBatch BuildRoute(PathGraph graph, int[] route)
+        {
+            if (graph == null)
+                throw new ArgumentNullException("graph");
+            if (route == null)
+                throw new ArgumentNullException("route");
+            if (route.Length < 2)
+                return new RenderLineBatch(new Vector3[0], new uint[0]);
+
+            Vector3[] positions = new Vector3[(route.Length - 1) * 2];
+            uint[] colors = new uint[positions.Length];
+            for (int i = 0; i < route.Length - 1; i++)
+            {
+                if (route[i] < 0 || route[i] >= graph.NodeCount ||
+                    route[i + 1] < 0 || route[i + 1] >= graph.NodeCount)
+                {
+                    throw new ArgumentOutOfRangeException("route",
+                        "Route contains a node index outside the graph.");
+                }
+                positions[i * 2] = graph.Nodes[route[i]].Position;
+                positions[i * 2 + 1] = graph.Nodes[route[i + 1]].Position;
+                colors[i * 2] = RouteColor;
+                colors[i * 2 + 1] = RouteColor;
+            }
+            return new RenderLineBatch(positions, colors);
+        }
+
+        /// <summary>Joins two batches so a caller can submit one line-list draw call.</summary>
+        public static RenderLineBatch Concat(RenderLineBatch first, RenderLineBatch second)
+        {
+            if (first == null)
+                throw new ArgumentNullException("first");
+            if (second == null)
+                return first;
+            if (second.SegmentCount == 0)
+                return first;
+            if (first.SegmentCount == 0)
+                return second;
+            Vector3[] positions = new Vector3[first.Positions.Length + second.Positions.Length];
+            uint[] colors = new uint[positions.Length];
+            Array.Copy(first.Positions, 0, positions, 0, first.Positions.Length);
+            Array.Copy(second.Positions, 0, positions, first.Positions.Length,
+                second.Positions.Length);
+            Array.Copy(first.Colors, 0, colors, 0, first.Colors.Length);
+            Array.Copy(second.Colors, 0, colors, first.Colors.Length, second.Colors.Length);
+            return new RenderLineBatch(positions, colors);
+        }
     }
 }

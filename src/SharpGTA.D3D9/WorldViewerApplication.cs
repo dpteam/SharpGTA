@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Threading;
 using SharpGTA.Assets;
+using SharpGTA.Data;
 using SharpGTA.Mathematics;
 using SharpGTA.Rendering;
 using SharpGTA.Runtime;
@@ -30,9 +31,15 @@ namespace SharpGTA.D3D9
         private readonly HashSet<StaticInstance> verifySet = new HashSet<StaticInstance>();
         private readonly bool verifySectors;
         private readonly bool pathOverlay;
+        private readonly bool pathRoute;
+        private readonly float[] routePoints;
+        private readonly PathKind routeKind;
+        private readonly float routeRadius;
+        private bool routeReported;
         private const int MaxPathOverlaySegments = 20000;
         private bool pathOverlayReported;
         private RenderLineBatch pathOverlayBatch;
+        private RenderLineBatch routeBatch;
         private int dynamicSpawned;
         private int dynamicDrawn;
         private int dynamicRejected;
@@ -52,7 +59,8 @@ namespace SharpGTA.D3D9
 
         internal WorldViewerApplication(Win32Window window, D3D9Device device,
             GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget, int startHour,
-            bool verifySectors, int spawnCount, string spawnModel, bool pathOverlay)
+            bool verifySectors, int spawnCount, string spawnModel, bool pathOverlay,
+            bool pathRoute, float[] routePoints, string pathKind, float pathRouteRadius)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
@@ -73,7 +81,11 @@ namespace SharpGTA.D3D9
             resources.AttachRenderer(renderer);
             clock.SetTime(startHour, 0);
             this.verifySectors = verifySectors;
-            this.pathOverlay = pathOverlay;
+            this.pathOverlay = pathOverlay || pathRoute;
+            this.pathRoute = pathRoute;
+            this.routePoints = routePoints;
+            this.routeKind = ParsePathKind(pathKind);
+            this.routeRadius = pathRouteRadius;
             spawn = new Vector3(812.0f, -936.0f, 36.0f);
             ResetCamera();
             if (spawnCount > 0)
@@ -448,7 +460,72 @@ namespace SharpGTA.D3D9
                     " nodes=" + graph.NodeCount +
                     " radius=" + (ViewRadius * 4.0f).ToString("0.#", CultureInfo.InvariantCulture));
             }
+            if (pathRoute)
+            {
+                RenderLineBatch routeBatch = BuildRouteOverlay(graph);
+                pathOverlayBatch = PathOverlayBuilder.Concat(pathOverlayBatch, routeBatch);
+            }
             return pathOverlayBatch;
+        }
+
+        /// <summary>
+        /// Resolves both route endpoints once and draws the node chain in a single colour. The
+        /// endpoints live in the command line, so the search result cannot change between frames.
+        /// </summary>
+        private RenderLineBatch BuildRouteOverlay(PathGraph graph)
+        {
+            if (routeBatch != null)
+                return routeBatch;
+            Vector3 start = new Vector3(routePoints[0], routePoints[1], routePoints[2]);
+            Vector3 end = new Vector3(routePoints[3], routePoints[4], routePoints[5]);
+            PathGraphNode startNode;
+            float startDistance;
+            if (!graph.TryFindNearestNode(start, routeKind, routeRadius, out startNode,
+                out startDistance))
+            {
+                Console.WriteLine("Path-Overlay-Route: found=false reason=start-not-found");
+                routeBatch = new RenderLineBatch(new Vector3[0], new uint[0]);
+                return routeBatch;
+            }
+            PathGraphNode endNode;
+            float endDistance;
+            if (!graph.TryFindNearestNode(end, routeKind, routeRadius, out endNode, out endDistance))
+            {
+                Console.WriteLine("Path-Overlay-Route: found=false reason=end-not-found");
+                routeBatch = new RenderLineBatch(new Vector3[0], new uint[0]);
+                return routeBatch;
+            }
+            int[] route;
+            float length;
+            if (!graph.TryFindRoute(startNode.GlobalIndex, endNode.GlobalIndex, out route, out length))
+            {
+                Console.WriteLine("Path-Overlay-Route: found=false reason=disconnected" +
+                    " startComponent=" + startNode.GroupId +
+                    " endComponent=" + endNode.GroupId);
+                routeBatch = new RenderLineBatch(new Vector3[0], new uint[0]);
+                return routeBatch;
+            }
+            if (!routeReported)
+            {
+                routeReported = true;
+                Console.WriteLine("Path-Overlay-Route: kind=" + routeKind +
+                    " startNode=" + startNode.GlobalIndex +
+                    " endNode=" + endNode.GlobalIndex +
+                    " hops=" + (route.Length - 1) +
+                    " length=" + length.ToString("0.##", CultureInfo.InvariantCulture) +
+                    " component=" + startNode.GroupId);
+            }
+            routeBatch = PathOverlayBuilder.BuildRoute(graph, route);
+            return routeBatch;
+        }
+
+        private static PathKind ParsePathKind(string value)
+        {
+            if (value == "ped")
+                return PathKind.Ped;
+            if (value == "water")
+                return PathKind.Water;
+            return PathKind.Car;
         }
 
         private void SaveScreenshot(string path)

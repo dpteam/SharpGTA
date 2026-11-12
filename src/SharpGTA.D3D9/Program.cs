@@ -36,6 +36,10 @@ namespace SharpGTA.D3D9
             string spawnModel = null;
             int frames = 1;
             bool pathOverlay = false;
+            bool pathRoute = false;
+            float[] routePoints = new float[6];
+            string pathKind = "car";
+            float pathRadius = 200.0f;
             for (int i = 0; i < args.Length; i++)
             {
                 if (args[i] == "--hidden")
@@ -82,6 +86,49 @@ namespace SharpGTA.D3D9
                     verifySectors = true;
                 else if (args[i] == "--path-overlay")
                     pathOverlay = true;
+                else if (args[i] == "--path-route")
+                {
+                    if (i + 6 >= args.Length)
+                    {
+                        Console.Error.WriteLine("Missing six coordinates for --path-route.");
+                        return 2;
+                    }
+                    for (int p = 0; p < 6; p++)
+                    {
+                        if (!float.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture,
+                            out routePoints[p]) || float.IsNaN(routePoints[p]) ||
+                            float.IsInfinity(routePoints[p]))
+                        {
+                            Console.Error.WriteLine("Invalid coordinate for --path-route.");
+                            return 2;
+                        }
+                    }
+                    pathRoute = true;
+                }
+                else if (args[i] == "--path-kind")
+                {
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("Missing value for --path-kind.");
+                        return 2;
+                    }
+                    pathKind = args[++i];
+                    if (pathKind != "car" && pathKind != "ped" && pathKind != "water")
+                    {
+                        Console.Error.WriteLine("Invalid --path-kind; expected car, ped or water.");
+                        return 2;
+                    }
+                }
+                else if (args[i] == "--path-radius")
+                {
+                    if (i + 1 >= args.Length ||
+                        !float.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture,
+                            out pathRadius) || !(pathRadius > 0.0f))
+                    {
+                        Console.Error.WriteLine("Invalid --path-radius; expected a positive number.");
+                        return 2;
+                    }
+                }
                 else if (args[i] == "--spawn")
                 {
                     if (i + 1 >= args.Length)
@@ -233,7 +280,7 @@ namespace SharpGTA.D3D9
                 if (worldMode)
                     return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
                         frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
-                        spawnCount, spawnModel, pathOverlay);
+                        spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -256,7 +303,7 @@ namespace SharpGTA.D3D9
                         Console.WriteLine("Frontend: shutdown completed.");
                         if (frontend.Menu.WorldPreviewRequested)
                             return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
-                        spawnCount, spawnModel, pathOverlay);
+                        spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius);
                         return result;
                     }
                 }
@@ -310,14 +357,14 @@ namespace SharpGTA.D3D9
         private static int RunWorldViewer(Win32Window window, D3D9Device device,
             IGameFileSystem files, int frames, string screenshot, bool exerciseReset,
             int streamBudget, int txdBudget, int byteBudgetMiB, int startHour, bool verifySectors,
-            int spawnCount, string spawnModel, bool pathOverlay)
+            int spawnCount, string spawnModel, bool pathOverlay, bool pathRoute, float[] routePoints, string pathKind, float pathRadius)
         {
             using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
             {
                 loader.LoadInitialImage();
                 using (WorldViewerApplication viewer =
                     new WorldViewerApplication(window, device, loader, streamBudget, txdBudget,
-                        byteBudgetMiB * 1024 * 1024, startHour, verifySectors, spawnCount, spawnModel, pathOverlay))
+                        byteBudgetMiB * 1024 * 1024, startHour, verifySectors, spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius))
                     return viewer.Run(frames, screenshot, exerciseReset);
             }
         }

@@ -411,6 +411,28 @@ function Test-PathOverlay([string]$reference) {
         throw "Path overlay colours are missing: car=$car ped=$ped."
     }
     Write-Host "PASS path overlay draws $($overlay.Groups[1].Value) segments (car=$car ped=$ped pixels)."
+
+    # A resolved route must be drawn in its own colour on top of the network.
+    $routeShot = Join-Path $output "world-route.bmp"
+    [string[]]$routeLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 2 `
+        --path-route 812 -936 36 700 -700 36 --screenshot $routeShot 2>&1 |
+        ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Path route overlay run failed." }
+    $routeText = [string]::Join("`n", $routeLog)
+    if ($routeText -notmatch "Path-Overlay-Route: kind=Car .*hops=26 length=728\.49") {
+        throw "Path route overlay did not resolve the expected route: $routeText"
+    }
+    [byte[]]$routeBytes = [IO.File]::ReadAllBytes($routeShot)
+    $routeOffset = [BitConverter]::ToInt32($routeBytes, 10)
+    $routePixels = 0
+    for ($index = $routeOffset; $index -lt $routeBytes.Length - 3; $index += 4) {
+        if ($routeBytes[$index] -eq 255 -and $routeBytes[$index + 1] -eq 255 -and
+            $routeBytes[$index + 2] -eq 255) { $routePixels++ }
+    }
+    if ($routePixels -lt 100) {
+        throw "Path route overlay drew no route pixels: $routePixels."
+    }
+    Write-Host "PASS path route overlay draws $routePixels pixels."
 }
 
 function Test-DynamicEntities([string]$reference) {
