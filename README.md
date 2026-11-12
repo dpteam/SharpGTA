@@ -84,7 +84,9 @@ src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --world --game iii --root 
 
 Viewer строит оригинальные IPL placements, применяет model draw distance и оригинальный suffix LOD handoff, затем streamed DFF/TXD slots из `GTA3.IMG`/`TXD.IMG`. Материалы используют IDE TXD своей модели, затем `GENERIC.TXD` как fallback; чужие одноимённые textures не подставляются. Slots имеют refcount/приоритет/LRU/Deferred, а `--stream-budget N`/`--txd-budget N` задают capacities моделей/TXD (defaults 512/96). Нехватка capacity явно оставляет requests в queue и не превращает их в permanent failed models; near LOD используется как fallback, если detailed model недоступен.
 
-Работают `WASD` для движения, `Q/E` для высоты, обзор с RMB, `F` для возврата к исходной точке, `G` для COLL ground query, `Home` для сброса и Esc. Это free-fly camera без player physics, dynamic entities, async I/O и gameplay streaming. `tools/test-world.ps1` проверяет streamed resources, LOD-сцену, capacity block, BMP/Reset, переход из меню и управление на `net40` AnyCPU/x86 и `net9.0-windows`.
+DFF/TXD bytes читают два фоновых канала `IO/AsyncByteCache` с bounded byte LRU (`--byte-budget N` MiB, default 64) и prefetch-кольцом; decode и любая mutation мира выполняются на simulation thread. Первый кадр ждёт доставку, поэтому startup детерминирован, а дальше новый контент может появиться на кадр позже — это честный streaming lag, а не дыра в сцене.
+
+Работают `WASD` для движения, `Q/E` для высоты, обзор с RMB, `F` для возврата к исходной точке, `G` для COLL ground query, `Home` для сброса и Esc. Это free-fly camera без player physics, dynamic entities и gameplay streaming. `tools/test-world.ps1` проверяет streamed resources, LOD-сцену, capacity block, async byte budget, BMP/Reset, переход из меню и управление на `net40` AnyCPU/x86 и `net9.0-windows`.
 
 Для отдельной отладки DFF сохранён model preview:
 
@@ -114,7 +116,7 @@ src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --menu --import-settings "
 src\SharpGTA.D3D9\bin\Release\net40\SharpGTA.D3D9.exe --hidden --frames 2 --exercise-reset --screenshot artifacts\d3d9-reset.bmp
 ```
 
-D3D9 textures и static 3D vertex/index buffers используют managed pool; meshes рисуются через `DrawIndexedPrimitive` с оригинальными shared vertices/indices. Screen-space triangle/UI используют `DrawPrimitiveUP`, directional light и D24S8 работают для 3D. World models/TXD проходят через Core streaming slots с refcount/LRU; eviction освобождает GPU buffers/textures и CPU caches. Это синхронный пул ресурсов, не полный async `CStreaming` и не byte-memory budget. Menu/glyph rendering, frontend state/layout и hitboxes разделены; Headless по-прежнему не создаёт GPU/окно. Это не полноценный GTA renderer и не Windows XP VM test.
+D3D9 textures и static 3D vertex/index buffers используют managed pool; meshes рисуются через `DrawIndexedPrimitive` с оригинальными shared vertices/indices. Screen-space triangle/UI используют `DrawPrimitiveUP`, directional light и D24S8 работают для 3D. World models/TXD проходят через Core streaming slots с refcount/LRU; eviction освобождает GPU buffers/textures и CPU caches. Bytes доставляются двумя background channel'ами `AsyncByteCache` с byte-бюджетом, но decode/upload остаются на simulation thread, а gameplay streaming, IDE/IPL/COL channels и полный `CStreaming` lifecycle отсутствуют. Menu/glyph rendering, frontend state/layout и hitboxes разделены; Headless по-прежнему не создаёт GPU/окно. Это не полноценный GTA renderer и не Windows XP VM test.
 
 ## Проекты
 

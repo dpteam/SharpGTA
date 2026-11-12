@@ -51,7 +51,7 @@ function Assert-WorldLog([string]$name, [string]$text) {
         throw "$name has unexpected texture lookup failures: $($render.Value)."
     }
     $stream = [regex]::Match($text,
-        "World-Streaming: models=(\d+)/(\d+) txds=(\d+)/(\d+) evictedModels=(\d+) evictedTxds=(\d+) remaining=(\d+)")
+        "World-Streaming: models=(\d+)/(\d+) txds=(\d+)/(\d+) evictedModels=(\d+) evictedTxds=(\d+) remaining=(\d+) deferred=(\d+)")
     if (-not $stream.Success) {
         throw "$name did not print streaming diagnostics."
     }
@@ -63,7 +63,43 @@ function Assert-WorldLog([string]$name, [string]$text) {
         $streamModels -gt $modelCapacity -or $remaining -ne 0) {
         throw "$name has invalid streaming state: $($stream.Value)."
     }
+    $bytes = [regex]::Match($text,
+        "World-Bytes: cached=(\d+) bytes=(\d+)/(\d+) pending=(\d+) evicted=(\d+) failed=(\d+)")
+    if (-not $bytes.Success) {
+        throw "$name did not print async byte diagnostics."
+    }
+    if ([int]$bytes.Groups[2].Value -gt [int]$bytes.Groups[3].Value) {
+        throw "$name exceeded its async byte budget: $($bytes.Value)."
+    }
+    if ([int]$bytes.Groups[6].Value -ne 0) {
+        throw "$name has failed async byte reads: $($bytes.Value)."
+    }
     Write-Host "$name streaming: $($stream.Value)"
+    Write-Host "$name bytes: $($bytes.Value)"
+}
+
+function Assert-WorldFinal([string]$name, [string]$text) {
+    $final = [regex]::Match($text,
+        "World-Streaming-Final: models=(\d+)/\d+ txds=\d+/\d+ evictedModels=\d+ evictedTxds=\d+ remaining=(\d+) deferred=(\d+)")
+    if (-not $final.Success) {
+        throw "$name did not print final streaming diagnostics."
+    }
+    if ([int]$final.Groups[2].Value -ne 0 -or [int]$final.Groups[3].Value -ne 0) {
+        throw "$name ended with queued or deferred streaming work: $($final.Value)."
+    }
+    $bytesFinal = [regex]::Match($text,
+        "World-Bytes-Final: cached=\d+ bytes=(\d+)/(\d+) pending=\d+ evicted=\d+ failed=(\d+) oversize=(\d+)")
+    if (-not $bytesFinal.Success) {
+        throw "$name did not print final async byte diagnostics."
+    }
+    if ([int]$bytesFinal.Groups[3].Value -ne 0) {
+        throw "$name ended with failed async byte reads: $($bytesFinal.Value)."
+    }
+    if ([long]$bytesFinal.Groups[1].Value -gt [long]$bytesFinal.Groups[2].Value) {
+        throw "$name ended outside its async byte budget: $($bytesFinal.Value)."
+    }
+    Write-Host "$name final: $($final.Value)"
+    Write-Host "$name final bytes: $($bytesFinal.Value)"
 }
 
 function Assert-WorldBmp([string]$name, [string]$path) {
@@ -118,6 +154,7 @@ function Invoke-World([string]$name, [string]$command, [string[]]$arguments,
     $text = [string]::Join("`n", $lines)
     if ($exitCode -ne 0) { throw "$name failed with exit code $exitCode." }
     Assert-WorldLog $name $text
+    Assert-WorldFinal $name $text
     Assert-WorldBmp $name $screenshot
 }
 
@@ -141,6 +178,88 @@ function Test-StreamingCapacity {
         throw "Capacity-blocked TXD dependencies became permanent model failures."
     }
     Write-Host "PASS streaming capacity remains explicit and deferred: $($stream.Value)"
+}
+
+function Test-ByteBudget([string]$reference) {
+    Write-Host "=== Async byte budget ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    $small = Join-Path $root "artifacts/world-smoke/byte-budget-small.bmp"
+    [string[]]$lines = @(& $exe --world --game iii --root $gameRootFull `
+        --hidden --frames 30 --exercise-reset --byte-budget 1 `
+        --screenshot $small 2>&1 | ForEach-Object { $_.ToString() })
+    $exitCode = $LASTEXITCODE
+    $lines | ForEach-Object { Write-Host $_ }
+    if ($exitCode -ne 0) { throw "Byte budget probe failed with code $exitCode." }
+    $text = [string]::Join("`n", $lines)
+    $bytes = [regex]::Match($text,
+        "World-Bytes: cached=(\d+) bytes=(\d+)/(\d+) pending=(\d+) evicted=(\d+) failed=(\d+) oversize=(\d+)")
+    if (-not $bytes.Success) {
+        throw "Byte budget probe did not print async byte diagnostics."
+    }
+    $capacity = [long]$bytes.Groups[3].Value
+    if ($capacity -ne 1048576L) {
+        throw "Byte budget probe did not use a 1 MiB cache: $($bytes.Value)."
+    }
+    if ([int]$bytes.Groups[5].Value -le 0) {
+        throw "Byte budget probe never evicted under pressure: $($bytes.Value)."
+    }
+    if ([int]$bytes.Groups[6].Value -ne 0 -or $text -notmatch 'failedModels=0') {
+        throw "Byte budget pressure produced failures instead of streaming: $($bytes.Value)."
+    }
+    Assert-WorldLog "byte budget" $text
+    Assert-WorldFinal "byte budget" $text
+    Assert-WorldBmp "byte budget" $small
+    # A byte budget smaller than the working set must not change the image, and a
+    # payload larger than the whole budget must still be delivered to its decoder.
+    if (-not (Test-Path $reference)) {
+        throw "Byte budget comparison reference is missing: $reference."
+    }
+    $smallHash = (Get-FileHash $small).Hash
+    $referenceHash = (Get-FileHash $reference).Hash
+    if ($smallHash -ne $referenceHash) {
+        throw "Byte budget changed the rendered world frame."
+    }
+    $oversize = [regex]::Match($text,
+        "World-Bytes-Final: cached=\d+ bytes=\d+/(\d+) pending=\d+ evicted=\d+ failed=0 oversize=(\d+)")
+    if (-not $oversize.Success) {
+        throw "Byte budget probe did not report oversized payloads."
+    }
+    if ([int]$oversize.Groups[2].Value -le 0) {
+        throw "Byte budget probe never exercised the oversized-delivery path."
+    }
+    Write-Host "PASS async byte budget is enforced without changing the frame: $($bytes.Value)"
+
+    # Steady state: a large budget must settle instead of re-reading the same ring.
+    [string[]]$steadyLines = @(& $exe --world --game iii --root $gameRootFull `
+        --hidden --frames 30 --exercise-reset 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Byte steady-state probe failed." }
+    $steadyText = [string]::Join("`n", $steadyLines)
+    $steady = [regex]::Match($steadyText,
+        "World-Bytes-Final: cached=(\d+) bytes=\d+/\d+ pending=(\d+) evicted=(\d+) failed=0 oversize=\d+")
+    if (-not $steady.Success) {
+        throw "Byte steady-state probe did not print final diagnostics."
+    }
+    if ([int]$steady.Groups[3].Value -ne 0 -or [int]$steady.Groups[4].Value -ne 0) {
+        throw "Byte steady state kept re-reading or failing: $($steady.Value)."
+    }
+    if ([int]$steady.Groups[1].Value -le 0) {
+        throw "Byte steady state cached no prefetched bytes: $($steady.Value)."
+    }
+    Write-Host "PASS async byte cache reaches steady state: $($steady.Value)"
+
+    [string]$invalidError = Join-Path $root "artifacts/world-smoke/byte-budget-invalid.err.log"
+    [string]$invalidOutput = Join-Path $root "artifacts/world-smoke/byte-budget-invalid.out.log"
+    $invalidProcess = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru -Wait `
+        -ArgumentList @("--world", "--game", "iii", "--root", "`"$gameRootFull`"",
+            "--hidden", "--frames", "2", "--byte-budget", "0") `
+        -RedirectStandardError $invalidError -RedirectStandardOutput $invalidOutput
+    if ($invalidProcess.ExitCode -ne 2) {
+        throw "Invalid --byte-budget was not rejected: $((Get-Content $invalidError) -join ' ')"
+    }
+    if ((Get-Content $invalidError) -notmatch 'byte-budget') {
+        throw "Invalid --byte-budget did not report the expected message."
+    }
+    Write-Host "PASS invalid --byte-budget is rejected"
 }
 
 function Test-MenuAndInput {
@@ -387,6 +506,7 @@ try {
         throw "Managed world resources changed the frame after Reset."
     }
     Write-Host "Reset preserves the world BMP exactly."
+    Test-ByteBudget $reset
 
     Invoke-World "net9.0-windows" "dotnet" `
         @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `

@@ -29,6 +29,7 @@ namespace SharpGTA.D3D9
             bool noFrameLimit = false;
             int streamBudget = 512;
             int txdBudget = 96;
+            int byteBudgetMiB = 64;
             int frames = 1;
             for (int i = 0; i < args.Length; i++)
             {
@@ -69,6 +70,17 @@ namespace SharpGTA.D3D9
                         out txdBudget) || txdBudget <= 0)
                     {
                         Console.Error.WriteLine("Invalid --txd-budget value; expected a positive TXD count.");
+                        return 2;
+                    }
+                }
+                else if (args[i] == "--byte-budget" && i + 1 < args.Length)
+                {
+                    // The value becomes a byte count in an int; cap it so a large MiB
+                    // value cannot overflow into a negative or zero budget.
+                    if (!int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                        out byteBudgetMiB) || byteBudgetMiB <= 0 || byteBudgetMiB > 1024)
+                    {
+                        Console.Error.WriteLine("Invalid --byte-budget value; expected 1..1024 MiB.");
                         return 2;
                     }
                 }
@@ -186,7 +198,7 @@ namespace SharpGTA.D3D9
                 Console.WriteLine("Device: " + device.Description);
                 if (worldMode)
                     return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
-                        frames, screenshot, exerciseReset, streamBudget, txdBudget);
+                        frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -208,7 +220,7 @@ namespace SharpGTA.D3D9
                         }
                         Console.WriteLine("Frontend: shutdown completed.");
                         if (frontend.Menu.WorldPreviewRequested)
-                            return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget);
+                            return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB);
                         return result;
                     }
                 }
@@ -261,13 +273,14 @@ namespace SharpGTA.D3D9
 
         private static int RunWorldViewer(Win32Window window, D3D9Device device,
             IGameFileSystem files, int frames, string screenshot, bool exerciseReset,
-            int streamBudget, int txdBudget)
+            int streamBudget, int txdBudget, int byteBudgetMiB)
         {
             using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
             {
                 loader.LoadInitialImage();
                 using (WorldViewerApplication viewer =
-                    new WorldViewerApplication(window, device, loader, streamBudget, txdBudget))
+                    new WorldViewerApplication(window, device, loader, streamBudget, txdBudget,
+                        byteBudgetMiB * 1024 * 1024))
                     return viewer.Run(frames, screenshot, exerciseReset);
             }
         }
@@ -315,6 +328,7 @@ namespace SharpGTA.D3D9
             Console.WriteLine("  --frames 0 keeps the menu open; screenshots require a finite positive count.");
             Console.WriteLine("  --language 0..4, --resolution WxH, --no-vsync, --no-frame-limit.");
             Console.WriteLine("  --stream-budget N / --txd-budget N: world model/TXD capacities (defaults 512/96).");
+            Console.WriteLine("  --byte-budget N: async DFF/TXD byte cache size in MiB (default 64).");
             Console.WriteLine("  --import-settings FILE and --export-settings FILE share launcher settings.");
             Console.WriteLine("  --exercise-reset releases cached surfaces and resets between frames.");
             Console.WriteLine("  No D3DX, external DLL or game data is required for triangle mode.");

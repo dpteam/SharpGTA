@@ -27,9 +27,13 @@ namespace SharpGTA.D3D9
 
         private const int DefaultModelCapacity = 512;
         private const int DefaultTxdCapacity = 96;
+        private const int DefaultByteCapacity = 64 * 1024 * 1024;
+        private const int ByteWaitTimeoutMilliseconds = 30000;
+        private const int MaximumResourceBytes = 32 * 1024 * 1024;
         private readonly GameDataLoader loader;
         private readonly RenderResourceManager resources = new RenderResourceManager();
         private readonly ImgCatalog textures;
+        private readonly AsyncByteCache bytes;
         private readonly StreamingPool<string, TxdArchive> txds;
         private readonly StreamingPool<string, ModelResource> models;
         private readonly HashSet<string> knownFailures =
@@ -39,19 +43,26 @@ namespace SharpGTA.D3D9
         private readonly HashSet<string> missingTextures = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private D3D9ModelRenderer renderer;
         private StreamingLoadReport lastLoad;
+        private bool waitForBytes;
         private bool disposed;
 
         internal WorldResourceManager(GameDataLoader loader)
-            : this(loader, DefaultModelCapacity, DefaultTxdCapacity)
+            : this(loader, DefaultModelCapacity, DefaultTxdCapacity, DefaultByteCapacity)
         {
         }
 
         internal WorldResourceManager(GameDataLoader loader, int modelCapacity)
-            : this(loader, modelCapacity, DefaultTxdCapacity)
+            : this(loader, modelCapacity, DefaultTxdCapacity, DefaultByteCapacity)
         {
         }
 
         internal WorldResourceManager(GameDataLoader loader, int modelCapacity, int txdCapacity)
+            : this(loader, modelCapacity, txdCapacity, DefaultByteCapacity)
+        {
+        }
+
+        internal WorldResourceManager(GameDataLoader loader, int modelCapacity, int txdCapacity,
+            int byteCapacity)
         {
             if (loader == null)
                 throw new ArgumentNullException("loader");
@@ -59,8 +70,11 @@ namespace SharpGTA.D3D9
                 throw new ArgumentOutOfRangeException("modelCapacity");
             if (txdCapacity <= 0)
                 throw new ArgumentOutOfRangeException("txdCapacity");
+            if (byteCapacity <= 0)
+                throw new ArgumentOutOfRangeException("byteCapacity");
             this.loader = loader;
             textures = OpenTextureCatalog(loader.FileSystem);
+            bytes = new AsyncByteCache(byteCapacity, 2, ReadResourceBytes);
             txds = new StreamingPool<string, TxdArchive>(txdCapacity, TryLoadTxd, UnloadTxd,
                 StringComparer.OrdinalIgnoreCase);
             models = new StreamingPool<string, ModelResource>(modelCapacity, TryLoadModel, UnloadModel,
@@ -69,6 +83,9 @@ namespace SharpGTA.D3D9
             {
                 if (loader.FileSystem.FileExists("MODELS/GENERIC.TXD"))
                 {
+                    if (!bytes.WaitFor(TxdKey("generic"), ByteWaitTimeoutMilliseconds))
+                        throw new AssetFormatException("GENERIC.TXD bytes could not be read: " +
+                            (bytes.GetFailure(TxdKey("generic")) ?? "timed out"));
                     txds.Request("generic", int.MaxValue, true);
                     StreamingLoadReport generic = txds.LoadAllRequested();
                     if (generic.FailedCount != 0 || txds.GetState("generic") != StreamingState.Loaded)
@@ -80,10 +97,19 @@ namespace SharpGTA.D3D9
             {
                 models.Dispose();
                 txds.Dispose();
+                bytes.Dispose();
                 textures.Dispose();
                 throw;
             }
         }
+
+        internal long ByteCacheBytes { get { return bytes.CachedBytes; } }
+        internal int ByteCacheCount { get { return bytes.CachedCount; } }
+        internal int ByteCachePending { get { return bytes.PendingCount; } }
+        internal int ByteCacheEvictions { get { return bytes.EvictedCount; } }
+        internal int ByteCacheFailures { get { return bytes.FailedCount; } }
+        internal int ByteCacheOversized { get { return bytes.OversizedCount; } }
+        internal int ByteCacheCapacity { get { return bytes.MaximumBytes; } }
 
         internal int ModelCount { get { return models.LoadedCount; } }
         internal int TextureDictionaryCount { get { return txds.LoadedCount; } }
@@ -126,8 +152,20 @@ namespace SharpGTA.D3D9
 
         internal void RetryFailedModels()
         {
+            List<string> failedNames = new List<string>(failures.Keys);
             knownFailures.Clear();
             failures.Clear();
+            // Byte read failures are sticky by design; an explicit retry must clear them
+            // too, otherwise the model would immediately fail again with the same message.
+            for (int i = 0; i < failedNames.Count; i++)
+            {
+                ModelDefinition definition = loader.Models.Find(failedNames[i]);
+                if (definition == null)
+                    continue;
+                bytes.Forget(DffKey(failedNames[i]));
+                if (!string.IsNullOrEmpty(definition.Txd))
+                    bytes.Forget(TxdKey(definition.Txd));
+            }
         }
 
         public void Dispose()
@@ -147,13 +185,31 @@ namespace SharpGTA.D3D9
                 }
                 finally
                 {
-                    textures.Dispose();
+                    try
+                    {
+                        bytes.Dispose();
+                    }
+                    finally
+                    {
+                        textures.Dispose();
+                    }
                 }
             }
         }
 
         internal RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
             Vector3 center, float radius)
+        {
+            return BuildVisible(instances, center, radius, false);
+        }
+
+        /// <summary>
+        /// Requests visible models, then their bytes. Worker threads deliver bytes only;
+        /// decoding and world mutation stay on this simulation thread. The first frame
+        /// waits for its byte deliveries so startup is deterministic.
+        /// </summary>
+        internal RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
+            Vector3 center, float radius, bool waitForBytes)
         {
             if (instances == null)
                 throw new ArgumentNullException("instances");
@@ -162,45 +218,58 @@ namespace SharpGTA.D3D9
             if (disposed)
                 throw new ObjectDisposedException("WorldResourceManager");
 
+            bytes.Pump();
             models.ReleaseAll();
-            HashSet<string> requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < instances.Count; i++)
+            this.waitForBytes = waitForBytes;
+            try
             {
-                StaticInstance instance = instances[i];
-                if (!StaticWorldScene.IsVisible(instance, center, radius))
-                    continue;
-                float distanceSquared = (instance.Position - center).LengthSquared();
-                string name = instance.Model.Name;
-                if (knownFailures.Contains(name) || !requested.Add(name))
-                    continue;
-                int priority = distanceSquared <= 80.0f * 80.0f ? 3 :
-                    distanceSquared <= 160.0f * 160.0f ? 2 : 1;
-                models.Request(name, priority, false);
-            }
-            StreamingLoadReport visibleLoad = models.LoadAllRequested();
-            lastLoad = visibleLoad;
-            bool requestedFallback = false;
-            for (int i = 0; i < instances.Count; i++)
-            {
-                StaticInstance instance = instances[i];
-                if (!StaticWorldScene.IsLodFallbackCandidate(instance, center, radius))
-                    continue;
-                if (IsModelLoaded(instance.Model.RelatedModel))
-                    continue;
-                string name = instance.Model.Name;
-                if (knownFailures.Contains(name) || !requested.Add(name))
-                    continue;
-                models.Request(name, 0, false);
-                requestedFallback = true;
-            }
-            if (requestedFallback)
+                HashSet<string> requested = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int i = 0; i < instances.Count; i++)
+                {
+                    StaticInstance instance = instances[i];
+                    if (!StaticWorldScene.IsVisible(instance, center, radius))
+                        continue;
+                    float distanceSquared = (instance.Position - center).LengthSquared();
+                    string name = instance.Model.Name;
+                    if (knownFailures.Contains(name) || !requested.Add(name))
+                        continue;
+                    int priority = distanceSquared <= 80.0f * 80.0f ? 3 :
+                        distanceSquared <= 160.0f * 160.0f ? 2 : 1;
+                    models.Request(name, priority, false);
+                }
+                RequestBytesForNames(requested);
                 lastLoad = models.LoadAllRequested();
-            foreach (string name in requested)
+                bool requestedFallback = false;
+                for (int i = 0; i < instances.Count; i++)
+                {
+                    StaticInstance instance = instances[i];
+                    if (!StaticWorldScene.IsLodFallbackCandidate(instance, center, radius))
+                        continue;
+                    if (IsModelLoaded(instance.Model.RelatedModel))
+                        continue;
+                    string name = instance.Model.Name;
+                    if (knownFailures.Contains(name) || !requested.Add(name))
+                        continue;
+                    models.Request(name, 0, false);
+                    requestedFallback = true;
+                }
+                if (requestedFallback)
+                {
+                    RequestBytesForNames(requested);
+                    lastLoad = models.LoadAllRequested();
+                }
+                PrefetchBytes(instances, center, radius, radius * 1.5f);
+                foreach (string name in requested)
+                {
+                    if (models.GetState(name) != StreamingState.Failed)
+                        continue;
+                    knownFailures.Add(name);
+                    failures[name] = name + ": " + models.GetFailure(name);
+                }
+            }
+            finally
             {
-                if (models.GetState(name) != StreamingState.Failed)
-                    continue;
-                knownFailures.Add(name);
-                failures[name] = name + ": " + models.GetFailure(name);
+                this.waitForBytes = false;
             }
             return StaticWorldScene.BuildVisible(instances, center, radius, Resolve, ResolveTransforms,
                 IsModelLoaded);
@@ -209,6 +278,127 @@ namespace SharpGTA.D3D9
         private bool IsModelLoaded(ModelDefinition model)
         {
             return model != null && models.GetState(model.Name) == StreamingState.Loaded;
+        }
+
+        /// <summary>
+        /// Queues byte reads for the ring just outside the visible radius, so the next
+        /// camera move does not have to wait for the disk. Already decoded resources and
+        /// permanent read failures are never re-read.
+        /// </summary>
+        private void PrefetchBytes(IList<StaticInstance> instances, Vector3 center,
+            float visibleRadius, float prefetchRadius)
+        {
+            // Keep decode headroom: prefetch never fills the whole byte budget, otherwise
+            // it can evict bytes that the current frame is about to decode.
+            if (bytes.CachedBytes * 4 >= (long)bytes.MaximumBytes * 3)
+                return;
+            float nearSquared = visibleRadius * visibleRadius;
+            float farSquared = prefetchRadius * prefetchRadius;
+            for (int i = 0; i < instances.Count; i++)
+            {
+                StaticInstance instance = instances[i];
+                if (instance == null || instance.Model == null)
+                    continue;
+                float distanceSquared = (instance.Position - center).LengthSquared();
+                if (distanceSquared <= nearSquared || distanceSquared > farSquared)
+                    continue;
+                ModelDefinition definition = instance.Model;
+                if (!string.IsNullOrEmpty(definition.Txd) &&
+                    txds.GetState(definition.Txd) != StreamingState.Loaded)
+                    bytes.Request(TxdKey(definition.Txd));
+                if (models.GetState(definition.Name) != StreamingState.Loaded &&
+                    !knownFailures.Contains(definition.Name))
+                    bytes.Request(DffKey(definition.Name));
+            }
+        }
+
+        /// <summary>
+        /// Queues DFF/TXD reads for these models. Bytes arrive on worker threads; the
+        /// caller decodes them. Waiting frames wait per model inside the loader instead.
+        /// </summary>
+        private void RequestBytesForNames(ICollection<string> names)
+        {
+            foreach (string name in names)
+            {
+                ModelDefinition definition = loader.Models.Find(name);
+                if (definition == null)
+                    continue;
+                if (!string.IsNullOrEmpty(definition.Txd) &&
+                    txds.GetState(definition.Txd) != StreamingState.Loaded)
+                    bytes.Request(TxdKey(definition.Txd));
+                if (models.GetState(name) != StreamingState.Loaded)
+                    bytes.Request(DffKey(name));
+            }
+        }
+
+        private static string DffKey(string name)
+        {
+            return "dff:" + name;
+        }
+
+        private static string TxdKey(string name)
+        {
+            return "txd:" + name;
+        }
+
+        /// <summary>
+        /// Runs on the async worker threads. It only reads bytes; nothing here decodes
+        /// assets or mutates pools, caches or world state.
+        /// </summary>
+        private byte[] ReadResourceBytes(string key)
+        {
+            if (key.StartsWith("dff:", StringComparison.OrdinalIgnoreCase))
+            {
+                string dffName = key.Substring(4) + ".dff";
+                if (loader.Images.Find(dffName) != null)
+                    return loader.Images.Read(dffName);
+                if (loader.FileSystem.FileExists("MODELS/" + key.Substring(4) + ".DFF"))
+                    return loader.FileSystem.ReadAllBytes("MODELS/" + key.Substring(4) + ".DFF",
+                        MaximumResourceBytes);
+                throw new KeyNotFoundException("DFF '" + dffName + "' was not found in the game images.");
+            }
+
+            string name = key.Substring(4);
+            if (name.Equals("generic", StringComparison.OrdinalIgnoreCase) &&
+                loader.FileSystem.FileExists("MODELS/GENERIC.TXD"))
+                return loader.FileSystem.ReadAllBytes("MODELS/GENERIC.TXD", MaximumResourceBytes);
+            if (loader.Images.Find(name + ".txd") != null)
+                return loader.Images.Read(name + ".txd");
+            if (textures.Find(name + ".txd") != null)
+                return textures.Read(name + ".txd");
+            if (loader.FileSystem.FileExists("MODELS/" + name + ".TXD"))
+                return loader.FileSystem.ReadAllBytes("MODELS/" + name + ".TXD", MaximumResourceBytes);
+            throw new KeyNotFoundException("TXD '" + name + "' was not found in the game images.");
+        }
+
+        private StreamingLoadOutcome TakeOrRequestBytes(string key, out byte[] data,
+            out string failure)
+        {
+            failure = null;
+            if (bytes.TryTake(key, out data))
+                return StreamingLoadOutcome.Loaded;
+            failure = bytes.GetFailure(key);
+            if (failure != null)
+                return StreamingLoadOutcome.Failed;
+            if (waitForBytes)
+            {
+                // A waiting frame decodes one model at a time, so a small byte budget
+                // never has to hold the whole visible set at once.
+                if (bytes.WaitFor(key, ByteWaitTimeoutMilliseconds) &&
+                    bytes.TryTake(key, out data))
+                {
+                    failure = null;
+                    return StreamingLoadOutcome.Loaded;
+                }
+                failure = bytes.GetFailure(key) ??
+                    "Bytes for '" + key + "' did not arrive in time.";
+                return bytes.GetFailure(key) != null
+                    ? StreamingLoadOutcome.Failed
+                    : StreamingLoadOutcome.Deferred;
+            }
+            bytes.Request(key);
+            failure = "Bytes for '" + key + "' are still loading.";
+            return StreamingLoadOutcome.Deferred;
         }
 
         private GeometryRenderData[] Resolve(StaticInstance instance)
@@ -226,29 +416,20 @@ namespace SharpGTA.D3D9
         private StreamingLoadOutcome TryLoadTxd(string name, out TxdArchive archive, out string failure)
         {
             archive = null;
-            failure = null;
+            string key = TxdKey(name);
+            byte[] data;
+            StreamingLoadOutcome byteOutcome = TakeOrRequestBytes(key, out data, out failure);
+            if (byteOutcome != StreamingLoadOutcome.Loaded)
+                return byteOutcome;
+
+            bytes.Remove(key);
             try
             {
-                if (name.Equals("generic", StringComparison.OrdinalIgnoreCase) &&
-                    loader.FileSystem.FileExists("MODELS/GENERIC.TXD"))
-                {
-                    archive = loader.LoadTxd("MODELS/GENERIC.TXD");
-                }
-                else if (loader.Images.Find(name + ".txd") != null)
-                {
-                    archive = loader.LoadTxdEntry(name + ".txd");
-                }
-                else if (textures.Find(name + ".txd") != null)
-                {
-                    archive = TxdReader.Read(textures.Read(name + ".txd"));
-                }
-                else
-                {
-                    archive = loader.LoadTxd("MODELS/" + name + ".TXD");
-                }
+                archive = TxdReader.Read(data);
                 resources.AddDictionary(name, archive);
                 if (name.Equals("generic", StringComparison.OrdinalIgnoreCase))
                     resources.AddFallbackDictionary(archive);
+                failure = null;
                 return StreamingLoadOutcome.Loaded;
             }
             catch (Exception exception)
@@ -256,7 +437,7 @@ namespace SharpGTA.D3D9
                 if (!IsRecoverable(exception))
                     throw;
                 archive = null;
-                failure = exception.Message;
+                failure = "TXD '" + name + "' could not be decoded: " + exception.Message;
                 return StreamingLoadOutcome.Failed;
             }
         }
@@ -291,9 +472,19 @@ namespace SharpGTA.D3D9
                     : StreamingLoadOutcome.Failed;
             }
 
+            string key = DffKey(name);
+            byte[] data;
+            StreamingLoadOutcome byteOutcome = TakeOrRequestBytes(key, out data, out failure);
+            if (byteOutcome != StreamingLoadOutcome.Loaded)
+            {
+                txds.Release(definition.Txd);
+                return byteOutcome;
+            }
+
+            bytes.Remove(key);
             try
             {
-                DffDocument document = loader.LoadDffEntry(name + ".dff");
+                DffDocument document = DffReader.Read(data);
                 if (document.Clumps.Length != 1)
                     throw new AssetFormatException("Expected one clump for IPL model " + name + ".");
                 GeometryRenderData[] atomics = resources.GetClump(name, document, definition.Txd);
