@@ -262,6 +262,62 @@ function Test-ByteBudget([string]$reference) {
     Write-Host "PASS invalid --byte-budget is rejected"
 }
 
+function Test-WorldTime {
+    Write-Host "=== Game clock and timed objects ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    $hours = @(12, 21, 3)
+    $counts = @{}
+    foreach ($hour in $hours) {
+        $screenshot = Join-Path $root "artifacts/world-smoke/world-time-$hour.bmp"
+        [string[]]$lines = @(& $exe --world --game iii --root $gameRootFull `
+            --hidden --frames 3 --time $hour --screenshot $screenshot 2>&1 |
+            ForEach-Object { $_.ToString() })
+        $exitCode = $LASTEXITCODE
+        $lines | ForEach-Object { Write-Host $_ }
+        if ($exitCode -ne 0) { throw "World time probe at $hour failed with code $exitCode." }
+        $text = [string]::Join("`n", $lines)
+        $time = [regex]::Match($text,
+            "World-Time-Final: hour=(\d+):(\d+) day=(\d+) timed=(\d+)/(\d+) created=(\d+) destroyed=(\d+) rejected=(\d+)")
+        if (-not $time.Success) {
+            throw "World time probe at $hour did not print time diagnostics."
+        }
+        if ([int]$time.Groups[1].Value -ne $hour) {
+            throw "World clock ignored --time $hour : $($time.Value)."
+        }
+        if ([int]$time.Groups[7].Value -ne 0) {
+            throw "Timed object pool rejected placements at $hour : $($time.Value)."
+        }
+        if ([int]$time.Groups[8].Value -ne 0) {
+            throw "Timed object pool overflowed at $hour : $($time.Value)."
+        }
+        $counts[$hour] = [int]$time.Groups[4].Value
+        Assert-WorldLog "hour $hour" $text
+        Assert-WorldFinal "hour $hour" $text
+        Assert-WorldBmp "hour $hour" $screenshot
+    }
+    if ($counts[12] -le 0) {
+        throw "No day timed objects were allocated at 12:00."
+    }
+    if ($counts[21] -le $counts[12]) {
+        throw "Night timed objects were not allocated at 21:00 (day=$($counts[12]) night=$($counts[21]))."
+    }
+    Write-Host "PASS game clock drives timed-object pool: 12:00=$($counts[12]) 21:00=$($counts[21]) 03:00=$($counts[3])"
+
+    [string]$invalidError = Join-Path $root "artifacts/world-smoke/time-invalid.err.log"
+    [string]$invalidOutput = Join-Path $root "artifacts/world-smoke/time-invalid.out.log"
+    $invalidProcess = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru -Wait `
+        -ArgumentList @("--world", "--game", "iii", "--root", "`"$gameRootFull`"",
+            "--hidden", "--frames", "2", "--time", "24") `
+        -RedirectStandardError $invalidError -RedirectStandardOutput $invalidOutput
+    if ($invalidProcess.ExitCode -ne 2) {
+        throw "Invalid --time was not rejected: $((Get-Content $invalidError) -join ' ')"
+    }
+    if ((Get-Content $invalidError) -notmatch '--time') {
+        throw "Invalid --time did not report the expected message."
+    }
+    Write-Host "PASS invalid --time is rejected"
+}
+
 function Test-MenuAndInput {
     Write-Host "=== New Game -> world and live input ==="
     $stdout = Join-Path $root "artifacts/world-smoke/menu-input.stdout.log"
@@ -507,6 +563,7 @@ try {
     }
     Write-Host "Reset preserves the world BMP exactly."
     Test-ByteBudget $reset
+    Test-WorldTime
 
     Invoke-World "net9.0-windows" "dotnet" `
         @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `

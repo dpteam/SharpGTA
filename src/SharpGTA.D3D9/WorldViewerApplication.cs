@@ -5,6 +5,7 @@ using System.Threading;
 using SharpGTA.Assets;
 using SharpGTA.Mathematics;
 using SharpGTA.Rendering;
+using SharpGTA.Runtime;
 using SharpGTA.World;
 
 namespace SharpGTA.D3D9
@@ -17,6 +18,9 @@ namespace SharpGTA.D3D9
         private readonly WorldResourceManager resources;
         private readonly D3D9ModelRenderer renderer;
         private readonly FreeFlyCamera camera = new FreeFlyCamera();
+        private readonly SimulationRuntime runtime;
+        private readonly GameClock clock;
+        private readonly TimeObjectController timeObjects = new TimeObjectController();
         private readonly Vector3 spawn;
         private readonly bool[] keys = new bool[256];
         private bool exitRequested;
@@ -27,7 +31,7 @@ namespace SharpGTA.D3D9
         private bool disposed;
 
         internal WorldViewerApplication(Win32Window window, D3D9Device device,
-            GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget)
+            GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget, int startHour)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
@@ -35,13 +39,18 @@ namespace SharpGTA.D3D9
             if (modelBudget <= 0) throw new ArgumentOutOfRangeException("modelBudget");
             if (txdBudget <= 0) throw new ArgumentOutOfRangeException("txdBudget");
             if (byteBudget <= 0) throw new ArgumentOutOfRangeException("byteBudget");
+            if (startHour < 0 || startHour > 23) throw new ArgumentOutOfRangeException("startHour");
             this.window = window;
             this.device = device;
             this.loader = loader;
             loader.LoadStandard();
+            runtime = new SimulationRuntime(loader.Definition);
+            clock = new GameClock();
+            runtime.AddModule(clock);
             resources = new WorldResourceManager(loader, modelBudget, txdBudget, byteBudget);
             renderer = new D3D9ModelRenderer(device, resources.Textures);
             resources.AttachRenderer(renderer);
+            clock.SetTime(startHour, 0);
             spawn = new Vector3(812.0f, -936.0f, 36.0f);
             ResetCamera();
         }
@@ -60,6 +69,10 @@ namespace SharpGTA.D3D9
                 ProcessInput();
                 if (exitRequested)
                     break;
+                // The 30 Hz deterministic driver advances the clock one game minute per
+                // 30 rendered frames, so a preview never depends on wall-clock speed.
+                runtime.Step();
+                timeObjects.Update(loader.World.Instances, clock);
                 Vector3 previousPosition = camera.Position;
                 camera.Move(keys[87], keys[83], keys[65], keys[68], keys[81], keys[69], 1.0f / 30.0f);
                 if (pendingMoveKey >= 0 && (camera.Position - previousPosition).LengthSquared() > 0.0f)
@@ -74,11 +87,18 @@ namespace SharpGTA.D3D9
                     device.Reset(window.Handle, device.Width, device.Height);
 
                 RenderSceneSnapshot snapshot = resources.BuildVisible(loader.World.Instances,
-                    camera.Position, 260.0f, frame == 0);
+                    camera.Position, 260.0f, frame == 0, timeObjects);
                 renderer.Prepare(snapshot);
                 if (!diagnosticsPrinted && snapshot.DrawCalls.Count > 0)
                 {
                     diagnosticsPrinted = true;
+                    Console.WriteLine("World-Time: hour=" + clock.Hours.ToString("00", CultureInfo.InvariantCulture) +
+                        ":" + clock.Minutes.ToString("00", CultureInfo.InvariantCulture) +
+                        " day=" + clock.DaysPassed +
+                        " timed=" + timeObjects.AllocatedCount + "/" + timeObjects.Capacity +
+                        " created=" + timeObjects.CreatedCount +
+                        " destroyed=" + timeObjects.DestroyedCount +
+                        " rejected=" + timeObjects.RejectedCount);
                     Console.WriteLine("World-Render: models=" + resources.ModelCount + " txd=" + resources.TextureDictionaryCount +
                         " drawCalls=" + snapshot.DrawCalls.Count + " textures=" + renderer.TextureCount +
                         " failedModels=" + resources.FailedModelCount + " missingTextures=" + resources.MissingTextureCount +
@@ -116,6 +136,13 @@ namespace SharpGTA.D3D9
             }
             if (diagnosticsPrinted)
             {
+                Console.WriteLine("World-Time-Final: hour=" + clock.Hours.ToString("00", CultureInfo.InvariantCulture) +
+                    ":" + clock.Minutes.ToString("00", CultureInfo.InvariantCulture) +
+                    " day=" + clock.DaysPassed +
+                    " timed=" + timeObjects.AllocatedCount + "/" + timeObjects.Capacity +
+                    " created=" + timeObjects.CreatedCount +
+                    " destroyed=" + timeObjects.DestroyedCount +
+                    " rejected=" + timeObjects.RejectedCount);
                 Console.WriteLine("World-Streaming-Final: models=" + resources.ModelCount +
                     "/" + resources.ModelCapacity +
                     " txds=" + resources.TextureDictionaryCount + "/" + resources.TxdCapacity +

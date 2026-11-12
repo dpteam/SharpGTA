@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using SharpGTA.Collision;
+using SharpGTA.Runtime;
 
 namespace SharpGTA.World
 {
@@ -21,7 +22,7 @@ namespace SharpGTA.World
         private readonly ReadOnlyCollection<float> lodDistances;
 
         internal ModelDefinition(int id, ModelKind kind, string name, string txd,
-            IList<float> lodDistances, uint flags)
+            IList<float> lodDistances, uint flags, int timeOn, int timeOff)
         {
             Id = id;
             Kind = kind;
@@ -30,6 +31,8 @@ namespace SharpGTA.World
             this.lodDistances = new List<float>(lodDistances).AsReadOnly();
             FirstDamaged = FindFirstDamaged(this.lodDistances);
             Flags = flags;
+            TimeOn = timeOn;
+            TimeOff = timeOff;
         }
 
         public int Id { get; private set; }
@@ -38,6 +41,26 @@ namespace SharpGTA.World
         public string Txd { get; private set; }
         public IList<float> LodDistances { get { return lodDistances; } }
         public uint Flags { get; private set; }
+
+        /// <summary>True for IDE tobj models, whose visibility follows the game clock.</summary>
+        public bool IsTimed { get { return Kind == ModelKind.Timed; } }
+
+        /// <summary>IDE tobj hour window start; unused for non-timed models.</summary>
+        public int TimeOn { get; private set; }
+
+        /// <summary>IDE tobj hour window end, exclusive as in CClock::GetIsTimeInRange.</summary>
+        public int TimeOff { get; private set; }
+
+        /// <summary>The _nt/_dy counterpart of a timed model, resolved by name.</summary>
+        public ModelDefinition OtherTimeModel { get; internal set; }
+
+        /// <summary>Non-timed models are always in range; timed ones follow the clock.</summary>
+        public bool GetIsTimeInRange(GameClock clock)
+        {
+            if (clock == null)
+                throw new ArgumentNullException("clock");
+            return !IsTimed || clock.IsTimeInRange(TimeOn, TimeOff);
+        }
 
         /// <summary>Original m_firstDamaged derivation from non-increasing distances.</summary>
         public int FirstDamaged { get; private set; }

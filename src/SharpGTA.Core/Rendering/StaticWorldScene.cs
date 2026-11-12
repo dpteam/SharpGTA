@@ -9,18 +9,26 @@ namespace SharpGTA.Rendering
     public static class StaticWorldScene
     {
         /// <summary>
-        /// Applies model draw distance and the original LOD/non-LOD handoff. LOD
-        /// proxies appear only beyond the related model's largest draw distance.
+        /// Applies timed-object visibility, model draw distance and the original LOD/
+        /// non-LOD handoff. LOD proxies appear only beyond the related draw distance.
         /// </summary>
         public static bool IsVisible(StaticInstance instance, Vector3 center, float radius)
         {
-            return IsVisible(instance, center, radius, null);
+            return IsVisible(instance, center, radius, null, null);
         }
 
         public static bool IsVisible(StaticInstance instance, Vector3 center, float radius,
             Func<ModelDefinition, bool> relatedAvailable)
         {
+            return IsVisible(instance, center, radius, relatedAvailable, null);
+        }
+
+        public static bool IsVisible(StaticInstance instance, Vector3 center, float radius,
+            Func<ModelDefinition, bool> relatedAvailable, TimeObjectController timeObjects)
+        {
             if (instance == null || instance.Model == null)
+                return false;
+            if (timeObjects != null && !timeObjects.IsVisible(instance))
                 return false;
             float distanceSquared = (instance.Position - center).LengthSquared();
             if (distanceSquared > radius * radius)
@@ -38,8 +46,16 @@ namespace SharpGTA.Rendering
         public static bool IsLodFallbackCandidate(StaticInstance instance,
             Vector3 center, float radius)
         {
+            return IsLodFallbackCandidate(instance, center, radius, null);
+        }
+
+        public static bool IsLodFallbackCandidate(StaticInstance instance,
+            Vector3 center, float radius, TimeObjectController timeObjects)
+        {
             if (instance == null || instance.Model == null ||
                 instance.Model.RelatedModel == null)
+                return false;
+            if (timeObjects != null && !timeObjects.IsVisible(instance))
                 return false;
             float distanceSquared = (instance.Position - center).LengthSquared();
             if (distanceSquared > radius * radius)
@@ -54,13 +70,23 @@ namespace SharpGTA.Rendering
             Vector3 center, float radius, Func<StaticInstance, GeometryRenderData[]> modelResolver,
             Func<StaticInstance, Matrix[]> transformResolver)
         {
-            return BuildVisible(instances, center, radius, modelResolver, transformResolver, null);
+            return BuildVisible(instances, center, radius, modelResolver, transformResolver,
+                null, null);
         }
 
         public static RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
             Vector3 center, float radius, Func<StaticInstance, GeometryRenderData[]> modelResolver,
             Func<StaticInstance, Matrix[]> transformResolver,
             Func<ModelDefinition, bool> relatedAvailable)
+        {
+            return BuildVisible(instances, center, radius, modelResolver, transformResolver,
+                relatedAvailable, null);
+        }
+
+        public static RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
+            Vector3 center, float radius, Func<StaticInstance, GeometryRenderData[]> modelResolver,
+            Func<StaticInstance, Matrix[]> transformResolver,
+            Func<ModelDefinition, bool> relatedAvailable, TimeObjectController timeObjects)
         {
             if (instances == null)
                 throw new ArgumentNullException("instances");
@@ -74,7 +100,7 @@ namespace SharpGTA.Rendering
             for (int i = 0; i < instances.Count; i++)
             {
                 StaticInstance instance = instances[i];
-                if (!IsVisible(instance, center, radius, relatedAvailable))
+                if (!IsVisible(instance, center, radius, relatedAvailable, timeObjects))
                     continue;
                 GeometryRenderData[] atomics = modelResolver(instance);
                 if (atomics == null)

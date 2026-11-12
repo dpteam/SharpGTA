@@ -200,7 +200,7 @@ namespace SharpGTA.D3D9
         internal RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
             Vector3 center, float radius)
         {
-            return BuildVisible(instances, center, radius, false);
+            return BuildVisible(instances, center, radius, false, null);
         }
 
         /// <summary>
@@ -210,6 +210,12 @@ namespace SharpGTA.D3D9
         /// </summary>
         internal RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
             Vector3 center, float radius, bool waitForBytes)
+        {
+            return BuildVisible(instances, center, radius, waitForBytes, null);
+        }
+
+        internal RenderSceneSnapshot BuildVisible(IList<StaticInstance> instances,
+            Vector3 center, float radius, bool waitForBytes, TimeObjectController timeObjects)
         {
             if (instances == null)
                 throw new ArgumentNullException("instances");
@@ -227,7 +233,7 @@ namespace SharpGTA.D3D9
                 for (int i = 0; i < instances.Count; i++)
                 {
                     StaticInstance instance = instances[i];
-                    if (!StaticWorldScene.IsVisible(instance, center, radius))
+                    if (!StaticWorldScene.IsVisible(instance, center, radius, null, timeObjects))
                         continue;
                     float distanceSquared = (instance.Position - center).LengthSquared();
                     string name = instance.Model.Name;
@@ -243,7 +249,7 @@ namespace SharpGTA.D3D9
                 for (int i = 0; i < instances.Count; i++)
                 {
                     StaticInstance instance = instances[i];
-                    if (!StaticWorldScene.IsLodFallbackCandidate(instance, center, radius))
+                    if (!StaticWorldScene.IsLodFallbackCandidate(instance, center, radius, timeObjects))
                         continue;
                     if (IsModelLoaded(instance.Model.RelatedModel))
                         continue;
@@ -258,7 +264,7 @@ namespace SharpGTA.D3D9
                     RequestBytesForNames(requested);
                     lastLoad = models.LoadAllRequested();
                 }
-                PrefetchBytes(instances, center, radius, radius * 1.5f);
+                PrefetchBytes(instances, center, radius, radius * 1.5f, timeObjects);
                 foreach (string name in requested)
                 {
                     if (models.GetState(name) != StreamingState.Failed)
@@ -272,7 +278,7 @@ namespace SharpGTA.D3D9
                 this.waitForBytes = false;
             }
             return StaticWorldScene.BuildVisible(instances, center, radius, Resolve, ResolveTransforms,
-                IsModelLoaded);
+                IsModelLoaded, timeObjects);
         }
 
         private bool IsModelLoaded(ModelDefinition model)
@@ -286,7 +292,7 @@ namespace SharpGTA.D3D9
         /// permanent read failures are never re-read.
         /// </summary>
         private void PrefetchBytes(IList<StaticInstance> instances, Vector3 center,
-            float visibleRadius, float prefetchRadius)
+            float visibleRadius, float prefetchRadius, TimeObjectController timeObjects)
         {
             // Keep decode headroom: prefetch never fills the whole byte budget, otherwise
             // it can evict bytes that the current frame is about to decode.
@@ -301,6 +307,8 @@ namespace SharpGTA.D3D9
                     continue;
                 float distanceSquared = (instance.Position - center).LengthSquared();
                 if (distanceSquared <= nearSquared || distanceSquared > farSquared)
+                    continue;
+                if (timeObjects != null && !timeObjects.IsVisible(instance))
                     continue;
                 ModelDefinition definition = instance.Model;
                 if (!string.IsNullOrEmpty(definition.Txd) &&

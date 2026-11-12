@@ -51,6 +51,14 @@ World host использует два пула: модели (default 512, CLI 
 
 World host кодирует ключи как `dff:NAME` / `txd:NAME`, prefetch-ит ring `radius * 1.5` вперёд и декодирует `DffReader`/`TxdReader` на simulation thread, освобождая bytes сразу после `Remove`. Pending bytes дают `Deferred`, а не `Failed`. Первый кадр ожидает доставку per-model, поэтому startup детерминирован и малый byte budget не оставляет пустую сцену; последующие кадры только `Pump`, из-за чего новый контент может появиться на кадр позже — это и есть настоящий streaming lag. IDE/IPL/COL/IMG loading, gameplay streaming и полный `CStreaming` lifecycle остаются синхронными.
 
+## Entities и время
+
+`World/EntityPool<T>` — fixed-capacity пул с оригинальным `CPool` handle encoding: индекс в старших битах, 7-bit generation + free flag в младшем байте. `New` ищет свободный слот от текущего курсора с wrap-around, `Delete` откатывает курсор назад, `GetAt` возвращает null для `-1`, чужих и устаревших handle'ов, а generation переполняется на 128 переиспользованиях — как в оригинале. Пул не создаёт объекты сам: `New(entry)` атомарно резервирует слот и сохраняет запись, поэтому полуинициализированных слотов не бывает.
+
+`TimeObjectController` отслеживает IDE `tobj` инстансы, у которых открыто часовое окно. Оригинал держит entity и гейтит видимость в renderer/streaming коде; этот preview моделирует то же состояние слотом пула: инстанс держит слот ровно пока открыто окно, поэтому аллокация и освобождение следуют за игровыми часами. Окно — это `CClock::GetIsTimeInRange`: часы, конец эксклюзивен, переход через полночь поддержан. Время берётся из существующего `Runtime.GameClock`, который шагает детерминированным 30 Hz driver'ом (одна игровая минута на 30 кадров), а не по wall clock. Пары `_nt`/`_dy` резолвятся как `CTimeModelInfo::FindOtherTimeModel`: первый токен меняется на противоположный, хвост после токена отбрасывается, а switched-имя ищется точно (оригинал сравнивает префикс).
+
+`StaticWorldScene` учитывает time-фильтр до draw distance и LOD handoff, поэтому скрытые timed-модели не запрашиваются у стримера и не попадают в draw calls. Timed-модели участвуют в suffix LOD-парах и draw-distance handoff так же, как обычные, потому что оригинальный `IsSimple()` включает `MITYPE_TIME`. Неtimed placements всегда видимы; pool overflow не скрывает остальной мир, а считается в diagnostics. `OtherTimeModel` уже разрешён, но потребителя в renderer'е ещё нет.
+
 ## Zones и path data
 
 `ZoneWorld` хранит III/VC roots и исходные raw level IDs внутри выбранного profile. III `MAPZONE` заполняет отдельный map-level array; normal/navigation zones строят иерархию по алгоритму `CTheZones`. VC info/navigation/map arrays раздельны. Cull query объединяет флаги всех подходящих zones и берёт maximum wanted drop. VC occlusion сохраняет center после `z + height/2`, angle и quantized angle; это ещё не render-culling runtime.
@@ -101,7 +109,7 @@ Synthetic D3D9 tests фиксируют slots, HRESULT, layouts, imports и BMP 
 - Animation/skinning runtime, D3D8 pre-instanced geometry, PAL4/DXT2/DXT4 и PS2-specific asset decoders;
 - IFP/SCM, full paths/zones/timecycle/handling/weapons configs;
 - byte-memory eviction tuning для нескольких каналов, полный `CStreaming` lifecycle и gameplay streaming;
-- entities/pools, dynamic/time LOD, full CPhysical/Collision/CWorld, peds/vehicles/weapons/AI;
+- sector lists, gameplay entities (peds/vehicles/objects) и dynamic LOD, full CPhysical/Collision/CWorld, weapons/AI;
 - gameplay camera/HUD/audio, полный игровой renderer/saves и frontend за пределами III;
 - VC frontend, gameplay bootstrap/save profiles и полный D3D9 streaming/LOD/dynamic renderer.
 

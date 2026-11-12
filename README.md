@@ -86,7 +86,9 @@ Viewer строит оригинальные IPL placements, применяет 
 
 DFF/TXD bytes читают два фоновых канала `IO/AsyncByteCache` с bounded byte LRU (`--byte-budget N` MiB, default 64) и prefetch-кольцом; decode и любая mutation мира выполняются на simulation thread. Первый кадр ждёт доставку, поэтому startup детерминирован, а дальше новый контент может появиться на кадр позже — это честный streaming lag, а не дыра в сцене.
 
-Работают `WASD` для движения, `Q/E` для высоты, обзор с RMB, `F` для возврата к исходной точке, `G` для COLL ground query, `Home` для сброса и Esc. Это free-fly camera без player physics, dynamic entities и gameplay streaming. `tools/test-world.ps1` проверяет streamed resources, LOD-сцену, capacity block, async byte budget, BMP/Reset, переход из меню и управление на `net40` AnyCPU/x86 и `net9.0-windows`.
+Timed-объекты IDE (`tobj`) живут в `EntityPool` и создаются/освобождаются по игровым часам: `--time H` задаёт стартовый час (default 12), дальше `Runtime.GameClock` идёт детерминированным 30 Hz driver'ом — одна игровая минута на 30 кадров, не по wall clock. Окно видимости — часы с эксклюзивным концом и переходом через полночь. `_nt`/`_dy` пары резолвятся по имени, как в оригинале. В районе спавна ни одна timed-модель не попадает в радиус preview, поэтому day/night проба проверяет жизненный цикл пула, а не пиксели.
+
+Работают `WASD` для движения, `Q/E` для высоты, обзор с RMB, `F` для возврата к исходной точке, `G` для COLL ground query, `Home` для сброса и Esc. Это free-fly camera без player physics, dynamic entities и gameplay streaming. `tools/test-world.ps1` проверяет streamed resources, LOD-сцену, capacity block, async byte budget, clock/timed-object pools, BMP/Reset, переход из меню и управление на `net40` AnyCPU/x86 и `net9.0-windows`.
 
 Для отдельной отладки DFF сохранён model preview:
 

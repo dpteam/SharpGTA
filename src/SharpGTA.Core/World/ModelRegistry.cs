@@ -77,19 +77,19 @@ namespace SharpGTA.World
             {
                 VehicleRecord record = document.Vehicles[i];
                 Stage(record, record.Id, ModelKind.Vehicle, record.ModelName, record.TxdName,
-                    NoLodDistances, 0, pending, reservedIds, reservedNames);
+                    NoLodDistances, 0, 0, 0, pending, reservedIds, reservedNames);
             }
             for (int i = 0; i < document.Peds.Count; i++)
             {
                 PedRecord record = document.Peds[i];
                 Stage(record, record.Id, ModelKind.Ped, record.ModelName, record.TxdName,
-                    NoLodDistances, 0, pending, reservedIds, reservedNames);
+                    NoLodDistances, 0, 0, 0, pending, reservedIds, reservedNames);
             }
             for (int i = 0; i < document.Weapons.Count; i++)
             {
                 WeaponRecord record = document.Weapons[i];
                 Stage(record, record.Id, ModelKind.Weapon, record.ModelName, record.TxdName,
-                    new float[] { record.LodDistance }, 0, pending, reservedIds, reservedNames);
+                    new float[] { record.LodDistance }, 0, 0, 0, pending, reservedIds, reservedNames);
             }
             for (int i = 0; i < document.RawRecords.Count; i++)
             {
@@ -103,7 +103,7 @@ namespace SharpGTA.World
                 if (!int.TryParse(record.Tokens[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out id))
                     throw Error(record, "Invalid hier model ID '" + record.Tokens[0] + "'.");
                 Stage(record, id, ModelKind.Clump, record.Tokens[1], record.Tokens[2],
-                    NoLodDistances, 0, pending, reservedIds, reservedNames);
+                    NoLodDistances, 0, 0, 0, pending, reservedIds, reservedNames);
             }
 
             for (int i = 0; i < pending.Count; i++)
@@ -117,6 +117,51 @@ namespace SharpGTA.World
                     model.Collision = collision;
             }
             ResolveLodRelationships();
+            ResolveTimeModelRelationships();
+        }
+
+        /// <summary>
+        /// Resolves the timed-model pair the way CTimeModelInfo::FindOtherTimeModel does:
+        /// the first "_nt" becomes "_dy" and vice versa, and everything after the token is
+        /// dropped because the original writes a terminated three-character replacement.
+        /// The original then compares model names as a case-sensitive prefix; here the
+        /// switched name is looked up exactly (case-insensitively), which is equivalent for
+        /// the real III/VC names and cannot invent a pair for prefix-overlapping ones.
+        /// </summary>
+        private void ResolveTimeModelRelationships()
+        {
+            for (int i = 0; i < models.Length; i++)
+            {
+                ModelDefinition model = models[i];
+                if (model == null || model.Kind != ModelKind.Timed)
+                    continue;
+                string counterpart = SwapTimeSuffix(model.Name);
+                if (counterpart == null)
+                    continue;
+                ModelDefinition found = Find(counterpart);
+                if (found != null && found.Kind == ModelKind.Timed)
+                    model.OtherTimeModel = found;
+            }
+        }
+
+        private static string SwapTimeSuffix(string name)
+        {
+            int night = name.IndexOf("_nt", StringComparison.OrdinalIgnoreCase);
+            if (night >= 0)
+                return name.Substring(0, night) + "_dy";
+            int day = name.IndexOf("_dy", StringComparison.OrdinalIgnoreCase);
+            if (day >= 0)
+                return name.Substring(0, day) + "_nt";
+            return null;
+        }
+
+        /// <summary>
+        /// CBaseModelInfo::IsSimple is true for both MITYPE_SIMPLE and MITYPE_TIME, so timed
+        /// models take part in LOD pairing and draw-distance handoff exactly like plain ones.
+        /// </summary>
+        private static bool IsSimpleOrTimed(ModelDefinition model)
+        {
+            return model.Kind == ModelKind.Simple || model.Kind == ModelKind.Timed;
         }
 
         private void ResolveLodRelationships()
@@ -124,7 +169,7 @@ namespace SharpGTA.World
             for (int i = 0; i < models.Length; i++)
             {
                 ModelDefinition model = models[i];
-                if (model == null || model.Kind != ModelKind.Simple ||
+                if (model == null || !IsSimpleOrTimed(model) ||
                     model.LodDistances.Count == 0 ||
                     model.LodDistances[0] <= BigBuildingLodDistance ||
                     model.RelatedModel != null)
@@ -133,7 +178,7 @@ namespace SharpGTA.World
                 {
                     ModelDefinition candidate = models[j];
                     if (candidate == null || candidate == model ||
-                        candidate.Kind != ModelKind.Simple ||
+                        !IsSimpleOrTimed(candidate) ||
                         !SameLodSuffix(model.Name, candidate.Name))
                         continue;
                     model.RelatedModel = candidate;
@@ -171,12 +216,13 @@ namespace SharpGTA.World
             List<ModelDefinition> pending, bool[] reservedIds, HashSet<string> reservedNames)
         {
             Stage(record, record.Id, kind, record.ModelName, record.TxdName,
-                record.LodDistances, record.Flags, pending, reservedIds, reservedNames);
+                record.LodDistances, record.Flags, record.TimeOn, record.TimeOff,
+                pending, reservedIds, reservedNames);
         }
 
         private void Stage(RawDataRecord record, int id, ModelKind kind, string name,
-            string txd, IList<float> lodDistances, uint flags, List<ModelDefinition> pending,
-            bool[] reservedIds, HashSet<string> reservedNames)
+            string txd, IList<float> lodDistances, uint flags, int timeOn, int timeOff,
+            List<ModelDefinition> pending, bool[] reservedIds, HashSet<string> reservedNames)
         {
             if (id < 0 || id >= models.Length)
             {
@@ -189,7 +235,8 @@ namespace SharpGTA.World
                 throw Error(record, "Duplicate model name '" + name + "' (case-insensitive).");
 
             reservedIds[id] = true;
-            pending.Add(new ModelDefinition(id, kind, name, txd, lodDistances, flags));
+            pending.Add(new ModelDefinition(id, kind, name, txd, lodDistances, flags,
+                timeOn, timeOff));
         }
 
         private static AssetFormatException Error(RawDataRecord record, string message)
