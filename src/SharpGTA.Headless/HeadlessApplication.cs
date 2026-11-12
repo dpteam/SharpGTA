@@ -71,6 +71,13 @@ namespace SharpGTA.Headless
                     SimulationRuntime runtime = new SimulationRuntime(definition);
                     gameClock = new GameClock();
                     runtime.AddModule(gameClock);
+                    PathFollowerModule followers = null;
+                    if (options.HasSpawnCars)
+                    {
+                        followers = new PathFollowerModule(loader.PathGraph);
+                        SpawnCars(loader, options, followers);
+                        runtime.AddModule(followers);
+                    }
                     if (options.HasSpawnObjects)
                     {
                         SpawnObjects(loader, options);
@@ -92,6 +99,8 @@ namespace SharpGTA.Headless
                     output.WriteLine("Ticks: " + runtime.Clock.Tick.ToString(CultureInfo.InvariantCulture));
                     if (options.HasSpawnObjects)
                         WriteDynamicSummary(loader.World, options, output);
+                    if (followers != null)
+                        WritePathFollowSummary(followers, output);
                     output.WriteLine("Clock: day=" + gameClock.DaysPassed.ToString(CultureInfo.InvariantCulture) +
                         " time=" + gameClock.Hours.ToString("00", CultureInfo.InvariantCulture) + ":" +
                         gameClock.Minutes.ToString("00", CultureInfo.InvariantCulture) + ":" +
@@ -544,6 +553,89 @@ namespace SharpGTA.Headless
                     "->" + link.ToTile.ToString(CultureInfo.InvariantCulture) +
                     " from=" + Vector(link.FromPosition) + " to=" + Vector(link.ToPosition));
             }
+        }
+
+        /// <summary>
+        /// Spawns deterministic cars on the car network: each one takes the next car node with
+        /// links, walks a short greedy route through its neighbours, and follows it at a fixed
+        /// speed. No traffic rules, lane offsets or model variety yet.
+        /// </summary>
+        private static void SpawnCars(GameDataLoader loader, HeadlessOptions options,
+            PathFollowerModule followers)
+        {
+            ModelDefinition model = ResolveCarModel(loader, options);
+            PathGraph graph = loader.PathGraph;
+            int spawned = 0;
+            for (int i = 0; i < graph.NodeCount && spawned < options.SpawnCarCount; i++)
+            {
+                PathGraphNode node = graph.Nodes[i];
+                if (node.Kind != PathKind.Car || node.LinkCount == 0)
+                    continue;
+                int[] route = BuildGreedyRoute(graph, i, 40);
+                if (route.Length < 2)
+                    continue;
+                DynamicEntity entity;
+                if (!loader.World.TrySpawnEntity(WorldEntityKind.Vehicle, model, node.Position,
+                    Vector3.Zero, out entity))
+                    return;
+                if (!followers.Assign(entity, route, options.SpawnCarSpeed))
+                    continue;
+                spawned++;
+            }
+        }
+
+        private static ModelDefinition ResolveCarModel(GameDataLoader loader, HeadlessOptions options)
+        {
+            if (options.SpawnModel != null)
+            {
+                ModelDefinition named = loader.Models.Find(options.SpawnModel);
+                if (named == null)
+                {
+                    throw new CommandLineException("--spawn-model '" + options.SpawnModel +
+                        "' is not registered.");
+                }
+                return named;
+            }
+            ModelDefinition vehicle;
+            if (loader.Models.TryFindFirst(ModelKind.Vehicle, out vehicle))
+                return vehicle;
+            throw new CommandLineException(
+                "--spawn-cars needs a vehicle model; add --spawn-model NAME.");
+        }
+
+        /// <summary>Walks the lowest-numbered unvisited neighbour so the route is deterministic.</summary>
+        private static int[] BuildGreedyRoute(PathGraph graph, int start, int maximumHops)
+        {
+            List<int> route = new List<int>();
+            route.Add(start);
+            int current = start;
+            int previous = -1;
+            for (int hop = 0; hop < maximumHops; hop++)
+            {
+                IList<int> links = graph.Nodes[current].Links;
+                int best = -1;
+                for (int k = 0; k < links.Count; k++)
+                {
+                    int candidate = links[k];
+                    if (candidate == previous)
+                        continue;
+                    if (best < 0 || candidate < best)
+                        best = candidate;
+                }
+                if (best < 0)
+                    break;
+                route.Add(best);
+                previous = current;
+                current = best;
+            }
+            return route.ToArray();
+        }
+
+        private static void WritePathFollowSummary(PathFollowerModule followers, TextWriter output)
+        {
+            output.WriteLine("Path-Follow: vehicles=" + followers.Count.ToString(CultureInfo.InvariantCulture) +
+                " completed=" + followers.CompletedCount.ToString(CultureInfo.InvariantCulture) +
+                " travelled=" + followers.TravelledDistance.ToString("0.##", CultureInfo.InvariantCulture));
         }
 
         private static string PathKindName(PathKind kind)

@@ -47,6 +47,24 @@ namespace SharpGTA.World
             return byName.TryGetValue(name, out model) ? model : null;
         }
 
+        /// <summary>
+        /// First model of a kind in raw id order, so callers that need "some vehicle" stay
+        /// deterministic without depending on file order.
+        /// </summary>
+        public bool TryFindFirst(ModelKind kind, out ModelDefinition model)
+        {
+            for (int id = 0; id < models.Length; id++)
+            {
+                ModelDefinition candidate = models[id];
+                if (candidate == null || candidate.Kind != kind)
+                    continue;
+                model = candidate;
+                return true;
+            }
+            model = null;
+            return false;
+        }
+
         public bool TryGet(int id, out ModelDefinition model)
         {
             model = Find(id);

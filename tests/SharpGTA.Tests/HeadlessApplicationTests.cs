@@ -103,6 +103,7 @@ namespace SharpGTA.Tests
             temporary.WriteBytes("MODELS/GTA3.IMG", new byte[0]);
             temporary.WriteText("DATA/A.IDE",
                 "objs\n1, ground, generic, 1, 100, 0\nend\n" +
+                "cars\n130, landstal, landstal, car, LANDSTAL, LANDSTAL, normal, 10, 0, 1a, 0, 1.0\nend\n" +
                 "path\n" +
                 "car, -1, unused\n" +
                 "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
@@ -263,6 +264,28 @@ namespace SharpGTA.Tests
                 Assert.False(output.IndexOf("Path-Nearest:", StringComparison.Ordinal) >= 0);
                 // A world without path data must not pretend to have an empty graph.
                 Assert.False(output.IndexOf("Path-Graph:", StringComparison.Ordinal) >= 0);
+            }
+        }
+
+        [Test]
+        public void SpawnedCarsFollowTheCarNetwork()
+        {
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreatePathTree(temporary);
+                string first;
+                string second;
+                string error;
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-cars", "1",
+                    "--ticks", "120", "--state-at", "120" }, out first, out error), error);
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-cars", "1",
+                    "--ticks", "120", "--state-at", "120" }, out second, out error), error);
+                Assert.Equal(first, second);
+                // The synthetic chain is three ten-unit segments, driven at 12 units per second.
+                Assert.True(first.IndexOf(
+                    "Path-Follow: vehicles=1 completed=1 travelled=30",
+                    StringComparison.Ordinal) >= 0, first);
+                Assert.True(first.IndexOf("State@120:", StringComparison.Ordinal) >= 0);
             }
         }
 
