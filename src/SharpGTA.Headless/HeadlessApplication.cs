@@ -55,6 +55,8 @@ namespace SharpGTA.Headless
                             WritePathQuery(loader.Paths, options, output);
                         if (options.HasPathNearestQuery)
                             WritePathNearestQuery(loader, options, output);
+                        if (options.HasPathRouteQuery)
+                            WritePathRouteQuery(loader, options, output);
                         if (options.HasBuildingQuery)
                             WriteBuildingQuery(loader.World, options, output);
                         if (options.Verbose)
@@ -434,6 +436,64 @@ namespace SharpGTA.Headless
                 : loader.PathGraph;
         }
 
+        /// <summary>
+        /// Resolves both endpoints with the same weighted nearest-node search and then walks the
+        /// shortest route over the link distances. Disconnected endpoints are reported instead
+        /// of inventing a path.
+        /// </summary>
+        private static void WritePathRouteQuery(GameDataLoader loader, HeadlessOptions options,
+            TextWriter output)
+        {
+            if (loader.Paths.GroupCount == 0)
+            {
+                throw new CommandLineException(
+                    "--query-path-route requires loaded path data; add --standard.");
+            }
+            PathGraph graph = CreatePathGraph(loader, options);
+            Vector3 start = new Vector3(options.PathRouteStartX, options.PathRouteStartY,
+                options.PathRouteStartZ);
+            Vector3 end = new Vector3(options.PathRouteEndX, options.PathRouteEndY,
+                options.PathRouteEndZ);
+            string prefix = "Path-Route: kind=" + PathKindName(options.PathNearestKind) +
+                " radius=" + options.PathNearestRadius.ToString("R", CultureInfo.InvariantCulture);
+            PathGraphNode startNode;
+            float startDistance;
+            if (!graph.TryFindNearestNode(start, options.PathNearestKind, options.PathNearestRadius,
+                out startNode, out startDistance))
+            {
+                output.WriteLine(prefix + " startNode=-1 endNode=-1 found=false reason=start-not-found");
+                return;
+            }
+            PathGraphNode endNode;
+            float endDistance;
+            if (!graph.TryFindNearestNode(end, options.PathNearestKind, options.PathNearestRadius,
+                out endNode, out endDistance))
+            {
+                output.WriteLine(prefix + " startNode=" +
+                    startNode.GlobalIndex.ToString(CultureInfo.InvariantCulture) +
+                    " endNode=-1 found=false reason=end-not-found");
+                return;
+            }
+            int[] route;
+            float length;
+            if (!graph.TryFindRoute(startNode.GlobalIndex, endNode.GlobalIndex, out route, out length))
+            {
+                output.WriteLine(prefix + " startNode=" +
+                    startNode.GlobalIndex.ToString(CultureInfo.InvariantCulture) +
+                    " endNode=" + endNode.GlobalIndex.ToString(CultureInfo.InvariantCulture) +
+                    " found=false reason=disconnected" +
+                    " startComponent=" + startNode.GroupId.ToString(CultureInfo.InvariantCulture) +
+                    " endComponent=" + endNode.GroupId.ToString(CultureInfo.InvariantCulture));
+                return;
+            }
+            output.WriteLine(prefix + " startNode=" +
+                startNode.GlobalIndex.ToString(CultureInfo.InvariantCulture) +
+                " endNode=" + endNode.GlobalIndex.ToString(CultureInfo.InvariantCulture) +
+                " found=true hops=" + (route.Length - 1).ToString(CultureInfo.InvariantCulture) +
+                " length=" + length.ToString("R", CultureInfo.InvariantCulture) +
+                " component=" + startNode.GroupId.ToString(CultureInfo.InvariantCulture));
+        }
+
         private static string PathKindName(PathKind kind)
         {
             switch (kind)
@@ -640,6 +700,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --query-path GROUP NODE   Print one resolved path node position and next link.");
             output.WriteLine("  --query-path-nearest X Y Z  Find the closest path node; --path-kind car|ped|water, --path-radius R.");
             output.WriteLine("  --path-merge-distance R   Merge external path slots closer than R units (default 1, the original).");
+            output.WriteLine("  --query-path-route X Y Z X2 Y2 Z2  Shortest route between the nearest nodes of both points.");
             output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
             output.WriteLine("  --spawn-objects N [--spawn-model NAME]  Spawn N drifting gameplay objects and tick them.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");

@@ -193,6 +193,25 @@ namespace SharpGTA.Tests
                 Assert.True(output.IndexOf(
                     "Path-Nearest:", StringComparison.Ordinal) < 0, output);
 
+                // The four synthetic nodes sit ten units apart on one chain.
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
+                    "--query-path-route", "0", "0", "0", "30", "0", "0", "--path-radius", "5" },
+                    out output, out error), error);
+                Assert.True(output.IndexOf(
+                    "Path-Route: kind=car radius=5 startNode=0 endNode=3 found=true hops=3 length=30 component=1",
+                    StringComparison.Ordinal) >= 0, output);
+
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
+                    "--query-path-route", "500", "0", "0", "30", "0", "0", "--path-radius", "5" },
+                    out output, out error), error);
+                Assert.True(output.IndexOf("found=false reason=start-not-found",
+                    StringComparison.Ordinal) >= 0, output);
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
+                    "--query-path-route", "0", "0", "0", "500", "0", "0", "--path-radius", "5" },
+                    out output, out error), error);
+                Assert.True(output.IndexOf("endNode=-1 found=false reason=end-not-found",
+                    StringComparison.Ordinal) >= 0, output);
+
                 // The synthetic tree only has car paths, so a ped query must come back empty.
                 Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--standard",
                     "--query-path-nearest", "0", "0", "0", "--path-kind", "ped", "--path-radius", "100" },
@@ -226,6 +245,9 @@ namespace SharpGTA.Tests
             Assert.True(error.IndexOf("--path-merge-distance", StringComparison.Ordinal) >= 0);
             Assert.Equal(2, Invoke(new string[] { "--path-merge-distance", "5" }, out output, out error));
             Assert.True(error.IndexOf("--root", StringComparison.Ordinal) >= 0);
+            Assert.Equal(2, Invoke(new string[] { "--query-path-route", "1", "2", "3" },
+                out output, out error));
+            Assert.True(error.IndexOf("--query-path-route", StringComparison.Ordinal) >= 0);
 
             using (TemporaryDirectory temporary = new TemporaryDirectory())
             {

@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Building:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -94,6 +94,18 @@ try {
         $pedNode = if ($game -eq "iii") { "node=2245 group=165 local=0" } else { "node=9176 group=1885 local=4" }
         if ($pedPath -notmatch "Path-Nearest: kind=ped .*found=true $pedNode ") {
             throw "$game ped path lookup did not find the expected node."
+        }
+        # Routing must follow real connections only: III is fragmented at the probe, VC connects.
+        $route = if ($game -eq "iii") {
+            Invoke-Case "iii path route" $net40 ($common + @("--standard", "--query-path-route", "812", "-936", "36", "700", "-700", "36", "--path-radius", "200", "--ticks", "0")) $false
+        } else {
+            Invoke-Case "vc path route" $net40 ($common + @("--standard", "--query-path-route", "-864", "-575", "10", "-700", "-400", "10", "--path-kind", "ped", "--path-radius", "300", "--ticks", "0")) $false
+        }
+        if ($game -eq "iii" -and $route -notmatch "Path-Route: kind=car .*found=false reason=disconnected startComponent=977 endComponent=728") {
+            throw "III path route no longer reports the expected disconnected components."
+        }
+        if ($game -eq "vc" -and $route -notmatch "Path-Route: kind=ped .*found=true hops=282 length=4847\.98") {
+            throw "VC path route did not find the expected 282-hop walk."
         }
         if ($game -eq "vc") {
             # VC water lanes live in the same file but their own kind, so they must be reachable

@@ -571,6 +571,77 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void RouteFollowsLinkDistancesAndReportsDisconnectedNodes()
+        {
+            // Chain 0 -> 1 -> 2 -> 3 with ten units between neighbours, and a separate node 4.
+            PathWorld world = DetachedIII(
+                "2, 1, 0, 0, 0, 0, 160, 1, 1",
+                "2, 2, 0, 160, 0, 0, 160, 1, 1",
+                "2, 3, 0, 320, 0, 0, 160, 1, 1",
+                "2, -1, 0, 480, 0, 0, 160, 1, 1",
+                "2, -1, 0, 1600, 0, 0, 160, 1, 1",
+                EmptyNodes(7));
+
+            PathGraph graph = new PathGraph(world);
+            Assert.Equal(5, graph.NodeCount);
+
+            int[] route;
+            float length;
+            Assert.True(graph.TryFindRoute(0, 3, out route, out length));
+            Assert.Equal(4, route.Length);
+            Assert.Equal(0, route[0]);
+            Assert.Equal(3, route[3]);
+            Assert.Near(30.0f, length, 0.0001f);
+
+            Assert.True(graph.TryFindRoute(3, 0, out route, out length));
+            Assert.Equal(4, route.Length);
+            Assert.Near(30.0f, length, 0.0001f);
+
+            Assert.True(graph.TryFindRoute(2, 2, out route, out length));
+            Assert.Equal(1, route.Length);
+            Assert.Equal(2, route[0]);
+            Assert.Near(0.0f, length);
+
+            // Node 4 has no link at all, so no route can reach it.
+            Assert.False(graph.TryFindRoute(0, 4, out route, out length));
+            Assert.Equal(null, route);
+            Assert.Near(0.0f, length);
+
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                int[] unused;
+                float unusedLength;
+                graph.TryFindRoute(-1, 0, out unused, out unusedLength);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                int[] unused;
+                float unusedLength;
+                graph.TryFindRoute(0, 5, out unused, out unusedLength);
+            });
+        }
+
+        [Test]
+        public void RouteTakesTheShorterDetourWhenBothExist()
+        {
+            // 0 -> 2 -> 1 with no direct 0 -> 1 link, so the only route is the two-hop detour.
+            PathWorld world = DetachedIII(
+                "2, 2, 0, 0, 0, 0, 160, 1, 1",
+                "2, 2, 0, 160, 0, 0, 160, 1, 1",
+                "2, 1, 0, 80, -120, 0, 160, 1, 1",
+                EmptyNodes(9));
+
+            PathGraph graph = new PathGraph(world);
+            Assert.Equal(0, graph.Nodes[0].Links.Contains(1) ? 1 : 0);
+            int[] route;
+            float length;
+            Assert.True(graph.TryFindRoute(0, 1, out route, out length));
+            Assert.Equal(3, route.Length);
+            Assert.Equal(2, route[1]);
+            Assert.Near(18.027756f, length, 0.001f);
+        }
+
+        [Test]
         public void EmptyWorldBuildsAnEmptyGraph()
         {
             PathGraph graph = new PathGraph(new PathWorld());

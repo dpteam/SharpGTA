@@ -72,6 +72,13 @@ namespace SharpGTA.Headless
         public float PathNearestX { get; set; }
         public float PathNearestY { get; set; }
         public float PathNearestZ { get; set; }
+        public bool HasPathRouteQuery { get; set; }
+        public float PathRouteStartX { get; set; }
+        public float PathRouteStartY { get; set; }
+        public float PathRouteStartZ { get; set; }
+        public float PathRouteEndX { get; set; }
+        public float PathRouteEndY { get; set; }
+        public float PathRouteEndZ { get; set; }
         public PathKind PathNearestKind { get; set; }
         public float PathNearestRadius { get; set; }
         public float PathMergeDistance { get; set; }
@@ -207,6 +214,16 @@ namespace SharpGTA.Headless
                         options.PathNearestKind = ParsePathKind(Value(args, ref i, argument));
                         options.HasPathKindOption = true;
                         break;
+                    case "--query-path-route":
+                        options.PathRouteStartX = ParseSingle(Value(args, ref i, argument), argument);
+                        options.PathRouteStartY = ParseSingle(Value(args, ref i, argument), argument);
+                        options.PathRouteStartZ = ParseSingle(Value(args, ref i, argument), argument);
+                        options.PathRouteEndX = ParseSingle(Value(args, ref i, argument), argument);
+                        options.PathRouteEndY = ParseSingle(Value(args, ref i, argument), argument);
+                        options.PathRouteEndZ = ParseSingle(Value(args, ref i, argument), argument);
+                        options.HasPathRouteQuery = true;
+                        options.HasExplicitAssetAction = true;
+                        break;
                     case "--path-radius":
                         options.PathNearestRadius = ParseSingle(Value(args, ref i, argument), argument);
                         options.HasPathRadiusOption = true;
@@ -241,10 +258,17 @@ namespace SharpGTA.Headless
             {
                 if (options.HasStateAt && options.StateAt > options.Ticks)
                     throw new CommandLineException("--state-at cannot be greater than --ticks.");
-                if ((options.HasPathKindOption || options.HasPathRadiusOption) && !options.HasPathNearestQuery)
-                    throw new CommandLineException("--path-kind and --path-radius require --query-path-nearest.");
-                if (options.HasPathNearestQuery && !(options.PathNearestRadius > 0.0f))
+                if ((options.HasPathKindOption || options.HasPathRadiusOption) &&
+                    !(options.HasPathNearestQuery || options.HasPathRouteQuery))
+                {
+                    throw new CommandLineException(
+                        "--path-kind and --path-radius require --query-path-nearest or --query-path-route.");
+                }
+                if ((options.HasPathNearestQuery || options.HasPathRouteQuery) &&
+                    !(options.PathNearestRadius > 0.0f))
+                {
                     throw new CommandLineException("--path-radius must be a positive number.");
+                }
                 if (options.HasPathMergeDistance && !(options.PathMergeDistance > 0.0f))
                     throw new CommandLineException("--path-merge-distance must be a positive number.");
                 if (options.GxtKey != null && options.GxtPath == null)
@@ -259,7 +283,7 @@ namespace SharpGTA.Headless
                     options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
                     options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
                     options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview ||
-                    options.HasPathNearestQuery || options.HasPathMergeDistance;
+                    options.HasPathNearestQuery || options.HasPathMergeDistance || options.HasPathRouteQuery;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)

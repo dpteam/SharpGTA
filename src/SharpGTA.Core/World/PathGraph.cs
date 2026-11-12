@@ -421,6 +421,163 @@ namespace SharpGTA.World
         /// <summary>Distance under which two external slots are treated as one crossing.</summary>
         public float ExternMergeDistance { get; private set; }
 
+        /// <summary>
+        /// Shortest route between two already resolved nodes over the symmetric links, weighted
+        /// by <see cref="PathGraphNode.LinkDistance"/>. Dijkstra with an explicit heap; the
+        /// original runs a bucket queue over the same distances, so the cost is the same but
+        /// equal-length ties may resolve differently. Returns false when the nodes are not
+        /// connected, which is common on III because its lanes are fragmented.
+        /// </summary>
+        public bool TryFindRoute(int startIndex, int goalIndex, out int[] route, out float length)
+        {
+            if (startIndex < 0 || startIndex >= nodes.Count)
+                throw new ArgumentOutOfRangeException("startIndex");
+            if (goalIndex < 0 || goalIndex >= nodes.Count)
+                throw new ArgumentOutOfRangeException("goalIndex");
+
+            route = null;
+            length = 0.0f;
+            if (startIndex == goalIndex)
+            {
+                route = new int[] { startIndex };
+                return true;
+            }
+
+            float[] best = new float[nodes.Count];
+            int[] previous = new int[nodes.Count];
+            bool[] settled = new bool[nodes.Count];
+            for (int i = 0; i < best.Length; i++)
+            {
+                best[i] = float.PositiveInfinity;
+                previous[i] = -1;
+            }
+            NodeHeap heap = new NodeHeap(nodes.Count);
+            best[startIndex] = 0.0f;
+            heap.Push(0.0f, startIndex);
+            bool found = false;
+            while (heap.Count != 0)
+            {
+                float distance;
+                int index;
+                heap.Pop(out distance, out index);
+                if (settled[index])
+                    continue;
+                settled[index] = true;
+                if (index == goalIndex)
+                {
+                    found = true;
+                    break;
+                }
+                PathGraphNode node = nodes[index];
+                IList<int> links = node.Links;
+                for (int i = 0; i < links.Count; i++)
+                {
+                    int target = links[i];
+                    if (settled[target])
+                        continue;
+                    float candidate = distance + node.LinkDistance(i);
+                    if (!(candidate < best[target]))
+                        continue;
+                    best[target] = candidate;
+                    previous[target] = index;
+                    heap.Push(candidate, target);
+                }
+            }
+            if (!found)
+                return false;
+
+            int count = 1;
+            for (int at = goalIndex; at != startIndex; at = previous[at])
+                count++;
+            int[] result = new int[count];
+            int position = count - 1;
+            for (int at = goalIndex; at != -1; at = previous[at])
+            {
+                result[position--] = at;
+                if (at == startIndex)
+                    break;
+            }
+            route = result;
+            length = best[goalIndex];
+            return true;
+        }
+
+        /// <summary>Min-heap keyed by (distance, node index) so equal lengths stay ordered.</summary>
+        private sealed class NodeHeap
+        {
+            private readonly float[] keys;
+            private readonly int[] items;
+            private int count;
+
+            internal NodeHeap(int capacity)
+            {
+                keys = new float[capacity * 2 + 1];
+                items = new int[capacity * 2 + 1];
+            }
+
+            internal int Count { get { return count; } }
+
+            internal void Push(float key, int item)
+            {
+                if (count == keys.Length)
+                    throw new InvalidOperationException("Path heap overflow.");
+                keys[count] = key;
+                items[count] = item;
+                int index = count++;
+                while (index > 0)
+                {
+                    int parent = (index - 1) / 2;
+                    if (!Less(index, parent))
+                        break;
+                    Swap(index, parent);
+                    index = parent;
+                }
+            }
+
+            internal void Pop(out float key, out int item)
+            {
+                key = keys[0];
+                item = items[0];
+                count--;
+                if (count == 0)
+                    return;
+                keys[0] = keys[count];
+                items[0] = items[count];
+                int index = 0;
+                while (true)
+                {
+                    int left = index * 2 + 1;
+                    if (left >= count)
+                        break;
+                    int smallest = left;
+                    int right = left + 1;
+                    if (right < count && Less(right, left))
+                        smallest = right;
+                    if (!Less(smallest, index))
+                        break;
+                    Swap(index, smallest);
+                    index = smallest;
+                }
+            }
+
+            private bool Less(int left, int right)
+            {
+                if (keys[left] != keys[right])
+                    return keys[left] < keys[right];
+                return items[left] < items[right];
+            }
+
+            private void Swap(int left, int right)
+            {
+                float key = keys[left];
+                keys[left] = keys[right];
+                keys[right] = key;
+                int item = items[left];
+                items[left] = items[right];
+                items[right] = item;
+            }
+        }
+
         /// <summary>Adjacency entries, including both directions of every tile and external link.</summary>
         public int LinkCount { get; private set; }
 
