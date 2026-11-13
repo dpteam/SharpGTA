@@ -22,7 +22,7 @@
 - [x] Model registry + static IPL world + sector broad phase + bounded diagnostics.
 - [x] RenderWare chunk inventory и static non-native DFF: Clump/FrameList/GeometryList/Atomic, geometry/morph, materials/texture refs, BinMesh list/strip, multi-clump и stale parent lengths.
 - [x] DFF HAnim, old/split Skin и MatFX (включая embedded textures) читаются на всех реальных DFF; counters в `--dff[-entry]/scan`.
-- [~] Animation/skinning/render behavior: IFP читается и сэмплируется на реальном скелете, split-skin деформируется точно (`bindDelta=0`), но playback на актёрах, blending, старые VC-скины и D3D8 pre-instanced/skinned GPU path ещё не сделаны.
+- [~] Animation/skinning/render behavior: IFP читается, сэмплируется на реальном скелете и уже крутится по 30 Hz (`AnimationPlayer`, `--ifp-play`), split-skin деформируется точно (`bindDelta=0`), но на актёрах клипов ещё нет, как и blending, старые VC-скины и GPU-скиннинг.
 - [x] Smoke `LoadStandard()` на двух локальных реальных III/VC trees, обоих runtimes; counts в `docs/REAL-ASSETS.md`.
 - [x] Начальная синхронная загрузка 30 VC COLL-ресурсов из IMG до первого IPL и реальные ground queries.
 - [ ] Расширенные golden manifests/запросы для retail variants; bounds-based streaming/eviction ещё впереди.
@@ -35,7 +35,8 @@
 - [x] IFP animation packages: `ANLF`/`ANPK`, `INFO`/`NAME`/`DGAN`/`CPAN`/`ANIM`, `KR00`/`KRT0`/`KRTS`; инверсия кватернионов, перевод абсолютных времён в дельты и снятие flips как в `CAnimManager::LoadAnimFile`. Агрегаты и именованные анимации обеих игр в `docs/REAL-ASSETS.md`.
 - [x] Сэмплирование IFP: `AnimationSampler` повторяет `CAnimBlendNode::FindKeyFrame`/`Update` (шаг по дельтам, slerp кватернионов и lerp translation, clamp в конце, wrap по длине последовательности), `AnimationBinding` привязывает последовательности к кадрам DFF по имени узла (skinned — по ped bone tag, как `RpAnimBlendClumpFindFrame`), поза пишется как в `FrameUpdateCallBack`: поворот заменяет, translation складывается с rest-позицией. Headless — `--ifp-model`/`--ifp-time` с `IFP-Pose`.
 - [x] CPU-скиннинг: `SkinDeformer`/`SkinBinding` строят `inverseBind * boneWorld`, привязывают кости к кадрам по bind-матрицам (в файле нет per-frame node index, а порядок кадров VC-педов не совпадает с порядком узлов), учитывают, что старые скины хранят bind-матрицу, а не её инверсию, и деформируют позиции/нормали. `--skin` печатает `IFP-Skin:` с `bindDelta` (bind-поза обязана вернуться в исходные вершины) и `unsupported=` для старых скинов, которые пока честно не поддержаны.
-- [ ] Playback-состояние (анимации на актёрах, blending/partial weights, скорость ассоциаций), старые VC-скины (нужна game-специфичная таблица bone name) и SCM VM с отдельными numeric opcode tables III/VC.
+- [x] Playback-часы: `AnimationPlayer` владеет временем клипа (double-аккумулятор, `Advance`/`Seek`, speed, looping, `Finished`), сэмплирует позу и отдаёт world-матрицы; `--ifp-play` прогоняет клип на 30 Hz и печатает `wraps`, `maxStep` (плавность) и `loopGap` (непрерывность петли).
+- [ ] Анимации на актёрах (`PathFollowerModule` → клип по скорости), blending/partial weights, старые VC-скины (нужна game-специфичная таблица bone name) и SCM VM с отдельными numeric opcode tables III/VC.
 
 ## Этап 2 — streaming и simulation world
 

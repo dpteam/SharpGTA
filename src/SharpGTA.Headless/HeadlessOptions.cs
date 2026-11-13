@@ -60,6 +60,8 @@ namespace SharpGTA.Headless
         public float IfpTime { get; set; }
         public bool HasIfpTime { get; set; }
         public bool Skin { get; set; }
+        public float IfpPlay { get; set; }
+        public bool HasIfpPlay { get; set; }
         public List<string> DffEntries { get; private set; }
         public ulong Ticks { get; set; }
         public ulong StateAt { get; set; }
@@ -195,6 +197,10 @@ namespace SharpGTA.Headless
                         break;
                     case "--skin":
                         options.Skin = true;
+                        break;
+                    case "--ifp-play":
+                        options.IfpPlay = ParseSingle(Value(args, ref i, argument), "--ifp-play");
+                        options.HasIfpPlay = true;
                         break;
                     case "--dff-entry":
                         options.DffEntries.Add(Value(args, ref i, argument));
@@ -382,6 +388,13 @@ namespace SharpGTA.Headless
                     throw new CommandLineException("--ifp-time must not be negative.");
                 if (options.Skin && options.IfpModel == null)
                     throw new CommandLineException("--skin requires --ifp-model.");
+                if (options.HasIfpPlay)
+                {
+                    if (options.IfpModel == null)
+                        throw new CommandLineException("--ifp-play requires --ifp-model.");
+                    if (options.IfpPlay < 0.0f)
+                        throw new CommandLineException("--ifp-play must not be negative.");
+                }
                 if (options.RenderPreview && options.DffPaths.Count + options.DffEntries.Count == 0)
                     throw new CommandLineException("--render-preview requires at least one --dff or --dff-entry.");
                 if (options.HasGroundQuery)

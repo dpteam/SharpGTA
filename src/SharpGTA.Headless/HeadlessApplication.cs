@@ -1053,6 +1053,86 @@ namespace SharpGTA.Headless
 
             if (options.Skin)
                 WriteIfpSkin(model, modelSource, animation, options.IfpTime, output);
+            if (options.HasIfpPlay)
+                WriteIfpPlay(model, modelSource, animation, options.IfpPlay, output);
+        }
+
+        /// <summary>
+        /// Runs the clip on a 30 Hz clock, the same rate the simulation steps at, and reports how far
+        /// the skeleton moves between ticks. This is the playback check: the pose must advance,
+        /// wrap once per clip length and never jump.
+        /// </summary>
+        private static void WriteIfpPlay(DffDocument model, string source, IfpAnimation animation,
+            float seconds, TextWriter output)
+        {
+            const float Step = 1.0f / 30.0f;
+            DffClump clump = model.Clumps[0];
+            AnimationPlayer player = AnimationPlayer.Create(clump, animation);
+            Matrix[] previous = player.ResolveWorld();
+            int ticks = (int)Math.Round(seconds * 30.0);
+            int wraps = 0;
+            float maxStep = 0.0f;
+            float previousTime = player.Time;
+            for (int i = 0; i < ticks; i++)
+            {
+                player.Advance(Step);
+                Matrix[] world = player.ResolveWorld();
+                for (int f = 0; f < world.Length; f++)
+                {
+                    float dx = world[f].Position.X - previous[f].Position.X;
+                    float dy = world[f].Position.Y - previous[f].Position.Y;
+                    float dz = world[f].Position.Z - previous[f].Position.Z;
+                    float shift = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                    if (shift > maxStep)
+                        maxStep = shift;
+                }
+                if (player.Time < previousTime)
+                    wraps++;
+                previousTime = player.Time;
+                previous = world;
+            }
+
+            StateWriter digest = new StateWriter();
+            for (int f = 0; f < previous.Length; f++)
+            {
+                digest.WriteSingle(previous[f].Position.X);
+                digest.WriteSingle(previous[f].Position.Y);
+                digest.WriteSingle(previous[f].Position.Z);
+            }
+
+            // A looping clip is only seamless when its first and last pose agree; report the gap
+            // instead of pretending the wrap is invisible.
+            Matrix[] first = AnimationSampler_SampleWorld(animation, player, 0.0f);
+            Matrix[] last = AnimationSampler_SampleWorld(animation, player, player.Duration);
+            float loopGap = 0.0f;
+            for (int f = 0; f < first.Length && f < last.Length; f++)
+            {
+                float dx = first[f].Position.X - last[f].Position.X;
+                float dy = first[f].Position.Y - last[f].Position.Y;
+                float dz = first[f].Position.Z - last[f].Position.Z;
+                float shift = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                if (shift > loopGap)
+                    loopGap = shift;
+            }
+
+            output.WriteLine("IFP-Play: model=" + source + " animation=" + animation.Name +
+                " ticks=" + ticks.ToString(CultureInfo.InvariantCulture) +
+                " duration=" + player.Duration.ToString("0.###", CultureInfo.InvariantCulture) +
+                " t=" + player.Time.ToString("0.###", CultureInfo.InvariantCulture) +
+                " finished=" + (player.Finished ? "yes" : "no") +
+                " wraps=" + wraps.ToString(CultureInfo.InvariantCulture) +
+                " maxStep=" + maxStep.ToString("0.####", CultureInfo.InvariantCulture) +
+                " loopGap=" + loopGap.ToString("0.####", CultureInfo.InvariantCulture) +
+                " hash=" + digest.ToHex());
+        }
+
+        private static Matrix[] AnimationSampler_SampleWorld(IfpAnimation animation,
+            AnimationPlayer player, float seconds)
+        {
+            AnimationPlayer probe = AnimationPlayer.Create(player.Binding.Clump, animation);
+            probe.Looping = false;
+            probe.Seek(seconds);
+            return probe.ResolveWorld();
         }
 
         /// <summary>
@@ -1330,6 +1410,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --ifp-model PATH|IMG:NAME  Bind that animation to a DFF skeleton and print the pose.");
             output.WriteLine("  --ifp-time SECONDS       Pose time for --ifp-model (default 0).");
             output.WriteLine("  --skin                   Deform skinned geometries with the sampled pose and print IFP-Skin.");
+            output.WriteLine("  --ifp-play SECONDS       Run the clip on a 30 Hz clock and print IFP-Play.");
             output.WriteLine("  --txd PATH                Read D3D8 TXD and decode all its mip levels; repeatable.");
             output.WriteLine("  --txd-entry NAME          Read a named D3D8 TXD entry from loaded IMG files.");
             output.WriteLine("  --txd-scan                Decode every D3D8 TXD texture and mip level in IMG.");

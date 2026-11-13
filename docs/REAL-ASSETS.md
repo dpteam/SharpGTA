@@ -97,6 +97,7 @@
 | IFP pose `maxShift` at t=0.4 | 0.802 | 1.739 |
 | IFP skin: skinned / rigid / unsupported | 0 / 16 / 0 | 1 / 0 / 0 |
 | IFP skin `maxDelta` / `bindDelta` | 0 / 0 | 1.001 / 0 |
+| IFP play 30 Hz `wraps` / `maxStep` / `loopGap` | 2 / 1.549 / 1.567 | 2 / 0.112 / 0 |
 
 `LoadStandard()` завершается успешно на обеих играх и на обоих runtimes. Отсутствующих моделей для прочитанных IPL нет. Полные `--dff-scan` и `--txd-scan` проходят на всех nonempty DFF/TXD. Проверены отдельно III `loplyguy.dff` (legacy `0x30200`), `peds.dff` (22 clumps) и VC `wheels.DFF` (20 geometries), VC `FIREMAN.DFF` (split Skin + HAnim), loose `particle.txd` обеих игр, III `PLAYER.TXD`, VC DXT1 `WMYBE.TXD` (9 levels), DXT3 `AIRPLAN.TXD` и uncompressed `DOCENTRANCE.TXD`. VC дополнительно читает 30 COLL-ресурсов из IMG до первого IPL. Реальные ground queries прошли:
 
@@ -106,6 +107,8 @@
 `ANIM/ped.ifp` читается целиком на обеих играх: III — 236 анимаций, 3746 последовательностей, 84851 кадр, 239 последовательностей с translation и 8 с scale, самая длинная анимация 5 с; VC — 234 / 5031 / 87546 кадров, 171 / 110 и 12.167 с. Именованный lookup проверяет не только агрегаты, но и обход иерархии: III `walk_civi` — 16 последовательностей, 37 кадров, 1.2 с (кости `Swaist`…`SLhand`), VC `WALK_civi` — 22 / 36 / 1.167 с (`Root`,`Pelvis`,…). Сэмплирование проверено на настоящих скелетах: III `IMAGE PLAYER.DFF`, `walk_civi`, `t=0.4` — 17 кадров, `skinned=no`, привязаны все 16 последовательностей, все 16 кадров сдвинулись, `maxShift=0.802`; VC `FIREMAN.DFF` (split skin), `WALK_civi`, `t=0.4` — 25 кадров, `skinned=yes`, привязаны 22, `maxShift=1.739`. То есть reader и sampler сходятся на реальных ped-костях, а не только на числах.
 
 Это чтение и сэмплирование (DTO + времена в дельтах + поза), плюс CPU-скиннинг split-skin моделей. Реальные проверки: VC `FIREMAN.DFF` + `WALK_civi` при `t=0.4` даёт `skinned=1 rigid=0 unsupported=0 bones=24 vertices=855 moved=855 maxDelta=1.001 bindDelta=0` — то есть bind-поза возвращается в исходные вершины ровно, а поза реально их двигает. Старые VC-скины (`male01.DFF` и ещё 160 файлов) честно попадают в `IFP-Skin-Unsupported: ... old=yes split=no` (`unsupported=1`): их bind-матрицы хранятся как bind (это учтено), но кости нельзя сопоставить кадрам без game-специфичной таблицы bone name. III педы — жёсткая иерархия, а не скин: `PLAYER.DFF` даёт `skinned=0 rigid=16`. Blending и playback на актёрах по-прежнему отсутствуют.
+
+Playback-часы проверены на реальных клипах: III `PLAYER.DFF` + `walk_civi` за 2.5 с даёт `ticks=75 wraps=2 maxStep=1.549 loopGap=1.567` — корень за цикл уезжает вперёд на 1.57 unit, то есть это локомоционный mover, который в оригинале снимает velocity extraction, а не ошибка чтения; VC `FIREMAN.DFF` + `WALK_civi` за 3 с — `ticks=90 wraps=2 maxStep=0.112 loopGap=0`, петля сходится ровно и поза идёт плавно.
 
 Полученные warnings относятся только к явно не реализованным directives:
 

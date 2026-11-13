@@ -266,6 +266,12 @@ try {
             if ($ifpSkin -notmatch "IFP-Skin: model=IMG:PLAYER\.DFF animation=walk_civi t=0\.4 clumps=1 skinned=0 rigid=16 unsupported=0 bones=0 vertices=0 moved=0 maxDelta=0 bindDelta=0") {
                 throw "III PLAYER.DFF must stay a rigid hierarchy, not a skinned mesh."
             }
+            # walk_civi carries a moving root, so its loop gap is the locomotion distance.
+            $ifpPlay = Invoke-Case "III IFP playback clock" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:PLAYER.DFF", "--ifp-animation", "walk_civi", "--ifp-play", "2.5", "--ticks", "0")) $false
+            if ($ifpPlay -notmatch "IFP-Play: model=IMG:PLAYER\.DFF animation=walk_civi ticks=75 duration=1\.2 t=0\.[0-9]+ finished=no wraps=2" -or
+                $ifpPlay -notmatch "loopGap=1\.5") {
+                throw "III walk_civi playback did not advance, wrap and report its root mover gap."
+            }
         } else {
             $ifpPose = Invoke-Case "VC IFP pose on skinned ped" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:FIREMAN.DFF", "--ifp-animation", "WALK_civi", "--ifp-time", "0.4", "--ticks", "0")) $false
             if ($ifpPose -notmatch "IFP-Pose: model=IMG:FIREMAN\.DFF animation=WALK_civi t=0\.4 looped=no frames=25 skinned=yes bound=22 unbound=0 changed=23 maxShift=1\.7") {
@@ -281,6 +287,12 @@ try {
             if ($legacySkin -notmatch "IFP-Skin-Unsupported: atomic=0 old=yes split=no" -or
                 $legacySkin -notmatch "IFP-Skin: model=IMG:male01\.DFF .*skinned=0 rigid=0 unsupported=1") {
                 throw "VC old-format skin must be reported as unsupported."
+            }
+            # WALK_civi is authored to loop seamlessly, so its gap must be zero.
+            $ifpPlay = Invoke-Case "VC IFP playback clock" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:FIREMAN.DFF", "--ifp-animation", "WALK_civi", "--ifp-play", "3", "--ticks", "0")) $false
+            if ($ifpPlay -notmatch "IFP-Play: model=IMG:FIREMAN\.DFF animation=WALK_civi ticks=90 duration=1\.167 t=0\.[0-9]+ finished=no wraps=2" -or
+                $ifpPlay -notmatch "maxStep=0\.1" -or $ifpPlay -notmatch "loopGap=0 ") {
+                throw "VC WALK_civi playback did not advance, wrap seamlessly and stay smooth."
             }
         }
         $looseTxd = Invoke-Case "$game loose TXD" $net40 ($common + @("--txd", "MODELS/particle.txd", "--ticks", "0")) $false
