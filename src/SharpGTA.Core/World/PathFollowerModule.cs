@@ -29,6 +29,7 @@ namespace SharpGTA.World
         private int stalledSteps;
         private int trafficHolds;
 
+
         private uint lightMilliseconds;
 
         /// <summary>
@@ -334,6 +335,12 @@ namespace SharpGTA.World
                     allowed = gap;
                     blocked = true;
                 }
+                float pedLight = PedLightLimit(follower);
+                if (pedLight < allowed)
+                {
+                    allowed = pedLight;
+                    blocked = true;
+                }
                 if (allowed <= 0.0f)
                 {
 
@@ -407,6 +414,28 @@ namespace SharpGTA.World
         private static bool SameLane(Vector3 left, Vector3 right)
         {
             return Math.Abs(left.X - right.X) < 0.01f && Math.Abs(left.Y - right.Y) < 0.01f;
+        }
+
+        /// <summary>
+        /// A ped waits on the node before a light-controlled crossing until the walk phase, like
+        /// `CPed::SetWaitState(WAITSTATE_TRAFFIC_LIGHTS)`. Only the start of the link counts, so a
+        /// ped that already stepped onto the road keeps walking instead of freezing mid-crossing.
+        /// </summary>
+        private float PedLightLimit(Follower follower)
+        {
+            if (!ObeyTrafficLights)
+                return float.MaxValue;
+            if (follower.Entity.Kind != WorldEntityKind.Ped)
+                return float.MaxValue;
+            PathGraphNode node = graph.Nodes[follower.Route[follower.Segment]];
+            int link = node.FindLink(follower.Route[follower.Segment + 1]);
+            if (link < 0 || !node.LinkHasPedTrafficLight(link))
+                return float.MaxValue;
+            if (follower.Progress > 0.5f)
+                return float.MaxValue;
+            if (TrafficLights.PhasePeds(lightMilliseconds) == TrafficLights.PedPhase.Walk)
+                return float.MaxValue;
+            return 0.0f;
         }
 
         /// <summary>

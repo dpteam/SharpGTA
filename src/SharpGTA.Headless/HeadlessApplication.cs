@@ -379,7 +379,8 @@ namespace SharpGTA.Headless
                     " links=" + graph.CarLinkTrafficLightCount.ToString(CultureInfo.InvariantCulture) +
                     " type1=" + graph.CarLinkTrafficLightType1Count.ToString(CultureInfo.InvariantCulture) +
                     " type2=" + graph.CarLinkTrafficLightType2Count.ToString(CultureInfo.InvariantCulture) +
-                    " direction=" + graph.CarLinkTrafficLightDirectionCount.ToString(CultureInfo.InvariantCulture));
+                    " direction=" + graph.CarLinkTrafficLightDirectionCount.ToString(CultureInfo.InvariantCulture) +
+                    " pedLinks=" + graph.PedTrafficLightLinkCount.ToString(CultureInfo.InvariantCulture));
             }
             output.WriteLine("Asset-Issues: total=" + loader.Report.TotalIssueCount.ToString(CultureInfo.InvariantCulture) +
                 " retained=" + loader.Report.Count.ToString(CultureInfo.InvariantCulture) +

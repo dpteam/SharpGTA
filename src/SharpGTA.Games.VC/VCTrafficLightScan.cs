@@ -52,8 +52,40 @@ namespace SharpGTA.Games.VC
                         TrafficLights.Mark(graph, node, link, toNode, type);
                     }
                 }
+                // `Check peds`: same walk-phase crossings as III, measured from the light position.
+                for (int n = 0; n < graph.NodeCount; n++)
+                {
+                    PathGraphNode node = graph.Nodes[n];
+                    if (node.Kind != PathKind.Ped)
+                        continue;
+                    Vector3 lightPosition = instance.Position;
+                    float dist1 = Math.Abs(node.Position.X - lightPosition.X) +
+                        Math.Abs(node.Position.Y - lightPosition.Y);
+                    if (!(dist1 < 50.0f))
+                        continue;
+                    for (int link = 0; link < node.LinkCount; link++)
+                    {
+                        if (!node.LinkCrossesRoad(link))
+                            continue;
+                        int toNode = node.Links[link];
+                        Vector3 other = graph.Nodes[toNode].Position;
+                        float dist2 = Math.Abs(other.X - lightPosition.X) +
+                            Math.Abs(other.Y - lightPosition.Y);
+                        if (dist1 < 15.0f || dist2 < 15.0f)
+                            MarkPedCrossing(graph, node, link, toNode);
+                    }
+                }
             }
             graph.SetTrafficLightObjectCount(lights);
+        }
+
+        private static void MarkPedCrossing(PathGraph graph, PathGraphNode node, int link, int toNode)
+        {
+            node.SetLinkPedTrafficLight(link, true);
+            PathGraphNode other = graph.Nodes[toNode];
+            int back = other.FindLink(node.GlobalIndex);
+            if (back >= 0)
+                other.SetLinkPedTrafficLight(back, true);
         }
 
         private static bool IsLight(string name)

@@ -166,6 +166,52 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void PedWaitsAtALightControlledCrossing()
+        {
+            PathGraph graph = PedChainGraph();
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry);
+            DynamicEntity ped = SpawnPed(world, registry);
+            // Flag the first crossing the way a light scan does; the ped must wait on the node
+            // until the walk phase instead of stepping onto the road.
+            int link = graph.Nodes[0].FindLink(1);
+            graph.Nodes[0].SetLinkPedTrafficLight(link, true);
+            Assert.Equal(1, graph.PedTrafficLightLinkCount);
+
+            PathFollowerModule module = new PathFollowerModule(graph, world);
+            module.ObeyTrafficLights = true;
+            Assert.True(module.Assign(ped, new int[] { 0, 1, 2 }, 1.5f));
+            SimulationRuntime runtime = new SimulationRuntime(
+                new WorldTestDefinition(GameId.III, DataSchema.III, 32));
+            runtime.AddModule(module);
+
+            // Ticks 0..360 are the 12 second "don't walk" window.
+            runtime.RunTicks(100);
+            Assert.Near(0.0f, ped.Position.X, 0.01f);
+            Assert.True(module.TrafficHoldCount > 0);
+
+            // Walk starts at 12 s (tick 361).
+            runtime.RunTicks(300);
+            Assert.True(ped.Position.X > 1.0f);
+
+            // The next don't-walk window must not freeze a ped that already stepped out.
+            float committed = ped.Position.X;
+            runtime.RunTicks(300);
+            Assert.True(ped.Position.X > committed);
+        }
+
+        [Test]
+        public void PedLightPhaseTimingsMatchTheOriginal()
+        {
+            Assert.Equal(TrafficLights.PedPhase.DontWalk, TrafficLights.PhasePeds(0));
+            Assert.Equal(TrafficLights.PedPhase.DontWalk, TrafficLights.PhasePeds(11999));
+            Assert.Equal(TrafficLights.PedPhase.Walk, TrafficLights.PhasePeds(12000));
+            Assert.Equal(TrafficLights.PedPhase.Walk, TrafficLights.PhasePeds(15383));
+            Assert.Equal(TrafficLights.PedPhase.WalkBlink, TrafficLights.PhasePeds(15384));
+            Assert.Equal(TrafficLights.PedPhase.DontWalk, TrafficLights.PhasePeds(16384));
+        }
+
+        [Test]
         public void LightsAreCachedAndRejectInvalidTypes()
         {
             PathGraph graph = LongChainGraph();
@@ -214,12 +260,37 @@ namespace SharpGTA.Tests
             return new PathGraph(pathWorld);
         }
 
+        /// <summary>Three ped nodes ten units apart, for the crossing wait test.</summary>
+        private static PathGraph PedChainGraph()
+        {
+            PathWorld pathWorld = new PathWorld();
+            pathWorld.AddGroups(PathRecordParser.ParseGroups(
+                new IdeReader(DataSchema.III).Read(
+                    "path\nped, -1, unused\n" +
+                    "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                    "2, 2, 0, 160, 0, 0, 160, 1, 1\n" +
+                    "2, -1, 0, 320, 0, 0, 160, 1, 1\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "0, -1, 0, 0, 0, 0, 0, 0, 0\n" +
+                    "end\n", "iii-paths.ide").RawRecords,
+                DataSchema.III, "iii-paths.ide"));
+            return new PathGraph(pathWorld);
+        }
+
         private static StaticWorld CreateWorld(out ModelRegistry registry)
         {
             registry = new ModelRegistry(new WorldTestDefinition(GameId.III, DataSchema.III, 32));
             registry.Bind(new IdeReader(DataSchema.III).Read(
                 "objs\n1, plain, generic, 1, 300, 0\nend\n" +
-                "cars\n20, landstal, landstal, car, LANDSTAL, LANDSTAL, normal, 10, 0, 1a, 0, 1.0\nend\n"));
+                "cars\n20, landstal, landstal, car, LANDSTAL, LANDSTAL, normal, 10, 0, 1a, 0, 1.0\nend\n" +
+                "peds\n7, civmale, civmale, CIVMALE, STAT_PLAYER, ped, 0\nend\n"));
             StaticWorld world = new StaticWorld();
             world.Bind(new IplReader(DataSchema.III).Read(
                 "inst\n1, plain, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1\nend\n"),
@@ -231,6 +302,14 @@ namespace SharpGTA.Tests
         {
             DynamicEntity entity;
             Assert.True(world.TrySpawnEntity(WorldEntityKind.Vehicle, registry.Find("landstal"),
+                Vector3.Zero, Vector3.Zero, out entity));
+            return entity;
+        }
+
+        private static DynamicEntity SpawnPed(StaticWorld world, ModelRegistry registry)
+        {
+            DynamicEntity entity;
+            Assert.True(world.TrySpawnEntity(WorldEntityKind.Ped, registry.Find("civmale"),
                 Vector3.Zero, Vector3.Zero, out entity));
             return entity;
         }

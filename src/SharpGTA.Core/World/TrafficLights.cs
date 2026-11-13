@@ -45,6 +45,28 @@ namespace SharpGTA.World
             return TrafficLightPhase.Red;
         }
 
+        /// <summary>`PED_LIGHTS_*` from TrafficLights.h.</summary>
+        public enum PedPhase
+        {
+            DontWalk = 0,
+            Walk = 1,
+            WalkBlink = 2
+        }
+
+        /// <summary>
+        /// `CTrafficLights::LightForPeds`: 12 seconds of "don't walk", then walk, with the last
+        /// second blinking. Only an exact walk phase lets a waiting ped cross.
+        /// </summary>
+        public static PedPhase PhasePeds(uint milliseconds)
+        {
+            uint period = milliseconds % CycleMilliseconds;
+            if (period < 12000)
+                return PedPhase.DontWalk;
+            if (period < CycleMilliseconds - 1000)
+                return PedPhase.Walk;
+            return PedPhase.WalkBlink;
+        }
+
         /// <summary>
         /// `CTrafficLights::FindTrafficLightType`: a light facing roughly east or west governs
         /// phase 1, everything else phase 2. The original measures the angle with its own

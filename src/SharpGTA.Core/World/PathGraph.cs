@@ -14,6 +14,7 @@ namespace SharpGTA.World
         private ReadOnlyCollection<int> links = NoLinks;
         private float[] linkDistances = new float[0];
         private bool[] linkCrosses = new bool[0];
+        private bool[] linkPedLight = new bool[0];
         private int[] linkCarLinks = new int[0];
         private PathGraph graph;
 
@@ -105,8 +106,32 @@ namespace SharpGTA.World
         {
             linkDistances = distances;
             linkCrosses = crosses;
+            linkPedLight = new bool[crosses.Length];
             linkCarLinks = carLinks;
             graph = owner;
+        }
+
+        /// <summary>
+        /// `CConnectionFlags::bTrafficLight`: the ped crossing on this link is controlled by a
+        /// light, so a ped waits on the node until `LightForPeds` says walk.
+        /// </summary>
+        public bool LinkHasPedTrafficLight(int index)
+        {
+            if (index < 0 || index >= linkPedLight.Length)
+                throw new ArgumentOutOfRangeException("index");
+            return linkPedLight[index];
+        }
+
+        /// <summary>Called by a game light scan when a placed light sits next to this crossing.</summary>
+        public void SetLinkPedTrafficLight(int index, bool value)
+        {
+            if (index < 0 || index >= linkPedLight.Length)
+                throw new ArgumentOutOfRangeException("index");
+            if (linkPedLight[index] == value)
+                return;
+            linkPedLight[index] = value;
+            if (value)
+                graph.NotePedTrafficLight();
         }
 
         /// <summary>True when this connection carries a `CCarPathLink` (car paths only).</summary>
@@ -784,12 +809,20 @@ namespace SharpGTA.World
         /// <summary>Links whose light only applies when the car heads for the link owner.</summary>
         public int CarLinkTrafficLightDirectionCount { get; private set; }
 
+        /// <summary>Ped crossings controlled by a traffic light (`bTrafficLight`).</summary>
+        public int PedTrafficLightLinkCount { get; private set; }
+
         /// <summary>Called by a game's light scan once it knows how many light objects it saw.</summary>
         public void SetTrafficLightObjectCount(int value)
         {
             if (value < 0)
                 throw new ArgumentOutOfRangeException("value");
             TrafficLightObjectCount = value;
+        }
+
+        internal void NotePedTrafficLight()
+        {
+            PedTrafficLightLinkCount++;
         }
 
         internal void NoteCarLight(int oldType, bool oldDirection, int newType, bool newDirection)

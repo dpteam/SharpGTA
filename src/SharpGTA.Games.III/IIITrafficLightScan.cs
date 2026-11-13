@@ -58,8 +58,42 @@ namespace SharpGTA.Games.III
                         TrafficLights.Mark(graph, node, link, toNode, type);
                     }
                 }
+                // `Check peds`: a crossing near the light waits on the ped phase. The third
+                // distance test is loose on purpose (either end within 15 units).
+                for (int n = 0; n < graph.NodeCount; n++)
+                {
+                    PathGraphNode node = graph.Nodes[n];
+                    if (node.Kind != PathKind.Ped)
+                        continue;
+                    float dist1 = Math.Abs(node.Position.X - position.X) +
+                        Math.Abs(node.Position.Y - position.Y);
+                    if (!(dist1 < 50.0f))
+                        continue;
+                    for (int link = 0; link < node.LinkCount; link++)
+                    {
+                        if (!node.LinkCrossesRoad(link))
+                            continue;
+                        int toNode = node.Links[link];
+                        Vector3 other = graph.Nodes[toNode].Position;
+                        float dist2 = Math.Abs(other.X - position.X) +
+                            Math.Abs(other.Y - position.Y);
+                        if (dist1 < 15.0f || dist2 < 15.0f)
+                            MarkPedCrossing(graph, node, link, toNode);
+                    }
+                }
             }
             graph.SetTrafficLightObjectCount(lights);
+        }
+
+        private static void MarkPedCrossing(PathGraph graph, PathGraphNode node, int link, int toNode)
+        {
+            node.SetLinkPedTrafficLight(link, true);
+            // The original sets one shared connection flag, so both directions of the crossing
+            // wait for the ped phase.
+            PathGraphNode other = graph.Nodes[toNode];
+            int back = other.FindLink(node.GlobalIndex);
+            if (back >= 0)
+                other.SetLinkPedTrafficLight(back, true);
         }
 
         private static Vector3 NormaliseXY(Vector3 vector)

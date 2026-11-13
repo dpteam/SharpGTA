@@ -104,12 +104,25 @@ try {
         # Junction lights are scanned from placed light models, so a broken scan shows up as a
         # zero here instead of silently letting cars drive through every red.
         $lights = if ($game -eq "iii") {
-            "Path-Lights: lights=333 links=313 type1=161 type2=152 direction=172"
+            "Path-Lights: lights=333 links=313 type1=161 type2=152 direction=172 pedLinks=402"
         } else {
-            "Path-Lights: lights=271 links=271 type1=155 type2=116 direction=140"
+            "Path-Lights: lights=271 links=271 type1=155 type2=116 direction=140 pedLinks=20"
         }
         if ($standard -notmatch [regex]::Escape($lights)) {
             throw "$game traffic light scan changed: expected '$lights'."
+        }
+        # Peds must wait on light-controlled crossings, not step onto the road on a red. III routes
+        # cross flagged links within 1200 ticks; VC flags 20 crossings but the probe spawns (the
+        # first ped nodes in graph order, capped by the 140 ped pool) never reach one, so that
+        # half is only covered by pedLinks= above and by the synthetic follower test.
+        $pedsWait = Invoke-Case "$game ped crossings" $net40 ($common + @("--standard",
+            "--spawn-peds", "60", "--ticks", "1200")) $false
+        if ($game -eq "iii" -and
+            $pedsWait -notmatch "Path-Follow: vehicles=0 peds=60 actors=60 .*holds=[1-9]") {
+            throw "III peds did not wait on a light-controlled crossing: $pedsWait"
+        }
+        if ($game -eq "vc" -and $pedsWait -notmatch "Path-Follow: vehicles=0 peds=60 actors=60 ") {
+            throw "VC ped run did not keep its population: $pedsWait"
         }
         $nearestNode = if ($game -eq "iii") { "node=1969 group=87 local=1" } else { "node=139 group=31 local=3" }
         $nearest = "Path-Nearest: kind=car position=($($ground[0]),$($ground[1]),$zoneZ) radius=200 found=true $nearestNode"
