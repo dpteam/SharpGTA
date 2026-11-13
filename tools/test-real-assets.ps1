@@ -73,9 +73,9 @@ try {
             throw "$game path graph changed: expected '$graph'."
         }
         $verify = if ($game -eq "iii") {
-            "Path-Verify: nodes=4947 links=10272 selfLinks=0 asymmetricLinks=0 overLengthLinks=0 overLengthCar=0 overLengthPed=0 overLengthWater=0 longest=186.61"
+            "Path-Verify: nodes=4947 links=10272 selfLinks=0 asymmetricLinks=0 overLengthLinks=0 distanceMismatch=0 overLengthCar=0 overLengthPed=0 overLengthWater=0 longest=186.61"
         } else {
-            "Path-Verify: nodes=9642 links=20350 selfLinks=0 asymmetricLinks=0 overLengthLinks=26 overLengthCar=0 overLengthPed=0 overLengthWater=26 longest=329.02"
+            "Path-Verify: nodes=9642 links=20350 selfLinks=0 asymmetricLinks=0 overLengthLinks=26 distanceMismatch=0 overLengthCar=0 overLengthPed=0 overLengthWater=26 longest=329.02"
         }
         if ($standard -notmatch [regex]::Escape($verify)) {
             throw "$game path graph audit changed: expected '$verify'."

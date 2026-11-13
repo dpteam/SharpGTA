@@ -43,6 +43,7 @@ namespace SharpGTA.D3D9
         private int dynamicSpawned;
         private int dynamicCars;
         private PathFollowerModule dynamicCarFollowers;
+        private bool dynamicModuleAdded;
         private string dynamicCarModel = "";
         private float dynamicCarNearest;
         private int dynamicDrawn;
@@ -122,7 +123,7 @@ namespace SharpGTA.D3D9
             }
             if (model == null)
                 throw new ArgumentException("--spawn-cars needs a registered vehicle model.");
-            PathFollowerModule followers = new PathFollowerModule(graph);
+            PathFollowerModule followers = new PathFollowerModule(graph, loader.World);
             followers.RouteSource = delegate(int node)
             {
                 return PathRouteBuilder.BuildGreedy(graph, node, 40, true);
@@ -174,13 +175,21 @@ namespace SharpGTA.D3D9
             dynamicCars = spawned;
             dynamicCarFollowers = followers;
             dynamicCarModel = model.Name;
-            if (spawned > 0)
+            dynamicCarNearest = float.MaxValue;
+            for (int i = 0; i < loader.World.DynamicEntities.Count; i++)
             {
-                Vector3 first = loader.World.DynamicEntities[0].Position;
-                dynamicCarNearest = (first - camera.Position).Length();
+                DynamicEntity candidate = loader.World.DynamicEntities[i] as DynamicEntity;
+                if (candidate == null || candidate.Kind != WorldEntityKind.Vehicle)
+                    continue;
+                float distance = (candidate.Position - camera.Position).Length();
+                if (distance < dynamicCarNearest)
+                    dynamicCarNearest = distance;
             }
+            if (dynamicCarNearest == float.MaxValue)
+                dynamicCarNearest = 0.0f;
             dynamicRejected = loader.World.DynamicRejectedCount;
-            runtime.AddModule(new DynamicEntityModule(loader.World));
+            EnsureDynamicModule();
+            // Followers are registered after the integrator so their positions win.
             runtime.AddModule(followers);
         }
 
@@ -219,6 +228,18 @@ namespace SharpGTA.D3D9
             }
             dynamicSpawned = spawned;
             dynamicRejected = loader.World.DynamicRejectedCount;
+            EnsureDynamicModule();
+        }
+
+        /// <summary>
+        /// The linear integrator must exist exactly once: adding it from both spawn paths threw
+        /// "Duplicate simulation module name" when --spawn and --spawn-cars were combined.
+        /// </summary>
+        private void EnsureDynamicModule()
+        {
+            if (dynamicModuleAdded)
+                return;
+            dynamicModuleAdded = true;
             runtime.AddModule(new DynamicEntityModule(loader.World));
         }
 

@@ -172,9 +172,12 @@ namespace SharpGTA.World
     ///
     /// Neighbouring tiles are joined the way the original does it: two external slots of the
     /// same kind closer than one unit collapse into one connection between the interior nodes
-    /// behind them. Tile union-find groups, `m_connections` flags (`bCrossesRoad`,
-    /// `bTrafficLight`), the collapsed lane direction/lane counts and any route search are not
-    /// reproduced yet, so the graph is connected but no path is computed.
+    /// behind them. Connections carry the distance (`m_distances`), the ped `bCrossesRoad` flag
+    /// and, for car paths, `CCarPathLink` data (`m_carPathLinks`); flood-fill labels reproduce
+    /// `CountFloodFillGroups`, `TryFindRoute` walks the shortest path over the link distances
+    /// and car nodes carry the original `bDeadEnd` flag. Still missing: `bTrafficLight`, the
+    /// removal of isolated ped nodes, `CPathFind::FindPath`'s bucket queue (our Dijkstra has the
+    /// same cost but different tie-breaking) and any population controller.
     /// </summary>
     public sealed class PathGraph
     {
@@ -565,7 +568,7 @@ namespace SharpGTA.World
                 best[i] = float.PositiveInfinity;
                 previous[i] = -1;
             }
-            NodeHeap heap = new NodeHeap(nodes.Count);
+            NodeHeap heap = new NodeHeap(Math.Max(nodes.Count, LinkCount * 2) + 1);
             best[startIndex] = 0.0f;
             heap.Push(0.0f, startIndex);
             bool found = false;
@@ -625,8 +628,10 @@ namespace SharpGTA.World
 
             internal NodeHeap(int capacity)
             {
-                keys = new float[capacity * 2 + 1];
-                items = new int[capacity * 2 + 1];
+                // Relaxations can exceed the node count, so size the heap from the caller's
+                // bound instead of assuming one push per node.
+                keys = new float[capacity];
+                items = new int[capacity];
             }
 
             internal int Count { get { return count; } }

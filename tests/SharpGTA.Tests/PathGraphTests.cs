@@ -826,13 +826,15 @@ namespace SharpGTA.Tests
             Assert.Equal(3, report.NearestSampleCount);
             Assert.True(report.IsConsistent);
 
-            // The same graph fails the length audit when the limit is below the tile spacing.
+            // The same graph fails the length audit when the limit is below the tile spacing, and car
+            // over-length links make the report inconsistent by design.
             PathGraphReport strict = PathGraphVerifier.Verify(graph, 5.0f);
             Assert.Equal(4, strict.OverLengthLinkCount);
             Assert.Equal(4, strict.OverLengthCarCount);
             Assert.Equal(0, strict.OverLengthWaterCount);
             Assert.Equal(4, strict.OverLengthSamples.Count);
-            Assert.True(strict.IsConsistent);
+            Assert.False(strict.IsConsistent);
+            Assert.True(PathGraphVerifier.Verify(graph, 200.0f).IsConsistent);
 
             Assert.Throws<ArgumentNullException>(delegate { PathGraphVerifier.Verify(null, 10.0f); });
             Assert.Throws<ArgumentOutOfRangeException>(delegate

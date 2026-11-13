@@ -443,6 +443,9 @@ namespace SharpGTA.D3D9
             Console.WriteLine("  --time H: start the world clock at game hour 0..23 (default 12).");
             Console.WriteLine("  --verify-sectors: cross-check the sector index against a linear scan (exit 3 on mismatch).");
             Console.WriteLine("  --spawn N [--spawn-model NAME]: spawn N drifting gameplay objects for the preview.");
+            Console.WriteLine("  --spawn-cars N [--spawn-car-speed S]: spawn N cars that follow the car network.");
+            Console.WriteLine("  --path-overlay: draw the path graph as lines over the world.");
+            Console.WriteLine("  --path-route X Y Z X2 Y2 Z2 [--path-kind K] [--path-radius R]: draw a resolved route.");
             Console.WriteLine("  --import-settings FILE and --export-settings FILE share launcher settings.");
             Console.WriteLine("  --exercise-reset releases cached surfaces and resets between frames.");
             Console.WriteLine("  No D3DX, external DLL or game data is required for triangle mode.");

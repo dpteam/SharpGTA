@@ -28,6 +28,11 @@ namespace SharpGTA.Tests
             Assert.Equal(24, Offset<D3dModelVertex>("Color"));
             Assert.Equal(28, Offset<D3dModelVertex>("U"));
             Assert.Equal(32, Offset<D3dModelVertex>("V"));
+            // The path overlay uses XYZ|DIFFUSE, so the stride and colour offset are part of
+            // the ABI even though no indexed buffer is involved.
+            Assert.Equal(16, Marshal.SizeOf(typeof(D3dLineVertex)));
+            Assert.Equal(0, Offset<D3dLineVertex>("X"));
+            Assert.Equal(12, Offset<D3dLineVertex>("Color"));
             Assert.Equal(16, Marshal.SizeOf(typeof(D3dColorValue)));
             Assert.Equal(12, Marshal.SizeOf(typeof(D3dVector)));
             Assert.Equal(104, Marshal.SizeOf(typeof(D3dLight)));

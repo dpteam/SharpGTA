@@ -399,6 +399,23 @@ namespace SharpGTA.World
             return true;
         }
 
+        /// <summary>
+        /// Moves a gameplay entity and keeps the sector index in sync. Any code that repositions
+        /// an entity must go through this (or AdvanceDynamic), otherwise queries and Despawn
+        /// would keep looking at the old sectors.
+        /// </summary>
+        public void MoveEntity(DynamicEntity entity, Vector3 position)
+        {
+            if (entity == null)
+                throw new ArgumentNullException("entity");
+            RequireFinite(position, "position");
+            if (!dynamicEntities.Contains(entity))
+                throw new InvalidOperationException("The entity is not spawned in this world.");
+            Unindex(entity);
+            entity.SetPosition(position);
+            Index(entity);
+        }
+
         /// <summary>Despawns a gameplay entity; static placements cannot be despawned here.</summary>
         public bool DespawnEntity(WorldEntityKind kind, int handle)
         {

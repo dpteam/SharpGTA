@@ -40,6 +40,7 @@ namespace SharpGTA.World
         public int SelfLinkCount { get; internal set; }
         public int AsymmetricLinkCount { get; internal set; }
         public int OverLengthLinkCount { get; internal set; }
+        public int DistanceMismatchCount { get; internal set; }
         public int OverLengthCarCount { get; internal set; }
         public int OverLengthPedCount { get; internal set; }
         public int OverLengthWaterCount { get; internal set; }
@@ -61,9 +62,12 @@ namespace SharpGTA.World
         {
             get
             {
+                // Water lanes are legitimately long (hundreds of units), so only car and ped
+                // over-length links mean a bogus merge and make the graph inconsistent.
                 return SelfLinkCount == 0 && AsymmetricLinkCount == 0 &&
                     MisgroupedNodeCount == 0 && UnlabelledNodeCount == 0 &&
-                    NearestMismatchCount == 0;
+                    NearestMismatchCount == 0 && DistanceMismatchCount == 0 &&
+                    OverLengthCarCount == 0 && OverLengthPedCount == 0;
             }
         }
     }
@@ -99,6 +103,12 @@ namespace SharpGTA.World
                         continue;
                     }
                     float distance = node.LinkDistance(k);
+                    // The stored distance must be the real Euclidean length; a copied or stale
+                    // value would silently skew every route through this link.
+                    Vector3 offset = nodes[target].Position - node.Position;
+                    float expected = offset.Length();
+                    if (Math.Abs(distance - expected) > 0.01f)
+                        report.DistanceMismatchCount++;
                     if (distance > report.LongestLink)
                     {
                         report.LongestLink = distance;

@@ -42,6 +42,7 @@ namespace SharpGTA.Headless
                 WriteBanner(output);
                 output.WriteLine("Game: " + options.Game.ToLowerInvariant() + " (" + definition.DisplayName + ")");
                 GameClock gameClock = null;
+                bool inconsistentPathGraph = false;
                 using (GameDataLoader loader = CreateLoader(definition, options))
                 {
                     if (loader != null)
@@ -57,8 +58,8 @@ namespace SharpGTA.Headless
                             WritePathNearestQuery(loader, options, output);
                         if (options.HasPathRouteQuery)
                             WritePathRouteQuery(loader, options, output);
-                        if (options.VerifyPaths)
-                            WritePathVerification(loader, options, output);
+                        if (options.VerifyPaths && !WritePathVerification(loader, options, output))
+                            inconsistentPathGraph = true;
                         if (options.HasBuildingQuery)
                             WriteBuildingQuery(loader.World, options, output);
                         if (options.Verbose)
@@ -105,7 +106,7 @@ namespace SharpGTA.Headless
                     if (options.HasSpawnObjects)
                         WriteDynamicSummary(loader.World, options, output);
                     if (followers != null)
-                        WritePathFollowSummary(loader.World, followers, output);
+                        WritePathFollowSummary(loader.World, followers, options.SpawnCarCount, output);
                     output.WriteLine("Clock: day=" + gameClock.DaysPassed.ToString(CultureInfo.InvariantCulture) +
                         " time=" + gameClock.Hours.ToString("00", CultureInfo.InvariantCulture) + ":" +
                         gameClock.Minutes.ToString("00", CultureInfo.InvariantCulture) + ":" +
@@ -116,6 +117,11 @@ namespace SharpGTA.Headless
                         error.WriteLine("STRICT: " + loader.Report.TotalIssueCount.ToString(CultureInfo.InvariantCulture) + " asset issue(s) were reported.");
                         return 3;
                     }
+                }
+                if (inconsistentPathGraph)
+                {
+                    error.WriteLine("VERIFY: the path graph is internally inconsistent.");
+                    return 4;
                 }
                 return 0;
             }
@@ -518,7 +524,7 @@ namespace SharpGTA.Headless
         /// Independent audit of the built graph: symmetry, self links, absurd link lengths,
         /// flood-fill labels and the nearest-node round trip.
         /// </summary>
-        private static void WritePathVerification(GameDataLoader loader, HeadlessOptions options,
+        private static bool WritePathVerification(GameDataLoader loader, HeadlessOptions options,
             TextWriter output)
         {
             if (loader.Paths.GroupCount == 0)
@@ -533,6 +539,7 @@ namespace SharpGTA.Headless
                 " selfLinks=" + report.SelfLinkCount.ToString(CultureInfo.InvariantCulture) +
                 " asymmetricLinks=" + report.AsymmetricLinkCount.ToString(CultureInfo.InvariantCulture) +
                 " overLengthLinks=" + report.OverLengthLinkCount.ToString(CultureInfo.InvariantCulture) +
+                " distanceMismatch=" + report.DistanceMismatchCount.ToString(CultureInfo.InvariantCulture) +
                 " overLengthCar=" + report.OverLengthCarCount.ToString(CultureInfo.InvariantCulture) +
                 " overLengthPed=" + report.OverLengthPedCount.ToString(CultureInfo.InvariantCulture) +
                 " overLengthWater=" + report.OverLengthWaterCount.ToString(CultureInfo.InvariantCulture) +
@@ -544,6 +551,7 @@ namespace SharpGTA.Headless
                 " nearestMismatch=" + report.NearestMismatchCount.ToString(CultureInfo.InvariantCulture) +
                 "/" + report.NearestSampleCount.ToString(CultureInfo.InvariantCulture) +
                 " consistent=" + (report.IsConsistent ? "true" : "false"));
+            bool consistent = report.IsConsistent;
             output.WriteLine("Path-Verify-Length: limit=" +
                 options.PathVerifyLength.ToString("0.##", CultureInfo.InvariantCulture));
             IList<PathGraphReport.LongLink> longLinks = report.OverLengthSamples;
@@ -558,6 +566,7 @@ namespace SharpGTA.Headless
                     "->" + link.ToTile.ToString(CultureInfo.InvariantCulture) +
                     " from=" + Vector(link.FromPosition) + " to=" + Vector(link.ToPosition));
             }
+            return consistent;
         }
 
         /// <summary>
@@ -615,59 +624,15 @@ namespace SharpGTA.Headless
         }
 
         private static void WritePathFollowSummary(StaticWorld world, PathFollowerModule followers,
-            TextWriter output)
+            int requested, TextWriter output)
         {
-            output.WriteLine("Path-Follow: vehicles=" + followers.Count.ToString(CultureInfo.InvariantCulture) +
+            output.WriteLine("Path-Follow: requested=" + requested.ToString(CultureInfo.InvariantCulture) +
+                " vehicles=" + followers.Count.ToString(CultureInfo.InvariantCulture) +
                 " completed=" + followers.CompletedCount.ToString(CultureInfo.InvariantCulture) +
                 " replans=" + followers.ReplanCount.ToString(CultureInfo.InvariantCulture) +
+                " stalled=" + followers.StalledStepCount.ToString(CultureInfo.InvariantCulture) +
                 " travelled=" + followers.TravelledDistance.ToString("0.##", CultureInfo.InvariantCulture));
             output.WriteLine(VehicleGroundProbe.Format(VehicleGroundProbe.Measure(world)));
-        }
-
-        /// <summary>
-        /// Measures how far each car sits from the COLL ground below it. The path node carries
-        /// the lane plane, so a small delta means the model origin is at the contact plane; a
-        /// large one would mean the cars float or sink and the spawn needs an offset.
-        /// </summary>
-        private static void WritePathFollowGround(StaticWorld world, TextWriter output)
-        {
-            IList<WorldEntity> entities = world.DynamicEntities;
-            int measured = 0;
-            int misses = 0;
-            float minimum = float.MaxValue;
-            float maximum = float.MinValue;
-            float total = 0.0f;
-            for (int i = 0; i < entities.Count; i++)
-            {
-                DynamicEntity entity = entities[i] as DynamicEntity;
-                if (entity == null || entity.Kind != WorldEntityKind.Vehicle)
-                    continue;
-                StaticWorldHit hit;
-                if (!world.QueryVertical(entity.Position.X, entity.Position.Y,
-                    entity.Position.Z + 20.0f, entity.Position.Z - 60.0f, out hit))
-                {
-                    misses++;
-                    continue;
-                }
-                float delta = entity.Position.Z - hit.Position.Z;
-                if (delta < minimum)
-                    minimum = delta;
-                if (delta > maximum)
-                    maximum = delta;
-                total += delta;
-                measured++;
-            }
-            if (measured == 0)
-            {
-                output.WriteLine("Path-Follow-Ground: measured=0 misses=" +
-                    misses.ToString(CultureInfo.InvariantCulture));
-                return;
-            }
-            output.WriteLine("Path-Follow-Ground: measured=" + measured.ToString(CultureInfo.InvariantCulture) +
-                " misses=" + misses.ToString(CultureInfo.InvariantCulture) +
-                " deltaMin=" + minimum.ToString("0.###", CultureInfo.InvariantCulture) +
-                " deltaMax=" + maximum.ToString("0.###", CultureInfo.InvariantCulture) +
-                " deltaAvg=" + (total / measured).ToString("0.###", CultureInfo.InvariantCulture));
         }
 
         private static string PathKindName(PathKind kind)
@@ -875,16 +840,19 @@ namespace SharpGTA.Headless
             output.WriteLine("  --query-zone X Y Z        Query navigation/info/map zones and cull attributes.");
             output.WriteLine("  --query-path GROUP NODE   Print one resolved path node position and next link.");
             output.WriteLine("  --query-path-nearest X Y Z  Find the closest path node; --path-kind car|ped|water, --path-radius R.");
-            output.WriteLine("  --path-merge-distance R   Merge external path slots closer than R units (default 1, the original).");
             output.WriteLine("  --query-path-route X Y Z X2 Y2 Z2  Shortest route between the nearest nodes of both points.");
+            output.WriteLine("  --verify-paths            Audit the built graph (symmetry, lengths, groups, nearest round trip).");
+            output.WriteLine("  --path-verify-length R    Over-length threshold for --verify-paths (default 200 units).");
+            output.WriteLine("  --path-merge-distance R   Merge external path slots closer than R units (default 1, the original).");
+            output.WriteLine("  --spawn-cars N [--spawn-car-speed S]  Spawn N cars that follow the car network.");
             output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
             output.WriteLine("  --spawn-objects N [--spawn-model NAME]  Spawn N drifting gameplay objects and tick them.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");
             output.WriteLine("  --state-at N              Also print the diagnostic state hash at tick N.");
             output.WriteLine("  --verbose                 Print retained asset issues.");
             output.WriteLine("  --strict                  Return 3 when any asset issue was reported.");
-            output.WriteLine("  --version                 Print the branded version only.");
             output.WriteLine("  --help                    Show this text.");
         }
     }
 }
+

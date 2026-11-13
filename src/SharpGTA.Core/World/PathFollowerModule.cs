@@ -15,11 +15,16 @@ namespace SharpGTA.World
     /// </summary>
     public sealed class PathFollowerModule : ISimulationModule, IStateSerializable
     {
+        /// <summary>Upper bound on segment steps per tick, so a bad route cannot stall a frame.</summary>
+        private const int MaximumStepsPerTick = 256;
+
         private readonly PathGraph graph;
+        private readonly StaticWorld world;
         private readonly List<Follower> followers = new List<Follower>();
         private float travelled;
         private int completed;
         private int replanned;
+        private int stalledSteps;
 
         /// <summary>
         /// Optional route provider: when a car reaches the end of its chain the module asks for
@@ -29,10 +34,20 @@ namespace SharpGTA.World
         public Func<int, int[]> RouteSource { get; set; }
 
         public PathFollowerModule(PathGraph graph)
+            : this(graph, null)
+        {
+        }
+
+        /// <summary>
+        /// The optional world keeps the sector index in sync when a follower repositions or
+        /// snaps a car; without it the caller owns that bookkeeping.
+        /// </summary>
+        public PathFollowerModule(PathGraph graph, StaticWorld world)
         {
             if (graph == null)
                 throw new ArgumentNullException("graph");
             this.graph = graph;
+            this.world = world;
         }
 
         public string Name { get { return "PathFollowers"; } }
@@ -42,6 +57,9 @@ namespace SharpGTA.World
 
         /// <summary>Routes that were replaced by a new one from <see cref="RouteSource"/>.</summary>
         public int ReplanCount { get { return replanned; } }
+
+        /// <summary>Ticks that hit the per-tick step budget because a route made no progress.</summary>
+        public int StalledStepCount { get { return stalledSteps; } }
 
         /// <summary>Total distance the followers have driven, for probes and diagnostics.</summary>
         public float TravelledDistance { get { return travelled; } }
@@ -75,7 +93,7 @@ namespace SharpGTA.World
             follower.Speed = speed;
             followers.Add(follower);
             entity.Velocity = Vector3.Zero;
-            entity.SetPosition(graph.Nodes[follower.Route[0]].Position);
+            Move(entity, graph.Nodes[follower.Route[0]].Position);
             return true;
         }
 
@@ -96,8 +114,16 @@ namespace SharpGTA.World
         private void Advance(Follower follower, float deltaSeconds)
         {
             float remaining = follower.Speed * deltaSeconds;
+            int steps = 0;
             while (remaining > 0.0f && !follower.Finished)
             {
+                if (++steps > MaximumStepsPerTick)
+                {
+                    // A route built from zero-length segments, or a provider that keeps
+                    // returning them, must not spin forever inside one tick.
+                    stalledSteps++;
+                    return;
+                }
                 Vector3 start = graph.Nodes[follower.Route[follower.Segment]].Position;
                 Vector3 end = graph.Nodes[follower.Route[follower.Segment + 1]].Position;
                 float length = (end - start).Length();
@@ -123,8 +149,17 @@ namespace SharpGTA.World
         private void PlaceOnSegment(Follower follower, Vector3 start, Vector3 end, float length)
         {
             Vector3 position = start + (end - start) * (follower.Progress / length);
-            follower.Entity.SetPosition(position);
+            Move(follower.Entity, position);
             follower.Entity.Velocity = (end - start) * (follower.Speed / length);
+        }
+
+        /// <summary>Repositions through the world so the sector index follows the car.</summary>
+        private void Move(DynamicEntity entity, Vector3 position)
+        {
+            if (world == null)
+                entity.SetPosition(position);
+            else
+                world.MoveEntity(entity, position);
         }
 
         private void NextSegment(Follower follower, Vector3 segmentEnd)
@@ -133,10 +168,13 @@ namespace SharpGTA.World
             follower.Progress = 0.0f;
             if (follower.Segment < follower.Route.Length - 1)
                 return;
-            follower.Entity.SetPosition(segmentEnd);
+            Move(follower.Entity, segmentEnd);
             completed++;
-            int[] next = RouteSource == null ? null : RouteSource(follower.Route[follower.Route.Length - 1]);
-            if (next != null && next.Length >= 2)
+            int lastNode = follower.Route[follower.Route.Length - 1];
+            int[] next = RouteSource == null ? null : RouteSource(lastNode);
+            // A provider must continue from the node the car stands on, or the car would jump.
+            if (next != null && next.Length >= 2 && next[0] == lastNode &&
+                IsValidRoute(next))
             {
                 follower.Route = next;
                 follower.Segment = 0;
@@ -146,6 +184,16 @@ namespace SharpGTA.World
             }
             follower.Finished = true;
             follower.Entity.Velocity = Vector3.Zero;
+        }
+
+        private bool IsValidRoute(int[] route)
+        {
+            for (int i = 0; i < route.Length; i++)
+            {
+                if (route[i] < 0 || route[i] >= graph.NodeCount)
+                    return false;
+            }
+            return true;
         }
 
         /// <summary>Serializes progress so State@N reacts to path-following motion.</summary>
