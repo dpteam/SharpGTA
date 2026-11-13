@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|Path-Lanes:|Path-Follow:|Path-Traffic:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|Path-Lanes:|Path-Lights:|Path-Follow:|Path-Traffic:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -100,6 +100,16 @@ try {
         }
         if ($standard -notmatch [regex]::Escape($lanes)) {
             throw "$game lane data changed: expected '$lanes'."
+        }
+        # Junction lights are scanned from placed light models, so a broken scan shows up as a
+        # zero here instead of silently letting cars drive through every red.
+        $lights = if ($game -eq "iii") {
+            "Path-Lights: lights=333 links=313 type1=161 type2=152 direction=172"
+        } else {
+            "Path-Lights: lights=271 links=271 type1=155 type2=116 direction=140"
+        }
+        if ($standard -notmatch [regex]::Escape($lights)) {
+            throw "$game traffic light scan changed: expected '$lights'."
         }
         $nearestNode = if ($game -eq "iii") { "node=1969 group=87 local=1" } else { "node=139 group=31 local=3" }
         $nearest = "Path-Nearest: kind=car position=($($ground[0]),$($ground[1]),$zoneZ) radius=200 found=true $nearestNode"

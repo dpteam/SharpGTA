@@ -97,6 +97,9 @@ namespace SharpGTA.Assets
                 {
                     pathGraph = new PathGraph(Paths);
                     pathGraphVersion = Paths.Version;
+                    // Junction lights are placed objects, so the game scans the bound world once
+                    // the graph exists; a graph rebuilt for another merge distance is rescanned.
+                    Definition.ScanTrafficLights(World, pathGraph);
                 }
                 return pathGraph;
             }

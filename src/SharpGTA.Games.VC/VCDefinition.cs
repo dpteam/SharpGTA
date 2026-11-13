@@ -1,5 +1,7 @@
+using System;
 using SharpGTA;
 using SharpGTA.Data;
+using SharpGTA.World;
 
 namespace SharpGTA.Games.VC
 {
@@ -17,6 +19,15 @@ namespace SharpGTA.Games.VC
         public static VCDefinition Instance
         {
             get { return instance; }
+        }
+
+        public override void ScanTrafficLights(StaticWorld world, PathGraph graph)
+        {
+            if (world == null)
+                throw new ArgumentNullException("world");
+            if (graph == null)
+                throw new ArgumentNullException("graph");
+            VCTrafficLightScan.Apply(world, graph);
         }
     }
 }

@@ -507,7 +507,7 @@ function Test-RecycledTraffic([string]$reference) {
     $text = [string]::Join("`n", $firstLog)
     # The preview swaps finished actors, so both sides of the lifecycle must be non-zero.
     $actors = [regex]::Match($text,
-        "World-Actors-Final: cars=3 peds=0 completed=\d+ replans=\d+ travelled=[\d.]+ recycled=(\d+) respawned=(\d+)")
+        "World-Actors-Final: cars=3 peds=0 completed=\d+ replans=\d+ travelled=[\d.]+ holds=\d+ recycled=(\d+) respawned=(\d+)")
     if (-not $actors.Success) {
         throw "Recycled traffic was not reported: $text"
     }

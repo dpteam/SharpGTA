@@ -1,5 +1,6 @@
 using System;
 using SharpGTA.Data;
+using SharpGTA.World;
 
 namespace SharpGTA
 {
@@ -113,5 +114,15 @@ namespace SharpGTA
         public CollisionStorageKind CollisionStorage { get; private set; }
         public DataSchema DataSchema { get; private set; }
         public GameLimits Limits { get; private set; }
+
+        /// <summary>
+        /// Scans the placed map for junction lights and records them on the car links, the way
+        /// `CTrafficLights::ScanForLightsOnMap` does. III and VC use different geometric tests and
+        /// light models, so the rule belongs to the game module; the base does nothing, which
+        /// means "no light data for this profile" rather than invented behaviour.
+        /// </summary>
+        public virtual void ScanTrafficLights(StaticWorld world, PathGraph graph)
+        {
+        }
     }
 }

@@ -338,7 +338,7 @@ namespace SharpGTA.Tests
                 Assert.Equal(first, second);
                 // The synthetic chain is three ten-unit segments, driven at 12 units per second.
                 Assert.True(first.IndexOf(
-                    "Path-Follow: vehicles=1 peds=0 actors=1 completed=1 replans=0 stalled=0 travelled=30",
+                    "Path-Follow: vehicles=1 peds=0 actors=1 completed=1 replans=0 stalled=0 holds=0 travelled=30",
                     StringComparison.Ordinal) >= 0, first);
                 Assert.True(first.IndexOf("State@120:", StringComparison.Ordinal) >= 0);
             }

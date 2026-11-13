@@ -96,6 +96,9 @@ namespace SharpGTA.Headless
                         // --path-merge-distance cannot mean two different worlds in one run.
                         PathGraph followGraph = CreatePathGraph(loader, options);
                         followers = new PathFollowerModule(followGraph, loader.World);
+                        // The original always obeys junction lights; the follower defaults to off
+                        // so a plain speed probe does not stop without being asked.
+                        followers.ObeyTrafficLights = true;
                         if (!options.Recycle)
                         {
                             // Without recycling an actor keeps driving by asking for a new route;
@@ -369,6 +372,11 @@ namespace SharpGTA.Headless
                     " maxRight=" + graph.CarLinkMaxRightLanes.ToString(CultureInfo.InvariantCulture) +
                     " oneWay=" + graph.CarLinkOneWayCount.ToString(CultureInfo.InvariantCulture) +
                     " multiLane=" + graph.CarLinkMultiLaneCount.ToString(CultureInfo.InvariantCulture));
+                output.WriteLine("Path-Lights: lights=" + graph.TrafficLightObjectCount.ToString(CultureInfo.InvariantCulture) +
+                    " links=" + graph.CarLinkTrafficLightCount.ToString(CultureInfo.InvariantCulture) +
+                    " type1=" + graph.CarLinkTrafficLightType1Count.ToString(CultureInfo.InvariantCulture) +
+                    " type2=" + graph.CarLinkTrafficLightType2Count.ToString(CultureInfo.InvariantCulture) +
+                    " direction=" + graph.CarLinkTrafficLightDirectionCount.ToString(CultureInfo.InvariantCulture));
             }
             output.WriteLine("Asset-Issues: total=" + loader.Report.TotalIssueCount.ToString(CultureInfo.InvariantCulture) +
                 " retained=" + loader.Report.Count.ToString(CultureInfo.InvariantCulture) +
@@ -757,6 +765,7 @@ namespace SharpGTA.Headless
                 " completed=" + followers.CompletedCount.ToString(CultureInfo.InvariantCulture) +
                 " replans=" + followers.ReplanCount.ToString(CultureInfo.InvariantCulture) +
                 " stalled=" + followers.StalledStepCount.ToString(CultureInfo.InvariantCulture) +
+                " holds=" + followers.TrafficHoldCount.ToString(CultureInfo.InvariantCulture) +
                 " travelled=" + followers.TravelledDistance.ToString("0.##", CultureInfo.InvariantCulture);
             if (carModel != null)
                 summary += " vehicleModel=" + carModel;

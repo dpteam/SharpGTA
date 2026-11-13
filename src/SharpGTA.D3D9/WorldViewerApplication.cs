@@ -132,6 +132,7 @@ namespace SharpGTA.D3D9
             // complete, so recycling there uses short routes and the lifecycle stays observable.
             int hops = recycle ? PreviewRecycleHops : 40;
             PathFollowerModule followers = new PathFollowerModule(graph, loader.World);
+            followers.ObeyTrafficLights = true;
             if (!recycle)
             {
                 // Recycling needs actors that actually finish; a provider would keep every actor
@@ -524,7 +525,8 @@ namespace SharpGTA.D3D9
                         " completed=" + dynamicFollowers.CompletedCount +
                         " replans=" + dynamicFollowers.ReplanCount +
                         " travelled=" + dynamicFollowers.TravelledDistance.ToString("0.##",
-                            CultureInfo.InvariantCulture);
+                            CultureInfo.InvariantCulture) +
+                        " holds=" + dynamicFollowers.TrafficHoldCount;
                     if (dynamicPopulation != null)
                     {
                         actorsFinal += " recycled=" + dynamicPopulation.RecycledCount +

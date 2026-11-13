@@ -141,6 +141,39 @@ namespace SharpGTA.World
             return graph.GetCarLink(GetCarLinkIndex(index)).RightLanes;
         }
 
+        /// <summary>`CCarPathLink::pathNodeIndex`: the node this link is registered under.</summary>
+        public int LinkOwnerNode(int index)
+        {
+            return graph.GetCarLink(GetCarLinkIndex(index)).NodeIndex;
+        }
+
+        /// <summary>`CCarPathLink::trafficLightType`: 0 none, 1/2 the junction phase.</summary>
+        public int LinkTrafficLightType(int index)
+        {
+            return graph.GetCarLink(GetCarLinkIndex(index)).TrafficLightType;
+        }
+
+        /// <summary>`trafficLightDirection` / the original 0x80 flag of the light on this link.</summary>
+        public bool LinkTrafficLightDirection(int index)
+        {
+            return graph.GetCarLink(GetCarLinkIndex(index)).TrafficLightDirection;
+        }
+
+        /// <summary>
+        /// Records the traffic light of a car connection the way `ScanForLightsOnMap` writes
+        /// `m_carPathLinks[i].trafficLightType`. Both directions of one physical link share the
+        /// same `CCarPathLink`, so a second write replaces the first, exactly like the original.
+        /// </summary>
+        public void SetCarLinkTrafficLight(int index, int type, bool direction)
+        {
+            if (type < 0 || type > 2)
+                throw new ArgumentOutOfRangeException("type");
+            PathGraph.CarLink link = graph.GetCarLink(GetCarLinkIndex(index));
+            graph.NoteCarLight(link.TrafficLightType, link.TrafficLightDirection, type, direction);
+            link.TrafficLightType = type;
+            link.TrafficLightDirection = direction;
+        }
+
         private int GetCarLinkIndex(int index)
         {
             if (index < 0 || index >= linkCarLinks.Length)
@@ -209,6 +242,15 @@ namespace SharpGTA.World
             internal int LeftLanes;
             internal int RightLanes;
             internal int NodeIndex;
+
+            /// <summary>`CCarPathLink::trafficLightType`: 0 none, 1/2 the junction phase.</summary>
+            internal int TrafficLightType;
+
+            /// <summary>
+            /// `trafficLightDirection` (VC) / the 0x80 flag (III): the link's own node is not the
+            /// more connected end, so the stop only applies when the car heads for it.
+            /// </summary>
+            internal bool TrafficLightDirection;
         }
 
         /// <summary>One placed path tile: a group's twelve slots under one world transform.</summary>
@@ -726,6 +768,51 @@ namespace SharpGTA.World
 
         /// <summary>Lane sides that fell back to the default of one lane.</summary>
         public int CarLinkLaneFallbackCount { get; private set; }
+
+        /// <summary>Placed traffic light objects found by the game's light scan.</summary>
+        public int TrafficLightObjectCount { get; private set; }
+
+        /// <summary>Car links that carry a parsed junction light.</summary>
+        public int CarLinkTrafficLightCount { get; private set; }
+
+        /// <summary>Links governed by phase 1 (`CAR_LIGHTS_1`).</summary>
+        public int CarLinkTrafficLightType1Count { get; private set; }
+
+        /// <summary>Links governed by phase 2 (`CAR_LIGHTS_2`).</summary>
+        public int CarLinkTrafficLightType2Count { get; private set; }
+
+        /// <summary>Links whose light only applies when the car heads for the link owner.</summary>
+        public int CarLinkTrafficLightDirectionCount { get; private set; }
+
+        /// <summary>Called by a game's light scan once it knows how many light objects it saw.</summary>
+        public void SetTrafficLightObjectCount(int value)
+        {
+            if (value < 0)
+                throw new ArgumentOutOfRangeException("value");
+            TrafficLightObjectCount = value;
+        }
+
+        internal void NoteCarLight(int oldType, bool oldDirection, int newType, bool newDirection)
+        {
+            // Keep the counters equal to the number of links that currently carry a light, so a
+            // second scan (another merge distance) does not double count.
+            if (oldType == 0 && newType != 0)
+                CarLinkTrafficLightCount++;
+            else if (oldType != 0 && newType == 0)
+                CarLinkTrafficLightCount--;
+            if (oldType == 1)
+                CarLinkTrafficLightType1Count--;
+            else if (oldType == 2)
+                CarLinkTrafficLightType2Count--;
+            if (newType == 1)
+                CarLinkTrafficLightType1Count++;
+            else if (newType == 2)
+                CarLinkTrafficLightType2Count++;
+            if (oldDirection)
+                CarLinkTrafficLightDirectionCount--;
+            if (newDirection)
+                CarLinkTrafficLightDirectionCount++;
+        }
 
         /// <summary>Largest left-lane count on any car link, after inheritance and fallbacks.</summary>
         public int CarLinkMaxLeftLanes { get; private set; }

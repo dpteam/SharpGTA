@@ -27,6 +27,9 @@ namespace SharpGTA.World
         private int completed;
         private int replanned;
         private int stalledSteps;
+        private int trafficHolds;
+
+        private uint lightMilliseconds;
 
         /// <summary>
         /// Optional route provider: when an actor reaches the end of its chain the module asks for
@@ -44,6 +47,14 @@ namespace SharpGTA.World
 
         /// <summary>Same as <see cref="RecycleVehicles"/>, for peds.</summary>
         public bool RecyclePeds { get; set; }
+
+        /// <summary>
+        /// When true vehicles stop at junction lights: a red or yellow link within eight units of
+        /// its midpoint on the approach side holds the car until the phase turns green. Off by
+        /// default so a probe that measures constant speed does not silently stop; the headless
+        /// and preview wiring turn it on.
+        /// </summary>
+        public bool ObeyTrafficLights { get; set; }
 
         public PathFollowerModule(PathGraph graph)
             : this(graph, null)
@@ -84,6 +95,9 @@ namespace SharpGTA.World
 
         /// <summary>Ticks that hit the per-tick step budget because a route made no progress.</summary>
         public int StalledStepCount { get { return stalledSteps; } }
+
+        /// <summary>Actor-ticks spent waiting at a red or yellow light.</summary>
+        public int TrafficHoldCount { get { return trafficHolds; } }
 
         /// <summary>Total distance the followers have driven, for probes and diagnostics.</summary>
         public float TravelledDistance { get { return travelled; } }
@@ -222,6 +236,7 @@ namespace SharpGTA.World
             float delta = context.Time.DeltaSeconds;
             if (!(delta > 0.0f))
                 return;
+            lightMilliseconds = context.Time.Milliseconds;
             for (int i = 0; i < followers.Count; i++)
             {
                 if (!followers[i].Finished)
@@ -284,17 +299,109 @@ namespace SharpGTA.World
                     continue;
                 }
                 float left = length - follower.Progress;
-                if (remaining < left)
+                if (left <= 0.0f)
+                {
+                    // Float rounding can put progress exactly on the node; advance instead of
+                    // letting the zero-length remainder look like a held car.
+                    NextSegment(follower, end);
+                    continue;
+                }
+                float allowed = left;
+                bool blocked = false;
+                if (ObeyTrafficLights)
+                {
+                    float limit = StopLimit(follower, start, end, length);
+                    if (limit < allowed)
+                    {
+                        allowed = limit;
+                        blocked = true;
+                    }
+                }
+                if (allowed <= 0.0f)
+                {
+
+                    // Parked on the stop line: hold the position and report the wait.
+                    follower.Entity.Velocity = Vector3.Zero;
+                    trafficHolds++;
+                    return;
+                }
+                if (remaining < allowed)
                 {
                     follower.Progress += remaining;
                     travelled += remaining;
                     PlaceOnSegment(follower, start, end, length);
                     return;
                 }
-                remaining -= left;
-                travelled += left;
+                follower.Progress += allowed;
+                travelled += allowed;
+                remaining -= allowed;
+                if (blocked)
+                {
+                    PlaceOnSegment(follower, start, end, length);
+                    follower.Entity.Velocity = Vector3.Zero;
+                    trafficHolds++;
+                    return;
+                }
                 NextSegment(follower, end);
             }
+        }
+
+        /// <summary>
+        /// Distance this actor may still travel on the segment before it must stand at a red or
+        /// yellow light, or <see cref="float.MaxValue"/> when the segment is free. The stop line is
+        /// eight units before the link midpoint on the approach side, exactly where
+        /// `CTrafficLights::ShouldCarStopForLight` blocks a car; a car already inside that window
+        /// holds immediately instead of rolling through.
+        /// </summary>
+        private float StopLimit(Follower follower, Vector3 start, Vector3 end, float length)
+        {
+            if (follower.Entity.Kind != WorldEntityKind.Vehicle)
+                return float.MaxValue;
+            int fromNode = follower.Route[follower.Segment];
+            int toNode = follower.Route[follower.Segment + 1];
+            PathGraphNode node = graph.Nodes[fromNode];
+            int link = node.FindLink(toNode);
+            if (link < 0 || !node.HasCarLink(link))
+                return float.MaxValue;
+            int type = node.LinkTrafficLightType(link);
+
+            if (type == 0)
+                return float.MaxValue;
+            int owner = node.LinkOwnerNode(link);
+            bool directionFlag = node.LinkTrafficLightDirection(link);
+            // The light only applies when the link points at the node we are heading for, unless
+            // the scan flagged the direction, which flips that requirement.
+            if (directionFlag != (owner != toNode))
+                return float.MaxValue;
+            TrafficLightPhase phase = type == 1
+                ? TrafficLights.PhaseCars1(lightMilliseconds)
+                : TrafficLights.PhaseCars2(lightMilliseconds);
+            if (phase == TrafficLightPhase.Green)
+                return float.MaxValue;
+
+            Vector3 midpoint = node.LinkMidpoint(link);
+            Vector3 direction = node.LinkDirection(link);
+            // +1 travels toward the lower node index, which is the direction the link stores.
+            int travel = toNode < fromNode ? 1 : -1;
+            float target = travel > 0 ? -8.0f : 8.0f;
+            float startDistance = Vector3.Dot(start - midpoint, direction);
+            float endDistance = Vector3.Dot(end - midpoint, direction);
+            if (endDistance == startDistance)
+                return float.MaxValue;
+            float progress = follower.Progress / length;
+            float current = startDistance + (endDistance - startDistance) * progress;
+            bool inWindow = travel > 0
+                ? (current < 0.0f && current > -8.0f)
+                : (current > 0.0f && current < 8.0f);
+            if (inWindow)
+                return 0.0f;
+            float atTarget = (target - startDistance) / (endDistance - startDistance);
+            if (atTarget <= progress)
+            {
+                // Stop line is behind us: the car is already committing through the junction.
+                return float.MaxValue;
+            }
+            return (atTarget - progress) * length;
         }
 
         private void PlaceOnSegment(Follower follower, Vector3 start, Vector3 end, float length)
@@ -362,6 +469,7 @@ namespace SharpGTA.World
             writer.WriteSingle(travelled);
             writer.WriteInt32(completed);
             writer.WriteInt32(replanned);
+            writer.WriteInt32(trafficHolds);
             // Normally empty: the population module drains it in the same tick. It stays in the
             // hash so a state captured between follower and population still differs from a
             // state where nothing finished.
