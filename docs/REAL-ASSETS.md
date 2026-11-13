@@ -36,6 +36,7 @@
 | Links flagged `bCrossesRoad` | 512 | 36 |
 | Path audit (`--verify-paths`) | consistent, longest 186.61, no long links | consistent, 26 long links (all water, max 329.02) |
 | Route probe (ground to 200 units away) | 26 hops, 728.49 units | 282 hops, 4847.98 units |
+| Car ground delta (preview / full map) | +0.46 max / −19.8 min (multi-level roads) | −0.72 max / −0.29 avg |
 | Path graph extern slots / empty slots | 6726 / 14691 | 5090 / 8752 |
 | Path graph components (car / ped / water) | 109 (3 / 106 / 0) | 42 (4 / 32 / 6) |
 | Single-node components / largest component | 20 / 1967 | 0 / 5102 |

@@ -392,6 +392,19 @@ function Test-SpawnedCars([string]$reference) {
     if ($lateText -notmatch "World-Dynamic: spawned=4 alive=4 drawn=[1-9]\d*") {
         throw "Spawned cars drew nothing: $lateText"
     }
+    # Cars must not float: the path plane is the lane, so the ground under a car can be below
+    # it (multi-level roads, tunnels) but never far above it.
+    $ground = [regex]::Match($lateText,
+        "Path-Follow-Ground: measured=(\d+) misses=(\d+) deltaMin=(-?[\d.]+) deltaMax=(-?[\d.]+)")
+    if (-not $ground.Success) {
+        throw "Spawned cars did not report their ground delta: $lateText"
+    }
+    if ([int]$ground.Groups[1].Value -lt 1 -or [int]$ground.Groups[2].Value -ne 0) {
+        throw "Spawned cars could not be measured against the ground: $($ground.Value)"
+    }
+    if ([double]$ground.Groups[4].Value -gt 1.0) {
+        throw "Spawned cars float above the road: $($ground.Value)"
+    }
     if ((Get-FileHash $late -Algorithm SHA256).Hash -eq
         (Get-FileHash $reference -Algorithm SHA256).Hash) {
         throw "Spawned cars did not change the frame."

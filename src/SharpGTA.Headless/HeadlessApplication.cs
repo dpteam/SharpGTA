@@ -105,7 +105,7 @@ namespace SharpGTA.Headless
                     if (options.HasSpawnObjects)
                         WriteDynamicSummary(loader.World, options, output);
                     if (followers != null)
-                        WritePathFollowSummary(followers, output);
+                        WritePathFollowSummary(loader.World, followers, output);
                     output.WriteLine("Clock: day=" + gameClock.DaysPassed.ToString(CultureInfo.InvariantCulture) +
                         " time=" + gameClock.Hours.ToString("00", CultureInfo.InvariantCulture) + ":" +
                         gameClock.Minutes.ToString("00", CultureInfo.InvariantCulture) + ":" +
@@ -614,12 +614,60 @@ namespace SharpGTA.Headless
                 "--spawn-cars needs a vehicle model; add --spawn-model NAME.");
         }
 
-        private static void WritePathFollowSummary(PathFollowerModule followers, TextWriter output)
+        private static void WritePathFollowSummary(StaticWorld world, PathFollowerModule followers,
+            TextWriter output)
         {
             output.WriteLine("Path-Follow: vehicles=" + followers.Count.ToString(CultureInfo.InvariantCulture) +
                 " completed=" + followers.CompletedCount.ToString(CultureInfo.InvariantCulture) +
                 " replans=" + followers.ReplanCount.ToString(CultureInfo.InvariantCulture) +
                 " travelled=" + followers.TravelledDistance.ToString("0.##", CultureInfo.InvariantCulture));
+            output.WriteLine(VehicleGroundProbe.Format(VehicleGroundProbe.Measure(world)));
+        }
+
+        /// <summary>
+        /// Measures how far each car sits from the COLL ground below it. The path node carries
+        /// the lane plane, so a small delta means the model origin is at the contact plane; a
+        /// large one would mean the cars float or sink and the spawn needs an offset.
+        /// </summary>
+        private static void WritePathFollowGround(StaticWorld world, TextWriter output)
+        {
+            IList<WorldEntity> entities = world.DynamicEntities;
+            int measured = 0;
+            int misses = 0;
+            float minimum = float.MaxValue;
+            float maximum = float.MinValue;
+            float total = 0.0f;
+            for (int i = 0; i < entities.Count; i++)
+            {
+                DynamicEntity entity = entities[i] as DynamicEntity;
+                if (entity == null || entity.Kind != WorldEntityKind.Vehicle)
+                    continue;
+                StaticWorldHit hit;
+                if (!world.QueryVertical(entity.Position.X, entity.Position.Y,
+                    entity.Position.Z + 20.0f, entity.Position.Z - 60.0f, out hit))
+                {
+                    misses++;
+                    continue;
+                }
+                float delta = entity.Position.Z - hit.Position.Z;
+                if (delta < minimum)
+                    minimum = delta;
+                if (delta > maximum)
+                    maximum = delta;
+                total += delta;
+                measured++;
+            }
+            if (measured == 0)
+            {
+                output.WriteLine("Path-Follow-Ground: measured=0 misses=" +
+                    misses.ToString(CultureInfo.InvariantCulture));
+                return;
+            }
+            output.WriteLine("Path-Follow-Ground: measured=" + measured.ToString(CultureInfo.InvariantCulture) +
+                " misses=" + misses.ToString(CultureInfo.InvariantCulture) +
+                " deltaMin=" + minimum.ToString("0.###", CultureInfo.InvariantCulture) +
+                " deltaMax=" + maximum.ToString("0.###", CultureInfo.InvariantCulture) +
+                " deltaAvg=" + (total / measured).ToString("0.###", CultureInfo.InvariantCulture));
         }
 
         private static string PathKindName(PathKind kind)

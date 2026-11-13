@@ -318,6 +318,8 @@ namespace SharpGTA.D3D9
                             " travelled=" + dynamicCarFollowers.TravelledDistance.ToString("0.##",
                                 CultureInfo.InvariantCulture) +
                             " rejected=" + dynamicRejected);
+                        Console.WriteLine(VehicleGroundProbe.Format(
+                            VehicleGroundProbe.Measure(loader.World)));
                     }
                     Console.WriteLine("World-Time: hour=" + clock.Hours.ToString("00", CultureInfo.InvariantCulture) +
                         ":" + clock.Minutes.ToString("00", CultureInfo.InvariantCulture) +
