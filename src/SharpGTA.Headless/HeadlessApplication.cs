@@ -48,6 +48,7 @@ namespace SharpGTA.Headless
                 string carModelName = null;
                 string pedModelName = null;
                 TrafficPopulationModule population = null;
+                CharacterMoveModule walkerModule = null;
                 bool dynamicModuleAdded = false;
                 using (GameDataLoader loader = CreateLoader(definition, options))
                 {
@@ -75,10 +76,33 @@ namespace SharpGTA.Headless
                         }
                     }
 
-                    SimulationRuntime runtime = new SimulationRuntime(definition);
+                    SimulationRuntime runtime = new SimulationRuntime(definition,
+                        options.HasWalk ? WalkInputSource.Instance : null, null, null);
                     gameClock = new GameClock();
                     runtime.AddModule(gameClock);
                     PathFollowerModule followers = null;
+                    if (options.HasWalk)
+                    {
+                        // A player-shaped probe: one ped, scripted forward input, COLL walls.
+                        if (loader.World.Count == 0)
+                        {
+                            throw new CommandLineException(
+                                "--walk requires loaded map data; add --standard.");
+                        }
+                        ModelDefinition walkModel = ResolvePedModel(loader, options);
+                        DynamicEntity walker;
+                        if (!loader.World.TrySpawnEntity(WorldEntityKind.Ped, walkModel,
+                            new Vector3(options.WalkX, options.WalkY, options.WalkZ),
+                            Vector3.Zero, out walker))
+                        {
+                            throw new CommandLineException("--walk could not spawn a ped.");
+                        }
+                        walkerModule = new CharacterMoveModule(loader.World, walker);
+                        walkerModule.Speed = options.WalkSpeed;
+                        walkerModule.Heading = (float)Math.Atan2(options.WalkDirectionY,
+                            options.WalkDirectionX);
+                        runtime.AddModule(walkerModule);
+                    }
                     if (options.HasSpawnObjects)
                     {
                         SpawnObjects(loader, options);
@@ -174,6 +198,15 @@ namespace SharpGTA.Headless
                             carModelName, pedModelName, output);
                     if (population != null)
                         WriteTrafficSummary(population, output);
+                    if (walkerModule != null)
+                    {
+                        Vector3 walkerPosition = walkerModule.Entity.Position;
+                        output.WriteLine("Walk: hits=" +
+                            walkerModule.CollisionHitCount.ToString(CultureInfo.InvariantCulture) +
+                            " travelled=" +
+                            walkerModule.TravelledDistance.ToString("0.##", CultureInfo.InvariantCulture) +
+                            " position=" + Vector(walkerPosition));
+                    }
                     output.WriteLine("Clock: day=" + gameClock.DaysPassed.ToString(CultureInfo.InvariantCulture) +
                         " time=" + gameClock.Hours.ToString("00", CultureInfo.InvariantCulture) + ":" +
                         gameClock.Minutes.ToString("00", CultureInfo.InvariantCulture) + ":" +
@@ -990,6 +1023,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --path-merge-distance R   Merge external path slots closer than R units (default 1, the original).");
             output.WriteLine("  --spawn-cars N [--spawn-car-speed S]  Spawn N cars that follow the car network.");
             output.WriteLine("  --spawn-peds N [--spawn-ped-speed S]  Spawn N peds that follow the ped network.");
+            output.WriteLine("  --walk X Y Z DX DY SPEED  Spawn one ped and walk it with COLL collision.");
             output.WriteLine("  --recycle                 Despawn finished actors and replace them, keeping the count.");
             output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
             output.WriteLine("  --spawn-objects N [--spawn-model NAME]  Spawn N drifting gameplay objects and tick them.");

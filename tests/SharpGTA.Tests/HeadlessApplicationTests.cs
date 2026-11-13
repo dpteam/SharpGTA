@@ -400,6 +400,35 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void WalkProbeMovesACharacterWithCollision()
+        {
+            string output;
+            string error;
+            Assert.Equal(2, Invoke(new string[] { "--walk", "0", "0", "0", "1", "0", "3" },
+                out output, out error));
+            Assert.True(error.IndexOf("--root", StringComparison.Ordinal) >= 0);
+            Assert.Equal(2, Invoke(new string[] { "--root", ".", "--walk", "0", "0", "0", "0", "0", "3" },
+                out output, out error));
+            Assert.True(error.IndexOf("--walk direction", StringComparison.Ordinal) >= 0);
+
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreatePedPathTree(temporary);
+                string first;
+                string second;
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--walk",
+                    "0", "0", "0", "1", "0", "3", "--ticks", "60" }, out first, out error), error);
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--walk",
+                    "0", "0", "0", "1", "0", "3", "--ticks", "60" }, out second, out error), error);
+                Assert.Equal(first, second);
+                // Two seconds at three units per second, on a map with no wall in the way.
+                Assert.True(first.IndexOf("Walk: hits=", StringComparison.Ordinal) >= 0, first);
+                Assert.True(first.IndexOf("travelled=6", StringComparison.Ordinal) >= 0, first);
+                Assert.True(first.IndexOf("State@60:", StringComparison.Ordinal) >= 0);
+            }
+        }
+
+        [Test]
         public void SpawnedPedsFollowThePedNetwork()
         {
             using (TemporaryDirectory temporary = new TemporaryDirectory())

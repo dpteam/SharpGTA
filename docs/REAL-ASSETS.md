@@ -41,6 +41,9 @@
 | Traffic lights scanned → signalled links (phase 1 / phase 2, direction-flagged) | 333 → 313 (161 / 152, 172) | 271 → 271 (155 / 116, 140) |
 | Light-controlled ped crossings (`bTrafficLight`) | 402 | 20 |
 | Ped waiting ticks (60 peds, 1200 / 3000 ticks) | 491 / 6953 | 0 (routes never reach a flagged crossing) |
+| `--walk 812 -936 36 1 0 3`, 120 ticks (hits / travelled) | 57 / 11.9, stopped by a railing | — |
+| `--walk 700 -700 10 0 1 3`, 300 ticks | 0 hits / 30 units, z = 10 | — |
+| `--walk -864 -575 10 1 0 3`, 200 ticks (VC) | — | 0 hits / 20 units, z = 9.8875 |
 | Actor-ticks held at lights (8 cars / 4 cars, 3000 ticks) | 3177 | 1936 |
 | Actor-ticks held with car following (`VehicleGap`, 10 / 20 cars, 3000 ticks) | 4898 (completed 7) | 19555 (completed 6, 26 at 6000 ticks) |
 | Car ground delta after lane offsets (`--spawn-cars 6`, 1200 ticks) | +0.309 max / −17.9 min | +0.115 max / −0.184 min |

@@ -32,6 +32,7 @@ namespace SharpGTA.World
         private readonly List<ModelRegistry> registries = new List<ModelRegistry>();
         private readonly List<int> collisionRevisions = new List<int>();
         private readonly List<WorldEntity> queryBuffer = new List<WorldEntity>();
+        private readonly List<StaticInstance> rayBuffer = new List<StaticInstance>();
         private WorldEntities entities;
         private GameDefinition entityDefinition;
         private ObjectData objectData;
@@ -172,6 +173,68 @@ namespace SharpGTA.World
             for (int i = 0; i < unindexed.Count; i++)
                 TestInstance(unindexed[i], x, y, minZ, maxZ, ref found, ref closest, ref hit);
             return found;
+        }
+
+        /// <summary>
+        /// Casts a world-space ray through static collision only. Used by characters and probes
+        /// that need a horizontal sweep; the vertical query above stays the cheap path for ground.
+        /// Instance transforms are rigid (IPL scale is parsed but not applied), so the local hit
+        /// distance is the world distance.
+        /// </summary>
+        public bool QueryRay(Vector3 origin, Vector3 direction, float maxDistance, out StaticWorldHit hit)
+        {
+            hit = new StaticWorldHit();
+            if (maxDistance <= 0.0f || float.IsNaN(maxDistance) || float.IsInfinity(maxDistance))
+                return false;
+            if (float.IsNaN(direction.X) || float.IsNaN(direction.Y) || float.IsNaN(direction.Z))
+                return false;
+            if (direction.LengthSquared() <= 0.0f)
+                return false;
+            Vector3 unit = direction.Normalize();
+            Vector3 end = origin + unit * maxDistance;
+            EnsureCollisionBounds();
+
+            float centerX = (origin.X + end.X) * 0.5f;
+            float centerY = (origin.Y + end.Y) * 0.5f;
+            float radius = (end - origin).Length() * 0.5f + 1.0f;
+            Vector3 center = new Vector3(centerX, centerY, (origin.Z + end.Z) * 0.5f);
+            QuerySectors(center, radius, rayBuffer);
+
+            bool found = false;
+            float closest = maxDistance;
+            for (int i = 0; i < rayBuffer.Count; i++)
+            {
+                StaticInstance instance = rayBuffer[i];
+                ColModel collision = instance.Model == null ? null : instance.Model.Collision;
+                if (collision == null)
+                    continue;
+                BoundingBox bounds = instance.WorldBounds;
+                if (!SegmentTouchesBounds(origin, end, bounds))
+                    continue;
+                Matrix transform = instance.Transform;
+                Vector3 localOrigin = transform.InverseTransformPoint(origin);
+                Vector3 localDirection = InverseTransformDirection(transform, unit);
+                Ray localRay = new Ray(localOrigin, localDirection, closest);
+                ColHit localHit;
+                if (!collision.RayCast(localRay, out localHit) || localHit.Distance >= closest)
+                    continue;
+                Vector3 worldPosition = transform.TransformPoint(localHit.Position);
+                Vector3 worldNormal = transform.TransformDirection(localHit.Normal);
+                if (worldNormal.LengthSquared() > 0.0f)
+                    worldNormal = worldNormal.Normalize();
+                closest = localHit.Distance;
+                hit = new StaticWorldHit(instance, worldPosition, worldNormal,
+                    localHit.Distance, localHit);
+                found = true;
+            }
+            return found;
+        }
+
+        private static bool SegmentTouchesBounds(Vector3 start, Vector3 end, BoundingBox bounds)
+        {
+            return Math.Max(start.X, end.X) >= bounds.Min.X && Math.Min(start.X, end.X) <= bounds.Max.X &&
+                Math.Max(start.Y, end.Y) >= bounds.Min.Y && Math.Min(start.Y, end.Y) <= bounds.Max.Y &&
+                Math.Max(start.Z, end.Z) >= bounds.Min.Z && Math.Min(start.Z, end.Z) <= bounds.Max.Z;
         }
 
         /// <summary>

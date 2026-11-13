@@ -104,6 +104,15 @@ namespace SharpGTA.Headless
         /// despawned and replaced, so the count stays the same for the whole run.
         /// </summary>
         public bool Recycle { get; set; }
+
+        /// <summary>`--walk`: spawn one ped and drive it from scripted forward input.</summary>
+        public bool HasWalk { get; set; }
+        public float WalkX { get; set; }
+        public float WalkY { get; set; }
+        public float WalkZ { get; set; }
+        public float WalkDirectionX { get; set; }
+        public float WalkDirectionY { get; set; }
+        public float WalkSpeed { get; set; }
         public int PathGroupIndex { get; set; }
         public int PathNodeIndex { get; set; }
 
@@ -280,6 +289,21 @@ namespace SharpGTA.Headless
                     case "--recycle":
                         options.Recycle = true;
                         break;
+                    case "--walk":
+                        if (i + 6 >= args.Length)
+                            throw new CommandLineException("--walk needs X Y Z DX DY SPEED.");
+                        options.WalkX = ParseSingle(Value(args, ref i, argument), argument);
+                        options.WalkY = ParseSingle(Value(args, ref i, argument), argument);
+                        options.WalkZ = ParseSingle(Value(args, ref i, argument), argument);
+                        options.WalkDirectionX = ParseSingle(Value(args, ref i, argument), argument);
+                        options.WalkDirectionY = ParseSingle(Value(args, ref i, argument), argument);
+                        options.WalkSpeed = ParseSingle(Value(args, ref i, argument), argument);
+                        if (!(options.WalkSpeed > 0.0f))
+                            throw new CommandLineException("--walk speed must be positive.");
+                        if (options.WalkDirectionX == 0.0f && options.WalkDirectionY == 0.0f)
+                            throw new CommandLineException("--walk direction must be non-zero.");
+                        options.HasWalk = true;
+                        break;
                     case "--spawn-car-speed":
                         options.SpawnCarSpeed = ParseSingle(Value(args, ref i, argument), argument);
                         if (!(options.SpawnCarSpeed > 0.0f))
@@ -329,7 +353,7 @@ namespace SharpGTA.Headless
                     options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
                     options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview ||
                     options.HasPathNearestQuery || options.HasPathMergeDistance || options.HasPathRouteQuery ||
-                    options.VerifyPaths || options.HasSpawnCars || options.SpawnPedCount > 0;
+                    options.VerifyPaths || options.HasSpawnCars || options.SpawnPedCount > 0 || options.HasWalk;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)
