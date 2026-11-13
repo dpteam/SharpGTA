@@ -65,6 +65,9 @@ namespace SharpGTA.D3D9
         private int verifyFrameCount;
         private readonly Vector3 spawn;
         private readonly bool[] keys = new bool[256];
+        private readonly bool playMode;
+        private CharacterMoveModule playerModule;
+        private DynamicEntity playerEntity;
         private bool exitRequested;
         private bool lookActive;
         private int pendingMoveKey = -1;
@@ -77,7 +80,7 @@ namespace SharpGTA.D3D9
             bool verifySectors, int spawnCount, string spawnModel, bool pathOverlay,
             bool pathRoute, float[] routePoints, string pathKind, float pathRouteRadius,
             int spawnCarCount, float spawnCarSpeed, int spawnPedCount, float spawnPedSpeed,
-            bool recycle)
+            bool recycle, bool play)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
@@ -90,7 +93,9 @@ namespace SharpGTA.D3D9
             this.device = device;
             this.loader = loader;
             loader.LoadStandard();
-            runtime = new SimulationRuntime(loader.Definition);
+            this.playMode = play;
+            runtime = new SimulationRuntime(loader.Definition,
+                play ? new PlayInputSource(this) : null, null, null);
             clock = new GameClock();
             runtime.AddModule(clock);
             resources = new WorldResourceManager(loader, modelBudget, txdBudget, byteBudget);
@@ -109,6 +114,8 @@ namespace SharpGTA.D3D9
                 SpawnDynamicEntities(spawnCount, spawnModel);
             if (spawnCarCount > 0 || spawnPedCount > 0)
                 SpawnActors(spawnCarCount, spawnPedCount, spawnModel, spawnCarSpeed, spawnPedSpeed, recycle);
+            if (play)
+                SpawnPlayer(spawnModel);
         }
 
         /// <summary>
@@ -187,6 +194,69 @@ namespace SharpGTA.D3D9
             runtime.AddModule(followers);
             if (dynamicPopulation != null)
                 runtime.AddModule(dynamicPopulation);
+        }
+
+        /// <summary>
+        /// `--play`: one ped that the keyboard drives through CharacterMoveModule, with a
+        /// third-person camera behind it. This is the first mode where the preview is driven by a
+        /// character instead of the free-fly camera; there is still no animation, no gravity and
+        /// no entity-vs-entity collision.
+        /// </summary>
+        private void SpawnPlayer(string modelName)
+        {
+            if (loader.World.Count == 0)
+                throw new ArgumentException("--play needs loaded map data.");
+            ModelDefinition model = ResolveActorModel(modelName, ModelKind.Ped,
+                "--play needs a registered ped model.");
+            Vector3 position = spawn;
+            StaticWorldHit hit;
+            if (loader.World.QueryVertical(position.X, position.Y, position.Z - 100.0f,
+                position.Z + 100.0f, out hit))
+            {
+                position = new Vector3(position.X, position.Y, hit.Position.Z);
+            }
+            DynamicEntity entity;
+            if (!loader.World.TrySpawnEntity(WorldEntityKind.Ped, model, position,
+                Vector3.Zero, out entity))
+            {
+                throw new ArgumentException("--play could not spawn the player.");
+            }
+            playerModule = new CharacterMoveModule(loader.World, entity);
+            playerModule.Speed = 4.0f;
+            playerModule.Heading = (float)Math.Atan2(camera.Forward.Y, camera.Forward.X);
+            playerEntity = entity;
+            runtime.AddModule(playerModule);
+            camera.Pitch = -0.18f;
+            UpdatePlayerCamera();
+            Console.WriteLine("World-Play: model=" + model.Name + " position=" + WorldPoint(position) +
+                " speed=" + playerModule.Speed);
+        }
+
+        /// <summary>Third-person boom: behind the character along the current camera yaw.</summary>
+        private void UpdatePlayerCamera()
+        {
+            if (playerModule == null)
+                return;
+            const float BoomLength = 5.0f;
+            const float EyeHeight = 1.2f;
+            Vector3 target = playerEntity.Position + new Vector3(0.0f, 0.0f, EyeHeight);
+            Vector3 forward = camera.Forward;
+            forward = new Vector3(forward.X, forward.Y, 0.0f);
+            if (forward.LengthSquared() < 0.0001f)
+                forward = new Vector3(0.0f, 1.0f, 0.0f);
+            forward = forward.Normalize();
+            Vector3 back = -forward;
+            float distance = BoomLength;
+            StaticWorldHit wall;
+            if (loader.World.QueryRay(target, back, BoomLength + 0.3f, out wall))
+                distance = Math.Max(0.6f, wall.Distance - 0.3f);
+            camera.Position = target + back * distance;
+        }
+
+        private static string WorldPoint(Vector3 point)
+        {
+            return string.Format(CultureInfo.InvariantCulture, "({0:R},{1:R},{2:R})",
+                point.X, point.Y, point.Z);
         }
 
         private ModelDefinition ResolveActorModel(string modelName, ModelKind kind, string message)
@@ -344,8 +414,11 @@ namespace SharpGTA.D3D9
         {
             if (screenshot != null && frames <= 0)
                 throw new ArgumentException("A finite positive --frames value is required with --screenshot.");
-            Console.WriteLine("WORLD PREVIEW / FREE FLY (not player gameplay): " + loader.World.Count + " static IPL instances.");
-            Console.WriteLine("Controls: WASD move, Q/E height, RMB look, F focus, G ground query, Home reset, Esc exit.");
+            Console.WriteLine((playMode ? "WORLD PREVIEW / THIRD-PERSON PLAYER (no animation, no gravity): "
+                : "WORLD PREVIEW / FREE FLY (not player gameplay): ") + loader.World.Count + " static IPL instances.");
+            Console.WriteLine(playMode
+                ? "Controls: WASD walk, RMB orbit camera, G ground query, Esc exit."
+                : "Controls: WASD move, Q/E height, RMB look, F focus, G ground query, Home reset, Esc exit.");
             bool diagnosticsPrinted = false;
             for (int frame = 0; frames == 0 || frame < frames; frame++)
             {
@@ -359,7 +432,15 @@ namespace SharpGTA.D3D9
                 runtime.Step();
                 timeObjects.Update(loader.World.Instances, clock);
                 Vector3 previousPosition = camera.Position;
-                camera.Move(keys[87], keys[83], keys[65], keys[68], keys[81], keys[69], 1.0f / 30.0f);
+                if (playMode)
+                {
+                    // The character owns its position; the camera only follows behind it.
+                    UpdatePlayerCamera();
+                }
+                else
+                {
+                    camera.Move(keys[87], keys[83], keys[65], keys[68], keys[81], keys[69], 1.0f / 30.0f);
+                }
                 if (pendingMoveKey >= 0 && (camera.Position - previousPosition).LengthSquared() > 0.0f)
                 {
                     PrintCamera("Move:" + (char)pendingMoveKey);
@@ -396,7 +477,7 @@ namespace SharpGTA.D3D9
                 // the objects the player is looking at, and a starved budget must not hide them
                 // behind map models. Draw calls stay static-first to keep the previous order.
                 RenderSceneSnapshot dynamicSnapshot = null;
-                if (dynamicSpawned > 0 || dynamicCars > 0 || dynamicPeds > 0)
+                if (dynamicSpawned > 0 || dynamicCars > 0 || dynamicPeds > 0 || playerModule != null)
                     dynamicSnapshot = resources.BuildDynamic(loader.World.DynamicEntities,
                         camera.Position, ViewRadius, frame == 0);
                 RenderSceneSnapshot staticSnapshot = resources.BuildVisible(candidates,
@@ -416,7 +497,7 @@ namespace SharpGTA.D3D9
                     diagnosticsPrinted = true;
 
                     Console.WriteLine("World-Entities: " + EntitySummary());
-                    if (dynamicSpawned > 0 || dynamicCars > 0 || dynamicPeds > 0)
+                    if (dynamicSpawned > 0 || dynamicCars > 0 || dynamicPeds > 0 || playerModule != null)
                     {
                         Console.WriteLine("World-Dynamic: spawned=" + (dynamicSpawned + dynamicCars + dynamicPeds) +
                             " alive=" + loader.World.DynamicEntities.Count +
@@ -511,6 +592,15 @@ namespace SharpGTA.D3D9
                     " evictedTxds=" + resources.TxdEvictionCount +
                     " remaining=" + resources.LastLoadReport.RemainingRequestedCount +
                     " deferred=" + resources.LastLoadReport.DeferredCount);
+                if (playerModule != null)
+                {
+                    Vector3 playerPosition = playerEntity.Position;
+                    Console.WriteLine("World-Play-Final: hits=" +
+                        playerModule.CollisionHitCount.ToString(CultureInfo.InvariantCulture) +
+                        " travelled=" + playerModule.TravelledDistance.ToString("0.##",
+                            CultureInfo.InvariantCulture) +
+                        " position=" + WorldPoint(playerPosition));
+                }
                 Console.WriteLine("World-Bytes-Final: cached=" + resources.ByteCacheCount +
                     " bytes=" + resources.ByteCacheBytes + "/" + resources.ByteCacheCapacity +
                     " pending=" + resources.ByteCachePending +
@@ -657,6 +747,51 @@ namespace SharpGTA.D3D9
                     mouseY = input.Y;
                     camera.Look(dx * 0.006f, -dy * 0.006f);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Camera-relative player input: the pressed direction becomes the character heading, and
+        /// the character walks forward along it. Reading it inside the simulation step keeps the
+        /// position owner single: the module moves the ped, the camera only looks at it.
+        /// </summary>
+        private InputFrame ReadPlayerInput()
+        {
+            InputFrame frame = new InputFrame();
+            if (playerModule == null)
+                return frame;
+            float forwardInput = (keys[87] ? 1.0f : 0.0f) - (keys[83] ? 1.0f : 0.0f);
+            float strafeInput = (keys[68] ? 1.0f : 0.0f) - (keys[65] ? 1.0f : 0.0f);
+            if (forwardInput == 0.0f && strafeInput == 0.0f)
+                return frame;
+            Vector3 ahead = camera.Forward;
+            ahead = new Vector3(ahead.X, ahead.Y, 0.0f);
+            if (ahead.LengthSquared() < 0.0001f)
+                ahead = new Vector3(0.0f, 1.0f, 0.0f);
+            ahead = ahead.Normalize();
+            Vector3 right = new Vector3(ahead.Y, -ahead.X, 0.0f);
+            Vector3 direction = ahead * forwardInput + right * strafeInput;
+            if (direction.LengthSquared() <= 0.0001f)
+                return frame;
+            direction = direction.Normalize();
+            playerModule.Heading = (float)Math.Atan2(direction.Y, direction.X);
+            frame.MoveY = 1.0f;
+            return frame;
+        }
+
+        /// <summary>Scripted bridge: the simulation asks the viewer for this frame\'s player input.</summary>
+        private sealed class PlayInputSource : IInputSource
+        {
+            private readonly WorldViewerApplication view;
+
+            internal PlayInputSource(WorldViewerApplication view)
+            {
+                this.view = view;
+            }
+
+            public InputFrame ReadInput(ulong tick)
+            {
+                return view.ReadPlayerInput();
             }
         }
 

@@ -531,6 +531,106 @@ function Test-RecycledTraffic([string]$reference) {
     Write-Host "PASS preview recycles finished actors: $($actors.Value)"
 }
 
+function Test-PlayMode([string]$reference) {
+    Write-Host "=== Third-person player ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    $output = Join-Path $root "artifacts/world-smoke"
+    [IO.Directory]::CreateDirectory($output) | Out-Null
+    $first = Join-Path $output "world-play-a.bmp"
+    $second = Join-Path $output "world-play-b.bmp"
+    [string[]]$firstLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 10 `
+        --play --screenshot $first 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Play mode run failed." }
+    [string[]]$secondLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 10 `
+        --play --screenshot $second 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Play mode repeat run failed." }
+
+    $text = [string]::Join("`n", $firstLog)
+    # A real ped model, not the engine's null placeholder, and a player that the camera follows.
+    if ($text -notmatch "World-Play: model=(?!null)\S+ position=\S+ speed=\d") {
+        throw "Play mode did not spawn a player: $text"
+    }
+    if ($text -notmatch "World-Play-Final: hits=\d+ travelled=[\d.]+ position=") {
+        throw "Play mode did not report the player: $text"
+    }
+    if ($text -notmatch "THIRD-PERSON PLAYER") {
+        throw "Play mode did not switch the camera banner: $text"
+    }
+    if ((Get-FileHash $first -Algorithm SHA256).Hash -eq
+        (Get-FileHash $reference -Algorithm SHA256).Hash) {
+        throw "Play mode did not change the frame."
+    }
+    if ((Get-FileHash $first -Algorithm SHA256).Hash -ne
+        (Get-FileHash $second -Algorithm SHA256).Hash) {
+        throw "Play mode is not deterministic."
+    }
+
+    # Live proof that the keyboard drives the character: hold W, then leave with Esc.
+    $liveStdout = Join-Path $output "world-play-live.log"
+    $live = Start-Process -FilePath $exe -WorkingDirectory $root -PassThru `
+        -ArgumentList @("--world", "--game", "iii", "--root", "`"$gameRootFull`"", "--play",
+            "--frames", "100000") `
+        -RedirectStandardOutput $liveStdout -RedirectStandardError (Join-Path $output "world-play-live.err.log")
+    try {
+        $handle = $live.Handle
+        Add-Type -TypeDefinition @"
+using System;
+using System.Runtime.InteropServices;
+public static class SharpGtaPlaySmokeInput
+{
+    [DllImport("user32.dll", EntryPoint="PostMessageW", CharSet=CharSet.Unicode, ExactSpelling=true)]
+    public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+}
+"@
+        $windowDeadline = [DateTime]::UtcNow.AddSeconds(30)
+        $window = [IntPtr]::Zero
+        do {
+            Start-Sleep -Milliseconds 250
+            $live.Refresh()
+            if ($live.HasExited) { throw "Play mode process exited before input." }
+            $window = $live.MainWindowHandle
+        } while ($window -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $windowDeadline)
+        if ($window -eq [IntPtr]::Zero) { throw "Play mode window was not created." }
+        $bannerDeadline = [DateTime]::UtcNow.AddSeconds(60)
+        do {
+            Start-Sleep -Milliseconds 250
+            $live.Refresh()
+            if ($live.HasExited) { break }
+        } while (-not (Read-SharedText $liveStdout).Contains("THIRD-PERSON PLAYER") -and
+            [DateTime]::UtcNow -lt $bannerDeadline)
+        if (-not (Read-SharedText $liveStdout).Contains("THIRD-PERSON PLAYER")) {
+            throw "Play mode did not reach the third-person preview."
+        }
+        Start-Sleep -Milliseconds 1500
+        [SharpGtaPlaySmokeInput]::PostMessage($window, 0x0100, [IntPtr]87, [IntPtr]1) | Out-Null
+        Start-Sleep -Milliseconds 1500
+        [SharpGtaPlaySmokeInput]::PostMessage($window, 0x0101, [IntPtr]87, [IntPtr]0xC0000001) | Out-Null
+        Start-Sleep -Milliseconds 300
+        [SharpGtaPlaySmokeInput]::PostMessage($window, 0x0100, [IntPtr]27, [IntPtr]1) | Out-Null
+        Start-Sleep -Milliseconds 200
+        [SharpGtaPlaySmokeInput]::PostMessage($window, 0x0101, [IntPtr]27, [IntPtr]0xC0000001) | Out-Null
+        $exitDeadline = [DateTime]::UtcNow.AddSeconds(30)
+        do {
+            Start-Sleep -Milliseconds 250
+            $live.Refresh()
+        } while (-not $live.HasExited -and [DateTime]::UtcNow -lt $exitDeadline)
+        if (-not $live.HasExited) { throw "Play mode did not exit on Esc." }
+        $liveText = [string]::Join("`n", (Read-SharedText $liveStdout))
+        $final = [regex]::Match($liveText, "World-Play-Final: hits=(\d+) travelled=([\d.]+)")
+        if (-not $final.Success) {
+            throw "Play mode did not report the player after input: $liveText"
+        }
+        if ([double]$final.Groups[2].Value -le 0.0) {
+            throw "Holding W did not move the player: $($final.Value)"
+        }
+        Write-Host "PASS keyboard drives the third-person player: $($final.Value)"
+    }
+    finally {
+        if (-not $live.HasExited) { $live.Kill() }
+    }
+    Write-Host "PASS third-person player spawns and is rendered: $(($firstLog | Where-Object { $_ -match 'World-Play: ' }) -join ' ')"
+}
+
 function Test-PathOverlay([string]$reference) {
     Write-Host "=== Path graph overlay ==="
     $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
@@ -679,11 +779,21 @@ public static class SharpGtaWorldSmokeInput
     public static extern bool PostMessage(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
 }
 '@
-        Start-Sleep -Milliseconds 1200
+        # The native frontend needs its first frames (textures, GXT, menu layout) before it reads
+        # keys: a fixed 1.2 s wait became too tight once the build grew, so wait for the window
+        # and then let the menu settle instead of guessing a shorter value.
+        $windowDeadline = [DateTime]::UtcNow.AddSeconds(30)
+        $window = [IntPtr]::Zero
+        do {
+            Start-Sleep -Milliseconds 250
+            $process.Refresh()
+            if ($process.HasExited) { throw "Menu-to-world process exited before input." }
+            $window = $process.MainWindowHandle
+        } while ($window -eq [IntPtr]::Zero -and [DateTime]::UtcNow -lt $windowDeadline)
+        if ($window -eq [IntPtr]::Zero) { throw "Menu-to-world window was not created." }
+        Start-Sleep -Milliseconds 2500
         $process.Refresh()
         if ($process.HasExited) { throw "Menu-to-world process exited before input." }
-        $window = $process.MainWindowHandle
-        if ($window -eq [IntPtr]::Zero) { throw "Menu-to-world window was not created." }
 
         function Send-Key([int]$key) {
             if (-not [SharpGtaWorldSmokeInput]::PostMessage($window, 0x0100, [IntPtr]$key, [IntPtr]1)) {
@@ -910,6 +1020,7 @@ try {
     Test-SpawnedCars $baseline
     Test-SpawnedPeds $baseline
     Test-RecycledTraffic $baseline
+    Test-PlayMode $baseline
 
     Invoke-World "net9.0-windows" "dotnet" `
         @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `

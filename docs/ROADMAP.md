@@ -47,7 +47,7 @@
 
 ## Этап 3 — gameplay III/VC
 
-- [~] Player/ped AI, animation state, weapons, vehicles и VC bikes/boats/flying. Первый кусок игрокоподобного движения есть: `CharacterMoveModule` берёт `InputFrame`, идёт со скоростью и не проходит сквозь COLL-стены (`StaticWorld.QueryRay`, три зонда на высоте груди, скольжение по нормали, `QueryVertical` для ног; `--walk X Y Z DX DY SPEED`). Нет гравитации, ступенек, наклонов, коллизий между entity, анимации и камеры от третьего лица.
+- [~] Player/ped AI, animation state, weapons, vehicles и VC bikes/boats/flying. Первый кусок игрокоподобного движения есть: `CharacterMoveModule` берёт `InputFrame`, идёт со скоростью и не проходит сквозь COLL-стены (`StaticWorld.QueryRay`, три зонда на высоте груди, скольжение по нормали, `QueryVertical` для ног; `--walk X Y Z DX DY SPEED` в headless и `--play` в D3D9 preview с камерой третьего лица, WASD относительно камеры и укорачиванием выноса по `QueryRay`). Нет гравитации, ступенек, наклонов, коллизий между entity и анимации.
 - [ ] Camera, game logic, missions/scripts, pickups/garages/restart/weather/water.
 - [ ] III MLO/subway/cull-zone specifics; VC interiors/ropes/attractors/set pieces/stinger и др.
 - [ ] Отдельные save schemas III/VC и retail compatibility tests; не копировать C++ pointers/struct images.
