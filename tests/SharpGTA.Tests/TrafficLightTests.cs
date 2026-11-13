@@ -106,6 +106,66 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void CarsQueueBehindEachOtherAtARedLight()
+        {
+            PathGraph graph = LongChainGraph();
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry);
+            int link = graph.Nodes[2].FindLink(1);
+            graph.Nodes[2].SetCarLinkTrafficLight(link, 2, graph.Nodes[2].LinkOwnerNode(link) != 1);
+
+            DynamicEntity ahead = SpawnVehicle(world, registry);
+            DynamicEntity behind = SpawnVehicle(world, registry);
+            PathFollowerModule module = new PathFollowerModule(graph, world);
+            module.ObeyTrafficLights = true;
+            module.VehicleGap = 6.0f;
+            // The leader starts one node closer to the junction (x = 60) and reaches the stop line
+            // (x = 53) almost at once; the follower comes from x = 90 and must queue behind it.
+            Assert.True(module.Assign(ahead, new int[] { 2, 1, 0 }, 30.0f));
+            Assert.True(module.Assign(behind, new int[] { 3, 2, 1, 0 }, 30.0f));
+
+            SimulationRuntime runtime = new SimulationRuntime(
+                new WorldTestDefinition(GameId.III, DataSchema.III, 32));
+            runtime.AddModule(module);
+            runtime.RunTicks(100);
+            Assert.Near(53.0f, ahead.Position.X, 0.01f);
+            Assert.Near(59.0f, behind.Position.X, 0.01f);
+            Assert.Near(6.0f, behind.Position.X - ahead.Position.X, 0.01f);
+            Assert.True(module.TrafficHoldCount > 0);
+
+            // Green arrives at tick 180: both clear the junction and finish their routes.
+            runtime.RunTicks(600);
+            Assert.Equal(2, module.CompletedCount);
+        }
+
+        [Test]
+        public void WithoutAGapCarsShareTheStopLine()
+        {
+            PathGraph graph = LongChainGraph();
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry);
+            int link = graph.Nodes[2].FindLink(1);
+            graph.Nodes[2].SetCarLinkTrafficLight(link, 2, graph.Nodes[2].LinkOwnerNode(link) != 1);
+
+            DynamicEntity ahead = SpawnVehicle(world, registry);
+            DynamicEntity behind = SpawnVehicle(world, registry);
+            PathFollowerModule module = new PathFollowerModule(graph, world);
+            module.ObeyTrafficLights = true;
+            Assert.Equal(0.0f, module.VehicleGap);
+            Assert.True(module.Assign(ahead, new int[] { 2, 1, 0 }, 30.0f));
+            Assert.True(module.Assign(behind, new int[] { 3, 2, 1, 0 }, 30.0f));
+
+            SimulationRuntime runtime = new SimulationRuntime(
+                new WorldTestDefinition(GameId.III, DataSchema.III, 32));
+            runtime.AddModule(module);
+            runtime.RunTicks(100);
+            // Without car following the second car stands on the same stop line: this is the
+            // overlap the gap exists to prevent, kept as an explicit baseline.
+            Assert.Near(53.0f, ahead.Position.X, 0.01f);
+            Assert.Near(53.0f, behind.Position.X, 0.01f);
+        }
+
+        [Test]
         public void LightsAreCachedAndRejectInvalidTypes()
         {
             PathGraph graph = LongChainGraph();

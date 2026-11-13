@@ -133,6 +133,7 @@ namespace SharpGTA.D3D9
             int hops = recycle ? PreviewRecycleHops : 40;
             PathFollowerModule followers = new PathFollowerModule(graph, loader.World);
             followers.ObeyTrafficLights = true;
+            followers.VehicleGap = 6.0f;
             if (!recycle)
             {
                 // Recycling needs actors that actually finish; a provider would keep every actor

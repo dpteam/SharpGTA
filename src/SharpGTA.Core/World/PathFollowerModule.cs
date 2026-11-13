@@ -56,6 +56,14 @@ namespace SharpGTA.World
         /// </summary>
         public bool ObeyTrafficLights { get; set; }
 
+        /// <summary>
+        /// Gap kept behind another vehicle in the same lane, in world units; zero disables car
+        /// following. The original relies on real collision volumes (`CPhysical`), which do not
+        /// exist here, so this is the stand-in that makes a queue form behind a red light instead
+        /// of every car standing in the same spot.
+        /// </summary>
+        public float VehicleGap { get; set; }
+
         public PathFollowerModule(PathGraph graph)
             : this(graph, null)
         {
@@ -96,7 +104,10 @@ namespace SharpGTA.World
         /// <summary>Ticks that hit the per-tick step budget because a route made no progress.</summary>
         public int StalledStepCount { get { return stalledSteps; } }
 
-        /// <summary>Actor-ticks spent waiting at a red or yellow light.</summary>
+        /// <summary>
+        /// Actor-ticks spent waiting: at a red or yellow light, or behind the vehicle ahead in the
+        /// same lane.
+        /// </summary>
         public int TrafficHoldCount { get { return trafficHolds; } }
 
         /// <summary>Total distance the followers have driven, for probes and diagnostics.</summary>
@@ -317,6 +328,12 @@ namespace SharpGTA.World
                         blocked = true;
                     }
                 }
+                float gap = FollowingLimit(follower);
+                if (gap < allowed)
+                {
+                    allowed = gap;
+                    blocked = true;
+                }
                 if (allowed <= 0.0f)
                 {
 
@@ -344,6 +361,52 @@ namespace SharpGTA.World
                 }
                 NextSegment(follower, end);
             }
+        }
+
+        /// <summary>
+        /// Distance this actor may still travel before it reaches the vehicle ahead in the same
+        /// lane, or <see cref="float.MaxValue"/>. Only a leader on the same directed segment and in
+        /// the same lane counts; cars in other lanes, in the opposite direction or already past the
+        /// node do not block. A leader exactly beside us does not count either, so two actors that
+        /// start on one node are not deadlocked against each other.
+        /// </summary>
+        private float FollowingLimit(Follower follower)
+        {
+            if (!(VehicleGap > 0.0f))
+                return float.MaxValue;
+            if (follower.Entity.Kind != WorldEntityKind.Vehicle)
+                return float.MaxValue;
+            int fromNode = follower.Route[follower.Segment];
+            int toNode = follower.Route[follower.Segment + 1];
+            float limit = float.MaxValue;
+            for (int i = 0; i < followers.Count; i++)
+            {
+                Follower other = followers[i];
+                if (ReferenceEquals(other, follower))
+                    continue;
+                if (other.Entity.Kind != WorldEntityKind.Vehicle)
+                    continue;
+                if (other.Segment > other.Route.Length - 2)
+                    continue;
+                if (other.Route[other.Segment] != fromNode ||
+                    other.Route[other.Segment + 1] != toNode)
+                {
+                    continue;
+                }
+                if (!SameLane(other.Lateral, follower.Lateral))
+                    continue;
+                if (!(other.Progress > follower.Progress))
+                    continue;
+                float gap = other.Progress - follower.Progress - VehicleGap;
+                if (gap < limit)
+                    limit = gap;
+            }
+            return limit;
+        }
+
+        private static bool SameLane(Vector3 left, Vector3 right)
+        {
+            return Math.Abs(left.X - right.X) < 0.01f && Math.Abs(left.Y - right.Y) < 0.01f;
         }
 
         /// <summary>
@@ -396,12 +459,13 @@ namespace SharpGTA.World
             if (inWindow)
                 return 0.0f;
             float atTarget = (target - startDistance) / (endDistance - startDistance);
-            if (atTarget <= progress)
-            {
-                // Stop line is behind us: the car is already committing through the junction.
-                return float.MaxValue;
-            }
-            return (atTarget - progress) * length;
+            float remainingToTarget = (atTarget - progress) * length;
+            if (remainingToTarget > 0.0f)
+                return remainingToTarget;
+            // The stop line is at or just behind us. Hold only while we are still on the approach
+            // side of the midpoint; a car that already committed through the junction keeps going.
+            bool beforeMidpoint = travel > 0 ? current < 0.0f : current > 0.0f;
+            return beforeMidpoint ? 0.0f : float.MaxValue;
         }
 
         private void PlaceOnSegment(Follower follower, Vector3 start, Vector3 end, float length)

@@ -99,6 +99,9 @@ namespace SharpGTA.Headless
                         // The original always obeys junction lights; the follower defaults to off
                         // so a plain speed probe does not stop without being asked.
                         followers.ObeyTrafficLights = true;
+                        // Six units centre to centre keeps a visible gap without collision
+                        // volumes; a queue forms behind a red light instead of one shared spot.
+                        followers.VehicleGap = 6.0f;
                         if (!options.Recycle)
                         {
                             // Without recycling an actor keeps driving by asking for a new route;

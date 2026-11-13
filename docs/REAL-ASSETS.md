@@ -40,6 +40,7 @@
 | Car lanes per direction (max left / max right) | 2 / 2 (1209 multi-lane links, 573 one-way) | 3 / 3 (231 multi-lane links, 629 one-way) |
 | Traffic lights scanned → signalled links (phase 1 / phase 2, direction-flagged) | 333 → 313 (161 / 152, 172) | 271 → 271 (155 / 116, 140) |
 | Actor-ticks held at lights (8 cars / 4 cars, 3000 ticks) | 3177 | 1936 |
+| Actor-ticks held with car following (`VehicleGap`, 10 / 20 cars, 3000 ticks) | 4898 (completed 7) | 19555 (completed 6, 26 at 6000 ticks) |
 | Car ground delta after lane offsets (`--spawn-cars 6`, 1200 ticks) | +0.309 max / −17.9 min | +0.115 max / −0.184 min |
 | Spawned actors, 120 ticks (`--spawn-cars 2 --spawn-peds 3`) | 5 actors, `vehicleModel=landstal pedModel=cop`, travelled 73.77 | 5 actors, `landstal`/`cop`, travelled 114 |
 | Path graph extern slots / empty slots | 6726 / 14691 | 5090 / 8752 |
@@ -113,6 +114,8 @@ Car-связи получают `CCarPathLink`-данные: III 2079 запис
 Полосы тоже взяты из реальных данных, а не выдуманы: `Path-Lanes` показывает `maxLeft=maxRight=2`, 573 one-way и 1209 multi-lane связей в III и `maxLeft=maxRight=3`, 629 one-way и 231 multi-lane в VC — то есть смещение машины в сторону от линии узлов действительно различается по дорогам. После включения смещения `VehicleGroundProbe` на `--spawn-cars 6` за 1200 тиков даёт `deltaMax=0.309` (III) и `0.115` (VC), то есть колёса по-прежнему на дороге; `deltaMin=-17.9` в III — те же многоуровневые развязки, что и раньше.
 
 Светофоры тоже считаются из размещённых объектов, а не назначаются по эвристике: III находит 333 светофора и помечает 313 car-связей (161 фазы 1, 152 фазы 2, 172 с флагом направления), VC — 271 светофор и 271 связь (155 / 116 / 140). На реальных прогонах машины действительно ждут: 8 машин III за 3000 тиков дают `holds=3177` при `completed=6`, 4 машины VC — `holds=1936`. Фазы идут по симуляционным миллисекундам (30 Hz), а не по wall-clock `CTimer`, поэтому `State@N` детерминирован.
+
+С `VehicleGap` (6 unit) за светофором встаёт очередь: III 10 машин за 3000 тиков — `holds=4898`, `completed=7`; VC 20 машин — `holds=19555`, `completed=6`, а на 6000 тиках `completed=26` при том же числе живых. То есть это не затор: очередь рассасывается на зелёном, а маршруты продолжаются. Пешеходов зазор не касается — они по-прежнему идут по линии узлов без остановок.
 
 ## Важные границы проверки
 
