@@ -53,6 +53,17 @@ namespace SharpGTA.World
         /// </summary>
         public IList<int> Links { get { return links; } }
 
+        /// <summary>Index into <see cref="Links"/> that points at <paramref name="targetNode"/>, or -1.</summary>
+        public int FindLink(int targetNode)
+        {
+            for (int i = 0; i < links.Count; i++)
+            {
+                if (links[i] == targetNode)
+                    return i;
+            }
+            return -1;
+        }
+
         /// <summary>
         /// Straight-line length of a link, the way `m_distances` stores it for a connection.
         /// </summary>
@@ -716,6 +727,18 @@ namespace SharpGTA.World
         /// <summary>Lane sides that fell back to the default of one lane.</summary>
         public int CarLinkLaneFallbackCount { get; private set; }
 
+        /// <summary>Largest left-lane count on any car link, after inheritance and fallbacks.</summary>
+        public int CarLinkMaxLeftLanes { get; private set; }
+
+        /// <summary>Largest right-lane count on any car link, after inheritance and fallbacks.</summary>
+        public int CarLinkMaxRightLanes { get; private set; }
+
+        /// <summary>Car links with lanes on one side only (one-way roads).</summary>
+        public int CarLinkOneWayCount { get; private set; }
+
+        /// <summary>Car links with more than one lane in at least one direction.</summary>
+        public int CarLinkMultiLaneCount { get; private set; }
+
         /// <summary>External pairs collapsed into one crossing between two neighbouring tiles.</summary>
         public int CrossTileLinkCount { get; private set; }
 
@@ -1008,6 +1031,18 @@ namespace SharpGTA.World
                     carLinks[k].RightLanes = 1;
                     CarLinkLaneFallbackCount++;
                 }
+                // Lane statistics after inheritance: they are what the lane offsets use, so the
+                // probe can show that real roads carry more than one lane per direction.
+                int left = carLinks[k].LeftLanes;
+                int right = carLinks[k].RightLanes;
+                if (left > CarLinkMaxLeftLanes)
+                    CarLinkMaxLeftLanes = left;
+                if (right > CarLinkMaxRightLanes)
+                    CarLinkMaxRightLanes = right;
+                if (left == 0 || right == 0)
+                    CarLinkOneWayCount++;
+                if (Math.Max(left, right) > 1)
+                    CarLinkMultiLaneCount++;
             }
         }
 

@@ -362,6 +362,13 @@ namespace SharpGTA.Headless
                     " water=" + graph.WaterComponentCount.ToString(CultureInfo.InvariantCulture) +
                     " singles=" + graph.SingleNodeComponentCount.ToString(CultureInfo.InvariantCulture) +
                     " largest=" + graph.LargestComponentSize.ToString(CultureInfo.InvariantCulture));
+                // Lanes decide where a car drives relative to the path line, so their real values
+                // belong next to the graph that produces them.
+                output.WriteLine("Path-Lanes: laneWidth=" + CarLanes.LaneWidth.ToString("R", CultureInfo.InvariantCulture) +
+                    " maxLeft=" + graph.CarLinkMaxLeftLanes.ToString(CultureInfo.InvariantCulture) +
+                    " maxRight=" + graph.CarLinkMaxRightLanes.ToString(CultureInfo.InvariantCulture) +
+                    " oneWay=" + graph.CarLinkOneWayCount.ToString(CultureInfo.InvariantCulture) +
+                    " multiLane=" + graph.CarLinkMultiLaneCount.ToString(CultureInfo.InvariantCulture));
             }
             output.WriteLine("Asset-Issues: total=" + loader.Report.TotalIssueCount.ToString(CultureInfo.InvariantCulture) +
                 " retained=" + loader.Report.Count.ToString(CultureInfo.InvariantCulture) +

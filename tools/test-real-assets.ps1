@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|Path-Follow:|Path-Traffic:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|Path-Lanes:|Path-Follow:|Path-Traffic:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -90,6 +90,16 @@ try {
         }
         if ($standard -notmatch [regex]::Escape($groups)) {
             throw "$game flood-fill groups changed: expected '$groups'."
+        }
+        # Lane counts come from the extern crossings; the offsets cars use depend on them, so a
+        # silent change here would move every car sideways.
+        $lanes = if ($game -eq "iii") {
+            "Path-Lanes: laneWidth=5 maxLeft=2 maxRight=2 oneWay=573 multiLane=1209"
+        } else {
+            "Path-Lanes: laneWidth=5 maxLeft=3 maxRight=3 oneWay=629 multiLane=231"
+        }
+        if ($standard -notmatch [regex]::Escape($lanes)) {
+            throw "$game lane data changed: expected '$lanes'."
         }
         $nearestNode = if ($game -eq "iii") { "node=1969 group=87 local=1" } else { "node=139 group=31 local=3" }
         $nearest = "Path-Nearest: kind=car position=($($ground[0]),$($ground[1]),$zoneZ) radius=200 found=true $nearestNode"

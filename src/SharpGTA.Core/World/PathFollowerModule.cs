@@ -174,10 +174,45 @@ namespace SharpGTA.World
             follower.Entity = entity;
             follower.Route = (int[])route.Clone();
             follower.Speed = speed;
+            follower.Lateral = LateralFor(follower, 0);
             followers.Add(follower);
             entity.Velocity = Vector3.Zero;
-            Move(entity, graph.Nodes[follower.Route[0]].Position);
+            Move(entity, graph.Nodes[follower.Route[0]].Position + follower.Lateral);
             return true;
+        }
+
+        /// <summary>
+        /// Lane offset for one route segment, from the `CCarPathLink` of the connection the actor
+        /// is about to drive. Peds have no car links and stay on the node line; a car on a link
+        /// whose direction has no lanes (a one-way road driven against its direction) also keeps
+        /// the node line instead of inventing a lane.
+        /// </summary>
+        private Vector3 LateralFor(Follower follower, int segment)
+        {
+            DynamicEntity entity = follower.Entity;
+            if (entity.Kind != WorldEntityKind.Vehicle)
+                return Vector3.Zero;
+            int fromNode = follower.Route[segment];
+            int toNode = follower.Route[segment + 1];
+            PathGraphNode node = graph.Nodes[fromNode];
+            int link = node.FindLink(toNode);
+            if (link < 0 || !node.HasCarLink(link))
+                return Vector3.Zero;
+            int left = node.LinkLeftLanes(link);
+            int right = node.LinkRightLanes(link);
+            // The stored direction points at the lower node index, so travelling to a lower index
+            // is the original's +1 direction; the lane counts and the offset side both follow it.
+            int travel = toNode < fromNode ? 1 : -1;
+            int lanes = CarLanes.LanesInDirection(left, right, travel);
+            if (lanes <= 0)
+                return Vector3.Zero;
+            // The original picks a random lane; this is a stable per-actor choice so two runs of
+            // the same spawn hash the same, and there is no lane switching yet.
+            int lane = (entity.Handle & 0x7FFFFFFF) % lanes;
+            Vector3 forward = node.LinkDirection(link);
+            if (travel < 0)
+                forward = -forward;
+            return CarLanes.Offset(forward, lane + CarLanes.OneWayLaneOffset(left, right));
         }
 
         public void Process(SimulationContext context)
@@ -240,8 +275,8 @@ namespace SharpGTA.World
                     stalledSteps++;
                     return;
                 }
-                Vector3 start = graph.Nodes[follower.Route[follower.Segment]].Position;
-                Vector3 end = graph.Nodes[follower.Route[follower.Segment + 1]].Position;
+                Vector3 start = graph.Nodes[follower.Route[follower.Segment]].Position + follower.Lateral;
+                Vector3 end = graph.Nodes[follower.Route[follower.Segment + 1]].Position + follower.Lateral;
                 float length = (end - start).Length();
                 if (length <= 0.0001f)
                 {
@@ -283,7 +318,12 @@ namespace SharpGTA.World
             follower.Segment++;
             follower.Progress = 0.0f;
             if (follower.Segment < follower.Route.Length - 1)
+            {
+                // The next link can have a different lane layout and travel side, so the lane
+                // offset is recomputed per segment instead of being fixed for the whole route.
+                follower.Lateral = LateralFor(follower, follower.Segment);
                 return;
+            }
             Move(follower.Entity, segmentEnd);
             completed++;
             int lastNode = follower.Route[follower.Route.Length - 1];
@@ -295,6 +335,7 @@ namespace SharpGTA.World
                 follower.Route = next;
                 follower.Segment = 0;
                 follower.Progress = 0.0f;
+                follower.Lateral = LateralFor(follower, 0);
                 replanned++;
                 return;
             }
@@ -351,6 +392,12 @@ namespace SharpGTA.World
             internal int Segment;
             internal float Progress;
             internal bool Finished;
+            /// <summary>
+            /// Sideways offset of the lane this actor drives in on the current segment. It is
+            /// derived from the link and the handle, never from wall time, so it stays stable and
+            /// two runs of the same route put actors in the same lanes.
+            /// </summary>
+            internal Vector3 Lateral;
         }
     }
 }

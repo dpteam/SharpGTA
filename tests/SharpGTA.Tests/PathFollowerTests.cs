@@ -10,6 +10,13 @@ namespace SharpGTA.Tests
 {
     public sealed class PathFollowerTests
     {
+        /// <summary>
+        /// The synthetic chain has one car link per connection with the 1/1 lane fallback, so a
+        /// car sits half a lane (2.5 units) to the right of the path line. Bit-identical to
+        /// `LANE_WIDTH` * (0 + OneWayLaneOffset(1, 1)) from the original.
+        /// </summary>
+        private const float LaneOffset = 2.5f;
+
         [Test]
         public void VehicleWalksItsRouteAtConstantSpeed()
         {
@@ -21,27 +28,31 @@ namespace SharpGTA.Tests
             PathFollowerModule module = new PathFollowerModule(graph);
             Assert.True(module.Assign(vehicle, new int[] { 0, 1, 2, 3 }, 10.0f));
             Assert.Equal(1, module.Count);
-            AssertVector(Vector3.Zero, vehicle.Position);
+            // Assign snaps the car onto the first node in its lane, not onto the path line.
+            AssertVector(new Vector3(0.0f, -LaneOffset, 0.0f), vehicle.Position);
 
             SimulationRuntime runtime = new SimulationRuntime(
                 new WorldTestDefinition(GameId.III, DataSchema.III, 32));
             runtime.AddModule(module);
             runtime.RunTicks(30);
-            // One second at ten units per second: the car is on the first ten-unit segment end.
+            // One second at ten units per second: the car is on the first ten-unit segment end,
+            // inside its lane rather than on the path line.
             Assert.Near(10.0f, vehicle.Position.X, 0.01f);
+            Assert.Near(-LaneOffset, vehicle.Position.Y, 0.01f);
             Assert.Near(10.0f, module.TravelledDistance, 0.01f);
             Assert.Equal(0, module.CompletedCount);
 
             runtime.RunTicks(150);
-            // Thirty units of route are covered, so the car stops on the last node.
-            AssertVector(new Vector3(30.0f, 0.0f, 0.0f), vehicle.Position);
+            // Thirty units of route are covered, so the car stops on the last node of the route,
+            // offset into its lane (2.5 units right of the path line, see CarLanes).
+            AssertVector(new Vector3(30.0f, -LaneOffset, 0.0f), vehicle.Position);
             Assert.Equal(1, module.CompletedCount);
             AssertVector(Vector3.Zero, vehicle.Velocity);
             Assert.Near(30.0f, module.TravelledDistance, 0.01f);
 
             // Once finished it must not keep drifting.
             runtime.RunTicks(30);
-            AssertVector(new Vector3(30.0f, 0.0f, 0.0f), vehicle.Position);
+            AssertVector(new Vector3(30.0f, -LaneOffset, 0.0f), vehicle.Position);
             Assert.Near(30.0f, module.TravelledDistance, 0.01f);
         }
 
@@ -113,7 +124,7 @@ namespace SharpGTA.Tests
             runtime.RunTicks(60);
             Assert.Equal(1, module.CompletedCount);
             Assert.Equal(0, module.ReplanCount);
-            AssertVector(new Vector3(10.0f, 0.0f, 0.0f), vehicle.Position);
+            AssertVector(new Vector3(10.0f, -LaneOffset, 0.0f), vehicle.Position);
 
             // With a provider the car continues from wherever it stopped.
             PathFollowerModule replanning = new PathFollowerModule(graph);
@@ -130,12 +141,12 @@ namespace SharpGTA.Tests
             second_runtime.AddModule(replanning);
             second_runtime.RunTicks(60);
             Assert.Equal(1, replanning.ReplanCount);
-            AssertVector(new Vector3(20.0f, 0.0f, 0.0f), second.Position);
+            AssertVector(new Vector3(20.0f, -LaneOffset, 0.0f), second.Position);
 
             second_runtime.RunTicks(60);
             // The provider refuses anything past node 2, so the car parks there.
             Assert.Equal(1, replanning.ReplanCount);
-            AssertVector(new Vector3(20.0f, 0.0f, 0.0f), second.Position);
+            AssertVector(new Vector3(20.0f, -LaneOffset, 0.0f), second.Position);
             AssertVector(Vector3.Zero, second.Velocity);
         }
 

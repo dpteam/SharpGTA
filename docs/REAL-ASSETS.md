@@ -37,6 +37,8 @@
 | Path audit (`--verify-paths`) | consistent, longest 186.61, no long links | consistent, 26 long links (all water, max 329.02) |
 | Route probe (ground to 200 units away) | 26 hops, 728.49 units | 282 hops, 4847.98 units |
 | Car ground delta (preview / full map) | +0.46 max / −19.8 min (multi-level roads) | −0.72 max / −0.29 avg |
+| Car lanes per direction (max left / max right) | 2 / 2 (1209 multi-lane links, 573 one-way) | 3 / 3 (231 multi-lane links, 629 one-way) |
+| Car ground delta after lane offsets (`--spawn-cars 6`, 1200 ticks) | +0.309 max / −17.9 min | +0.115 max / −0.184 min |
 | Spawned actors, 120 ticks (`--spawn-cars 2 --spawn-peds 3`) | 5 actors, `vehicleModel=landstal pedModel=cop`, travelled 73.77 | 5 actors, `landstal`/`cop`, travelled 114 |
 | Path graph extern slots / empty slots | 6726 / 14691 | 5090 / 8752 |
 | Path graph components (car / ped / water) | 109 (3 / 106 / 0) | 42 (4 / 32 / 6) |
@@ -105,6 +107,8 @@ Car-связи получают `CCarPathLink`-данные: III 2079 запис
 Спавн актёров проверяется на обоих деревьях: `--spawn-cars 2 --spawn-peds 3` даёт 5 actor'ов с моделями `landstal`/`cop` (III 73.77 unit за 120 тиков, VC 114) — то есть подхватывается первый реальный рекорд своего вида, а не `null`-модель id 0, которая есть в IDE обоих городов и не имеет меша. Ped DFF в III состоит из двух clump'ов (`cop.dff`: 2 clumps, 25 atomics, 1096 треугольников), поэтому статическая модель конвертируется по всем clump'ам; в world preview стартовая точка на эстакаде оставляет ped-сеть под настилом, так что пиксельное доказательство ped-меша даёт `--model cop`, а не кадр мира.
 
 Рециклинг трафика проверяется там же: `--spawn-cars 3 --recycle --spawn-car-speed 40` за 3000 тиков даёт III `spawned=despawned=recycled=12` (11991 unit), VC — 13 (11992.68 unit), при этом `Path-Follow: vehicles=3 peds=0 actors=3` не меняется, то есть население держится на target, а не растёт. Пешеходы рециклируются тем же модулем (III `--spawn-peds 3 --recycle --spawn-ped-speed 10` → 4 замены). Узлы замен выбираются детерминированным round-robin со stride, а не случайно по зонам, как в `CPopulation`.
+
+Полосы тоже взяты из реальных данных, а не выдуманы: `Path-Lanes` показывает `maxLeft=maxRight=2`, 573 one-way и 1209 multi-lane связей в III и `maxLeft=maxRight=3`, 629 one-way и 231 multi-lane в VC — то есть смещение машины в сторону от линии узлов действительно различается по дорогам. После включения смещения `VehicleGroundProbe` на `--spawn-cars 6` за 1200 тиков даёт `deltaMax=0.309` (III) и `0.115` (VC), то есть колёса по-прежнему на дороге; `deltaMin=-17.9` в III — те же многоуровневые развязки, что и раньше.
 
 ## Важные границы проверки
 
