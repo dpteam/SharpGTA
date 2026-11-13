@@ -341,6 +341,8 @@ namespace SharpGTA.Headless
                 WriteDff(options.DffPaths[i], loader.LoadDff(options.DffPaths[i]), output);
             for (int i = 0; i < options.DffEntries.Count; i++)
                 WriteDff("IMG:" + options.DffEntries[i], loader.LoadDffEntry(options.DffEntries[i]), output);
+            for (int i = 0; i < options.IfpPaths.Count; i++)
+                WriteIfp(options.IfpPaths[i], loader.LoadIfp(options.IfpPaths[i]), options.IfpAnimation, output);
 
             GameDataLoadStats stats = loader.Stats;
             output.WriteLine("Assets: dat=" + stats.DatFileCount.ToString(CultureInfo.InvariantCulture) +
@@ -884,6 +886,64 @@ namespace SharpGTA.Headless
                 " dxt3=" + dxt3.ToString(CultureInfo.InvariantCulture));
         }
 
+        private static void WriteIfp(string source, IfpDocument document, string wanted, TextWriter output)
+        {
+            int animations = 0;
+            int sequences = 0;
+            int frames = 0;
+            int translated = 0;
+            int scaled = 0;
+            float longest = 0.0f;
+            for (int i = 0; i < document.Blocks.Length; i++)
+            {
+                IfpBlock block = document.Blocks[i];
+                for (int j = 0; j < block.Animations.Length; j++)
+                {
+                    IfpAnimation animation = block.Animations[j];
+                    animations++;
+                    if (animation.Duration > longest)
+                        longest = animation.Duration;
+                    for (int k = 0; k < animation.Sequences.Length; k++)
+                    {
+                        IfpSequence sequence = animation.Sequences[k];
+                        sequences++;
+                        frames += sequence.Frames.Length;
+                        if (sequence.HasTranslation)
+                            translated++;
+                        if (sequence.HasScale)
+                            scaled++;
+                    }
+                }
+            }
+            output.WriteLine("IFP: source=" + source +
+                " blocks=" + document.Blocks.Length.ToString(CultureInfo.InvariantCulture) +
+                " animations=" + animations.ToString(CultureInfo.InvariantCulture) +
+                " sequences=" + sequences.ToString(CultureInfo.InvariantCulture) +
+                " frames=" + frames.ToString(CultureInfo.InvariantCulture) +
+                " translated=" + translated.ToString(CultureInfo.InvariantCulture) +
+                " scaled=" + scaled.ToString(CultureInfo.InvariantCulture) +
+                " longest=" + longest.ToString("0.###", CultureInfo.InvariantCulture));
+            if (wanted == null)
+                return;
+            // A named lookup proves the names and hierarchy walk, not just the aggregate.
+            for (int i = 0; i < document.Blocks.Length; i++)
+            {
+                IfpBlock block = document.Blocks[i];
+                for (int j = 0; j < block.Animations.Length; j++)
+                {
+                    IfpAnimation animation = block.Animations[j];
+                    if (!string.Equals(animation.Name, wanted, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    output.WriteLine("IFP-Animation: block=" + block.Name + " name=" + animation.Name +
+                        " sequences=" + animation.Sequences.Length.ToString(CultureInfo.InvariantCulture) +
+                        " frames=" + animation.FrameCount.ToString(CultureInfo.InvariantCulture) +
+                        " duration=" + animation.Duration.ToString("0.###", CultureInfo.InvariantCulture));
+                    return;
+                }
+            }
+            output.WriteLine("IFP-Animation: name=" + wanted + " found=false");
+        }
+
         private static void WriteDff(string source, DffDocument document, TextWriter output)
         {
             int geometries = 0;
@@ -1009,6 +1069,8 @@ namespace SharpGTA.Headless
             output.WriteLine("  --dff PATH                Decode static non-native DFF data; repeatable.");
             output.WriteLine("  --dff-entry NAME          Decode a named DFF entry from loaded IMG files.");
             output.WriteLine("  --dff-scan                Decode every DFF entry and print aggregate diagnostics.");
+            output.WriteLine("  --ifp PATH               Read a loose IFP animation package; repeatable.");
+            output.WriteLine("  --ifp-animation NAME     Print one animation from the read IFP packages.");
             output.WriteLine("  --txd PATH                Read D3D8 TXD and decode all its mip levels; repeatable.");
             output.WriteLine("  --txd-entry NAME          Read a named D3D8 TXD entry from loaded IMG files.");
             output.WriteLine("  --txd-scan                Decode every D3D8 TXD texture and mip level in IMG.");

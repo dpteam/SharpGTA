@@ -23,6 +23,7 @@ namespace SharpGTA.Headless
             RenderWarePaths = new List<string>();
             RenderWareEntries = new List<string>();
             DffPaths = new List<string>();
+            IfpPaths = new List<string>();
             DffEntries = new List<string>();
             TxdPaths = new List<string>();
             TxdEntries = new List<string>();
@@ -53,6 +54,8 @@ namespace SharpGTA.Headless
         public List<string> RenderWarePaths { get; private set; }
         public List<string> RenderWareEntries { get; private set; }
         public List<string> DffPaths { get; private set; }
+        public List<string> IfpPaths { get; private set; }
+        public string IfpAnimation { get; set; }
         public List<string> DffEntries { get; private set; }
         public ulong Ticks { get; set; }
         public ulong StateAt { get; set; }
@@ -170,6 +173,13 @@ namespace SharpGTA.Headless
                     case "--dff":
                         options.DffPaths.Add(Value(args, ref i, argument));
                         options.HasExplicitAssetAction = true;
+                        break;
+                    case "--ifp":
+                        options.IfpPaths.Add(Value(args, ref i, argument));
+                        options.HasExplicitAssetAction = true;
+                        break;
+                    case "--ifp-animation":
+                        options.IfpAnimation = Value(args, ref i, argument);
                         break;
                     case "--dff-entry":
                         options.DffEntries.Add(Value(args, ref i, argument));
@@ -349,6 +359,7 @@ namespace SharpGTA.Headless
                 bool needsRoot = options.Standard || options.DatPaths.Count != 0 || options.ImagePaths.Count != 0 ||
                     options.GxtPath != null || options.RenderWarePaths.Count != 0 || options.RenderWareEntries.Count != 0 ||
                     options.DffPaths.Count != 0 || options.DffEntries.Count != 0 || options.DffScan ||
+                    options.IfpPaths.Count != 0 ||
                     options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
                     options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
                     options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview ||

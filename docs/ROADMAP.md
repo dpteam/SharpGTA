@@ -22,7 +22,7 @@
 - [x] Model registry + static IPL world + sector broad phase + bounded diagnostics.
 - [x] RenderWare chunk inventory и static non-native DFF: Clump/FrameList/GeometryList/Atomic, geometry/morph, materials/texture refs, BinMesh list/strip, multi-clump и stale parent lengths.
 - [x] DFF HAnim, old/split Skin и MatFX (включая embedded textures) читаются на всех реальных DFF; counters в `--dff[-entry]/scan`.
-- [~] Animation/skinning/render behavior и D3D8 pre-instanced geometry ещё не перенесены.
+- [~] Animation/skinning/render behavior и D3D8 pre-instanced geometry ещё не перенесены; IFP читается, но не сэмплируется на скелете.
 - [x] Smoke `LoadStandard()` на двух локальных реальных III/VC trees, обоих runtimes; counts в `docs/REAL-ASSETS.md`.
 - [x] Начальная синхронная загрузка 30 VC COLL-ресурсов из IMG до первого IPL и реальные ground queries.
 - [ ] Расширенные golden manifests/запросы для retail variants; bounds-based streaming/eviction ещё впереди.
@@ -32,7 +32,8 @@
 - [x] Полное чтение всех nonempty DFF из локальных IMG: III 3134 + 4 empty placeholders; VC 4617; ноль malformed entries.
 - [x] PC D3D8 TXD dictionaries, palettes, mip levels и RGBA decode реальных uncompressed/DXT1/DXT3 форматов; полный IMG scan обеих игр проходит. DXT5 покрыт synthetic tests.
 - [ ] Оставшиеся DFF plugins/native branches и специальные PAL4/DXT2/DXT4/PS2 asset decoders, если появятся соответствующие samples/потребность.
-- [ ] IFP animations и SCM VM с отдельными numeric opcode tables III/VC.
+- [x] IFP animation packages: `ANLF`/`ANPK`, `INFO`/`NAME`/`DGAN`/`CPAN`/`ANIM`, `KR00`/`KRT0`/`KRTS`; инверсия кватернионов, перевод абсолютных времён в дельты и снятие flips как в `CAnimManager::LoadAnimFile`. Агрегаты и именованные анимации обеих игр в `docs/REAL-ASSETS.md`.
+- [ ] Sampling/playback IFP на скелете, animation blending/state machine и SCM VM с отдельными numeric opcode tables III/VC.
 
 ## Этап 2 — streaming и simulation world
 
@@ -47,7 +48,7 @@
 
 ## Этап 3 — gameplay III/VC
 
-- [~] Player/ped AI, animation state, weapons, vehicles и VC bikes/boats/flying. Первый кусок игрокоподобного движения есть: `CharacterMoveModule` берёт `InputFrame`, идёт со скоростью, не проходит сквозь COLL-стены (`StaticWorld.QueryRay`, три зонда на высоте груди, скольжение по нормали) и имеет вертикаль `CPhysical::ApplyGravity` (падение с края и приземление по `QueryVertical`, `IsGrounded`); в headless это `--walk X Y Z DX DY SPEED`, в D3D9 preview — `--play` с камерой третьего лица, WASD относительно камеры и укорачиванием выноса по `QueryRay`. Тело — два кольца зондов (0.45 и грудь), поэтому низкие препятствия перешагиваются, а всё выше блокирует; другие актёры — цилиндры с односторонней реакцией (упирается, но не толкает). Нет ответа на настоящие наклоны (круче ~45° читаются как стена), транспорта как тела, swept-объёма и анимации.
+- [~] Player/ped AI, animation state, weapons, vehicles и VC bikes/boats/flying. Первый кусок игрокоподобного движения есть: `CharacterMoveModule` берёт `InputFrame`, идёт со скоростью, не проходит сквозь COLL-стены (`StaticWorld.QueryRay`, три зонда на высоте груди, скольжение по нормали) и имеет вертикаль `CPhysical::ApplyGravity` (падение с края и приземление по `QueryVertical`, `IsGrounded`); в headless это `--walk X Y Z DX DY SPEED`, в D3D9 preview — `--play` с камерой третьего лица, WASD относительно камеры и укорачиванием выноса по `QueryRay`. Тело — два кольца зондов (0.45 и грудь), поэтому низкие препятствия перешагиваются, а всё выше блокирует; другие актёры — цилиндры с односторонней реакцией (упирается, но не толкает). Нет ответа на настоящие наклоны (круче ~45° читаются как стена), транспорта как тела, swept-объёма и анимации; IFP-пакеты уже читаются (`--ifp`, `--ifp-animation`), но скелет и playback ещё не подключены.
 - [ ] Camera, game logic, missions/scripts, pickups/garages/restart/weather/water.
 - [ ] III MLO/subway/cull-zone specifics; VC interiors/ropes/attractors/set pieces/stinger и др.
 - [ ] Отдельные save schemas III/VC и retail compatibility tests; не копировать C++ pointers/struct images.

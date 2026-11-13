@@ -516,6 +516,21 @@ namespace SharpGTA.Assets
             }
         }
 
+        /// <summary>Reads a loose IFP animation package, the way `CAnimManager::LoadAnimFile` does.</summary>
+        public IfpDocument LoadIfp(string path)
+        {
+            ThrowIfDisposed();
+            RequireFile(path);
+            try
+            {
+                return IfpReader.Read(ReadRequiredBytes(path));
+            }
+            catch (AssetFormatException exception)
+            {
+                throw WithPath(path, exception);
+            }
+        }
+
         public TxdArchive LoadTxdEntry(string name)
         {
             ThrowIfDisposed();

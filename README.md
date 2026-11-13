@@ -4,7 +4,7 @@
 
 Управляемый движок на C# для данных и игровой логики **GTA III** и **GTA Vice City**. Целевая поставка — **.NET Framework 4.0 / Windows XP SP3**, без сторонних runtime-библиотек. Исходные игровые ресурсы не входят в репозиторий и должны принадлежать пользователю.
 
-> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, полного игрового renderer и звука пока нет; уже есть MSHTML Launcher, интерактивное меню GTA III и streamed static world preview с draw-distance/LOD на оригинальных данных. См. [дорожную карту](docs/ROADMAP.md).
+> **Статус:** это рабочий headless-фундамент, а не playable-порт. Уже работают профили III/VC, DAT/IDE/IPL/COLL/IMG/GXT, static non-native DFF с geometry/materials/BinMesh, D3D8 TXD с mipmaps и RGBA decode, HAnim/Skin/MatFX readers, IFP-пакеты анимаций (только чтение), статические IPL-объекты и COLL-запросы. Animation runtime, SCM, динамической физики, пешеходов, транспорта, полного игрового renderer и звука пока нет; уже есть MSHTML Launcher, интерактивное меню GTA III и streamed static world preview с draw-distance/LOD на оригинальных данных. См. [дорожную карту](docs/ROADMAP.md).
 
 ## Сборка
 
@@ -58,11 +58,12 @@ SharpGTA.Headless.exe --root "D:\Games\GTA III" --dff-entry PLAYER.DFF
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --dff-scan
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --txd-entry PLAYER.TXD
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --txd-scan
+SharpGTA.Headless.exe --root "D:\Games\GTA III" --ifp ANIM/ped.ifp --ifp-animation walk_civi
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --img MODELS/GTA3.IMG --dff-entry PLAYER.DFF --render-preview
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --dat DATA/CUSTOM.DAT --strict
 ```
 
-`--rw`/`--rw-entry` показывают только проверенную по границам **инвентаризацию RenderWare chunks**. `--dff`/`--dff-entry` декодируют static non-native geometry/materials/BinMesh и HAnim/Skin/MatFX, а `--dff-scan` проверяет все DFF entries и отдельно считает empty/malformed и plugin counts. `--txd`/`--txd-entry` читают D3D8 dictionaries и декодируют все mip levels в RGBA; `--txd-scan` проверяет каждую TXD entry и все пиксели, отдельно считая unsupported PS2 rasters. `--render-preview` дополнительно проверяет managed mesh/material/texture pipeline через NullRenderer, по-прежнему без GPU/окна. `--state-at N` печатает диагностический FNV-1a-хеш состояния; это не криптографический хеш и не сетевой античит. Полный список опций: `--help`.
+`--rw`/`--rw-entry` показывают только проверенную по границам **инвентаризацию RenderWare chunks**. `--dff`/`--dff-entry` декодируют static non-native geometry/materials/BinMesh и HAnim/Skin/MatFX, а `--dff-scan` проверяет все DFF entries и отдельно считает empty/malformed и plugin counts. `--txd`/`--txd-entry` читают D3D8 dictionaries и декодируют все mip levels в RGBA; `--txd-scan` проверяет каждую TXD entry и все пиксели, отдельно считая unsupported PS2 rasters. `--ifp` читает IFP-пакеты анимаций (сопряжение кватернионов, абсолютные времена → дельты, снятие flips), а `--ifp-animation NAME` печатает одну иерархию по имени; скелет и playback ещё не подключены. `--render-preview` дополнительно проверяет managed mesh/material/texture pipeline через NullRenderer, по-прежнему без GPU/окна. `--state-at N` печатает диагностический FNV-1a-хеш состояния; это не криптографический хеш и не сетевой античит. Полный список опций: `--help`.
 
 ## Launcher и меню GTA III
 

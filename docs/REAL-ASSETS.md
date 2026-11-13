@@ -87,11 +87,19 @@
 | Uncompressed textures | 7686 | 28 |
 | DXT1 textures | 0 | 10846 |
 | DXT3 textures | 0 | 1149 |
+| IFP packages read | 1 | 1 |
+| IFP animations | 236 | 234 |
+| IFP sequences | 3746 | 5031 |
+| IFP keyframes | 84851 | 87546 |
+| IFP translated / scale sequences | 239 / 8 | 171 / 110 |
+| IFP longest animation (s) | 5 | 12.167 |
 
 `LoadStandard()` завершается успешно на обеих играх и на обоих runtimes. Отсутствующих моделей для прочитанных IPL нет. Полные `--dff-scan` и `--txd-scan` проходят на всех nonempty DFF/TXD. Проверены отдельно III `loplyguy.dff` (legacy `0x30200`), `peds.dff` (22 clumps) и VC `wheels.DFF` (20 geometries), VC `FIREMAN.DFF` (split Skin + HAnim), loose `particle.txd` обеих игр, III `PLAYER.TXD`, VC DXT1 `WMYBE.TXD` (9 levels), DXT3 `AIRPLAN.TXD` и uncompressed `DOCENTRANCE.TXD`. VC дополнительно читает 30 COLL-ресурсов из IMG до первого IPL. Реальные ground queries прошли:
 
 - III `(812, -936)` → `ind_customroad003`, `z=35.9520454`; zone `ROADBR1:Navig`, path group 0/node 0 `(447.332764,-628.411255,15.1032)`;
 - VC `(-864, -575)` → `lh_icecream01`, `z=10.0659924`; navigation `HAVANA:Default`, info `ICCREAM:Info`, detached path `(-866.6312,-652.45,10.067687)`.
+
+`ANIM/ped.ifp` читается целиком на обеих играх: III — 236 анимаций, 3746 последовательностей, 84851 кадр, 239 последовательностей с translation и 8 с scale, самая длинная анимация 5 с; VC — 234 / 5031 / 87546 кадров, 171 / 110 и 12.167 с. Именованный lookup проверяет не только агрегаты, но и обход иерархии: III `walk_civi` — 16 последовательностей, 37 кадров, 1.2 с; VC `WALK_civi` — 22 / 36 / 1.167 с. Это только чтение (DTO + времена в дельтах): сэмплирования по костям скелета и playback нет.
 
 Полученные warnings относятся только к явно не реализованным directives:
 

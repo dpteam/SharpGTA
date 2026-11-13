@@ -236,6 +236,26 @@ try {
                 throw "III DFF plugin counts changed or were not decoded."
             }
         }
+        $ifp = Invoke-Case "$game IFP animation package" $net40 ($common + @("--ifp", "ANIM/ped.ifp", "--ticks", "0")) $false
+        if ($game -eq "iii") {
+            if ($ifp -notmatch "IFP: source=ANIM/ped\.ifp blocks=1 animations=236 sequences=3746 frames=84851 translated=239 scaled=8 longest=5") {
+                throw "III ped.ifp aggregate counts changed or were not read."
+            }
+        } else {
+            if ($ifp -notmatch "IFP: source=ANIM/ped\.ifp blocks=1 animations=234 sequences=5031 frames=87546 translated=171 scaled=110 longest=12\.167") {
+                throw "VC ped.ifp aggregate counts changed or were not read."
+            }
+        }
+        $walkIfp = Invoke-Case "$game IFP named animation" $net40 ($common + @("--ifp", "ANIM/ped.ifp", "--ifp-animation", "walk_civi", "--ticks", "0")) $false
+        if ($game -eq "iii") {
+            if ($walkIfp -notmatch "IFP-Animation: block=ped name=walk_civi sequences=16 frames=37 duration=1\.2") {
+                throw "III walk_civi hierarchy changed or was not decoded."
+            }
+        } else {
+            if ($walkIfp -notmatch "IFP-Animation: block=ped name=WALK_civi sequences=22 frames=36 duration=1\.167") {
+                throw "VC WALK_civi hierarchy changed or was not decoded."
+            }
+        }
         $looseTxd = Invoke-Case "$game loose TXD" $net40 ($common + @("--txd", "MODELS/particle.txd", "--ticks", "0")) $false
         if ($looseTxd -notmatch "TXD: source=MODELS/particle\.txd declared=[1-9]" -or $looseTxd -notmatch "pixels=[1-9]") {
             throw "$game loose particle.txd decode failed."
