@@ -256,6 +256,17 @@ try {
                 throw "VC WALK_civi hierarchy changed or was not decoded."
             }
         }
+        if ($game -eq "iii") {
+            $ifpPose = Invoke-Case "III IFP pose on PLAYER.DFF" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:PLAYER.DFF", "--ifp-animation", "walk_civi", "--ifp-time", "0.4", "--ticks", "0")) $false
+            if ($ifpPose -notmatch "IFP-Pose: model=IMG:PLAYER\.DFF animation=walk_civi t=0\.4 looped=no frames=17 skinned=no bound=16 unbound=0 changed=16 maxShift=0\.8") {
+                throw "III IFP pose was not sampled on PLAYER.DFF."
+            }
+        } else {
+            $ifpPose = Invoke-Case "VC IFP pose on skinned ped" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:FIREMAN.DFF", "--ifp-animation", "WALK_civi", "--ifp-time", "0.4", "--ticks", "0")) $false
+            if ($ifpPose -notmatch "IFP-Pose: model=IMG:FIREMAN\.DFF animation=WALK_civi t=0\.4 looped=no frames=25 skinned=yes bound=22 unbound=0 changed=23 maxShift=1\.7") {
+                throw "VC IFP pose was not sampled on the skinned ped."
+            }
+        }
         $looseTxd = Invoke-Case "$game loose TXD" $net40 ($common + @("--txd", "MODELS/particle.txd", "--ticks", "0")) $false
         if ($looseTxd -notmatch "TXD: source=MODELS/particle\.txd declared=[1-9]" -or $looseTxd -notmatch "pixels=[1-9]") {
             throw "$game loose particle.txd decode failed."

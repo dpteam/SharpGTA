@@ -59,11 +59,12 @@ SharpGTA.Headless.exe --root "D:\Games\GTA III" --dff-scan
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --txd-entry PLAYER.TXD
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --txd-scan
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --ifp ANIM/ped.ifp --ifp-animation walk_civi
+SharpGTA.Headless.exe --root "D:\Games\GTA III" --img MODELS/GTA3.IMG --ifp ANIM/ped.ifp --ifp-animation walk_civi --ifp-model IMG:PLAYER.DFF --ifp-time 0.4
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --img MODELS/GTA3.IMG --dff-entry PLAYER.DFF --render-preview
 SharpGTA.Headless.exe --root "D:\Games\GTA III" --dat DATA/CUSTOM.DAT --strict
 ```
 
-`--rw`/`--rw-entry` показывают только проверенную по границам **инвентаризацию RenderWare chunks**. `--dff`/`--dff-entry` декодируют static non-native geometry/materials/BinMesh и HAnim/Skin/MatFX, а `--dff-scan` проверяет все DFF entries и отдельно считает empty/malformed и plugin counts. `--txd`/`--txd-entry` читают D3D8 dictionaries и декодируют все mip levels в RGBA; `--txd-scan` проверяет каждую TXD entry и все пиксели, отдельно считая unsupported PS2 rasters. `--ifp` читает IFP-пакеты анимаций (сопряжение кватернионов, абсолютные времена → дельты, снятие flips), а `--ifp-animation NAME` печатает одну иерархию по имени; скелет и playback ещё не подключены. `--render-preview` дополнительно проверяет managed mesh/material/texture pipeline через NullRenderer, по-прежнему без GPU/окна. `--state-at N` печатает диагностический FNV-1a-хеш состояния; это не криптографический хеш и не сетевой античит. Полный список опций: `--help`.
+`--rw`/`--rw-entry` показывают только проверенную по границам **инвентаризацию RenderWare chunks**. `--dff`/`--dff-entry` декодируют static non-native geometry/materials/BinMesh и HAnim/Skin/MatFX, а `--dff-scan` проверяет все DFF entries и отдельно считает empty/malformed и plugin counts. `--txd`/`--txd-entry` читают D3D8 dictionaries и декодируют все mip levels в RGBA; `--txd-scan` проверяет каждую TXD entry и все пиксели, отдельно считая unsupported PS2 rasters. `--ifp` читает IFP-пакеты анимаций (сопряжение кватернионов, абсолютные времена → дельты, снятие flips), `--ifp-animation NAME` печатает одну иерархию по имени, а `--ifp-model PATH|IMG:NAME` с `--ifp-time SECONDS` сэмплирует её на настоящем скелете (шаг по дельтам, slerp/lerp, привязка костей по имени или ped bone tag) и печатает `IFP-Pose:`; скиннинга и playback на актёрах ещё нет. `--render-preview` дополнительно проверяет managed mesh/material/texture pipeline через NullRenderer, по-прежнему без GPU/окна. `--state-at N` печатает диагностический FNV-1a-хеш состояния; это не криптографический хеш и не сетевой античит. Полный список опций: `--help`.
 
 ## Launcher и меню GTA III
 

@@ -56,6 +56,9 @@ namespace SharpGTA.Headless
         public List<string> DffPaths { get; private set; }
         public List<string> IfpPaths { get; private set; }
         public string IfpAnimation { get; set; }
+        public string IfpModel { get; set; }
+        public float IfpTime { get; set; }
+        public bool HasIfpTime { get; set; }
         public List<string> DffEntries { get; private set; }
         public ulong Ticks { get; set; }
         public ulong StateAt { get; set; }
@@ -180,6 +183,14 @@ namespace SharpGTA.Headless
                         break;
                     case "--ifp-animation":
                         options.IfpAnimation = Value(args, ref i, argument);
+                        break;
+                    case "--ifp-model":
+                        options.IfpModel = Value(args, ref i, argument);
+                        options.HasExplicitAssetAction = true;
+                        break;
+                    case "--ifp-time":
+                        options.IfpTime = ParseSingle(Value(args, ref i, argument), "--ifp-time");
+                        options.HasIfpTime = true;
                         break;
                     case "--dff-entry":
                         options.DffEntries.Add(Value(args, ref i, argument));
@@ -352,6 +363,19 @@ namespace SharpGTA.Headless
                     throw new CommandLineException("--path-merge-distance must be a positive number.");
                 if (options.GxtKey != null && options.GxtPath == null)
                     throw new CommandLineException("--gxt-key requires --gxt.");
+                if (options.IfpModel != null)
+                {
+                    if (options.IfpAnimation == null)
+                        throw new CommandLineException("--ifp-model requires --ifp-animation.");
+                    if (options.IfpPaths.Count == 0)
+                        throw new CommandLineException("--ifp-model requires at least one --ifp.");
+                }
+                else if (options.HasIfpTime)
+                {
+                    throw new CommandLineException("--ifp-time requires --ifp-model.");
+                }
+                if (options.IfpTime < 0.0f)
+                    throw new CommandLineException("--ifp-time must not be negative.");
                 if (options.RenderPreview && options.DffPaths.Count + options.DffEntries.Count == 0)
                     throw new CommandLineException("--render-preview requires at least one --dff or --dff-entry.");
                 if (options.HasGroundQuery)
@@ -359,7 +383,7 @@ namespace SharpGTA.Headless
                 bool needsRoot = options.Standard || options.DatPaths.Count != 0 || options.ImagePaths.Count != 0 ||
                     options.GxtPath != null || options.RenderWarePaths.Count != 0 || options.RenderWareEntries.Count != 0 ||
                     options.DffPaths.Count != 0 || options.DffEntries.Count != 0 || options.DffScan ||
-                    options.IfpPaths.Count != 0 ||
+                    options.IfpPaths.Count != 0 || options.IfpModel != null ||
                     options.TxdPaths.Count != 0 || options.TxdEntries.Count != 0 || options.TxdScan ||
                     options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
                     options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview ||

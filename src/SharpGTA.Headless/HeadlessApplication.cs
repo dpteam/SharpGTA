@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using SharpGTA.Assets;
 using SharpGTA.World;
 using SharpGTA.Data;
@@ -341,8 +342,14 @@ namespace SharpGTA.Headless
                 WriteDff(options.DffPaths[i], loader.LoadDff(options.DffPaths[i]), output);
             for (int i = 0; i < options.DffEntries.Count; i++)
                 WriteDff("IMG:" + options.DffEntries[i], loader.LoadDffEntry(options.DffEntries[i]), output);
+            IfpDocument[] ifpDocuments = new IfpDocument[options.IfpPaths.Count];
             for (int i = 0; i < options.IfpPaths.Count; i++)
-                WriteIfp(options.IfpPaths[i], loader.LoadIfp(options.IfpPaths[i]), options.IfpAnimation, output);
+            {
+                ifpDocuments[i] = loader.LoadIfp(options.IfpPaths[i]);
+                WriteIfp(options.IfpPaths[i], ifpDocuments[i], options.IfpAnimation, output);
+            }
+            if (options.IfpModel != null)
+                WriteIfpPose(options, loader, ifpDocuments, output);
 
             GameDataLoadStats stats = loader.Stats;
             output.WriteLine("Assets: dat=" + stats.DatFileCount.ToString(CultureInfo.InvariantCulture) +
@@ -937,11 +944,129 @@ namespace SharpGTA.Headless
                     output.WriteLine("IFP-Animation: block=" + block.Name + " name=" + animation.Name +
                         " sequences=" + animation.Sequences.Length.ToString(CultureInfo.InvariantCulture) +
                         " frames=" + animation.FrameCount.ToString(CultureInfo.InvariantCulture) +
-                        " duration=" + animation.Duration.ToString("0.###", CultureInfo.InvariantCulture));
+                        " duration=" + animation.Duration.ToString("0.###", CultureInfo.InvariantCulture) +
+                        " bones=" + SequenceNames(animation));
                     return;
                 }
             }
             output.WriteLine("IFP-Animation: name=" + wanted + " found=false");
+        }
+
+        private static string SequenceNames(IfpAnimation animation)
+        {
+            StringBuilder names = new StringBuilder();
+            for (int i = 0; i < animation.Sequences.Length; i++)
+            {
+                if (i != 0)
+                    names.Append(',');
+                names.Append(animation.Sequences[i].Name);
+            }
+            return names.ToString();
+        }
+
+        /// <summary>
+        /// Samples one named animation at `--ifp-time` and binds it to a DFF skeleton, so the
+        /// reader is proven against real ped bones and not only against aggregate counts.
+        /// </summary>
+        private static void WriteIfpPose(HeadlessOptions options, GameDataLoader loader,
+            IfpDocument[] documents, TextWriter output)
+        {
+            IfpAnimation animation = FindAnimation(documents, options.IfpAnimation);
+            if (animation == null)
+            {
+                output.WriteLine("IFP-Pose: animation=" + options.IfpAnimation + " found=false");
+                return;
+            }
+
+            bool fromImage = options.IfpModel.StartsWith("IMG:", StringComparison.Ordinal);
+            string modelSource = options.IfpModel;
+            DffDocument model = fromImage
+                ? loader.LoadDffEntry(options.IfpModel.Substring(4))
+                : loader.LoadDff(options.IfpModel);
+            if (model.Clumps.Length == 0)
+            {
+                output.WriteLine("IFP-Pose: model=" + modelSource + " clumps=0");
+                return;
+            }
+
+            DffClump clump = model.Clumps[0];
+            AnimationBinding binding = AnimationBinding.Bind(clump, animation);
+            AnimationPose pose = AnimationSampler.SampleLooping(animation, options.IfpTime);
+            Matrix[] rest = binding.RestWorld();
+            Matrix[] world = binding.ResolveWorld(pose);
+
+            int changed = 0;
+            float maxShift = 0.0f;
+            StateWriter digest = new StateWriter();
+            for (int i = 0; i < world.Length; i++)
+            {
+                Vector3 delta = new Vector3(
+                    world[i].Position.X - rest[i].Position.X,
+                    world[i].Position.Y - rest[i].Position.Y,
+                    world[i].Position.Z - rest[i].Position.Z);
+                float shift = (float)Math.Sqrt(delta.X * delta.X + delta.Y * delta.Y + delta.Z * delta.Z);
+                if (shift > maxShift)
+                    maxShift = shift;
+                if (shift > 0.001f)
+                    changed++;
+                digest.WriteSingle(world[i].Position.X);
+                digest.WriteSingle(world[i].Position.Y);
+                digest.WriteSingle(world[i].Position.Z);
+                digest.WriteSingle(world[i].Right.X);
+                digest.WriteSingle(world[i].Forward.Y);
+                digest.WriteSingle(world[i].Up.Z);
+            }
+
+            output.WriteLine("IFP-Pose: model=" + modelSource + " animation=" + animation.Name +
+                " t=" + options.IfpTime.ToString("0.###", CultureInfo.InvariantCulture) +
+                " looped=" + (pose.Looped ? "yes" : "no") +
+                " frames=" + clump.Frames.Length.ToString(CultureInfo.InvariantCulture) +
+                " skinned=" + (binding.IsSkinned ? "yes" : "no") +
+                " bound=" + binding.BoundCount.ToString(CultureInfo.InvariantCulture) +
+                " unbound=" + binding.UnboundSequences.Length.ToString(CultureInfo.InvariantCulture) +
+                " changed=" + changed.ToString(CultureInfo.InvariantCulture) +
+                " maxShift=" + maxShift.ToString("0.###", CultureInfo.InvariantCulture) +
+                " root=" + FormatVector(world[0].Position) +
+                " hash=" + digest.ToHex());
+            if (binding.UnboundSequences.Length != 0)
+            {
+                StringBuilder names = new StringBuilder();
+                for (int i = 0; i < binding.UnboundSequences.Length; i++)
+                {
+                    if (i != 0)
+                        names.Append(',');
+                    names.Append(binding.UnboundSequences[i]);
+                }
+                output.WriteLine("IFP-Pose-Unbound: " + names);
+            }
+        }
+
+        private static string FormatVector(Vector3 value)
+        {
+            return "(" + value.X.ToString("0.###", CultureInfo.InvariantCulture) + "," +
+                value.Y.ToString("0.###", CultureInfo.InvariantCulture) + "," +
+                value.Z.ToString("0.###", CultureInfo.InvariantCulture) + ")";
+        }
+
+        private static IfpAnimation FindAnimation(IfpDocument[] documents, string name)
+        {
+            for (int i = 0; i < documents.Length; i++)
+            {
+                IfpDocument document = documents[i];
+                if (document == null)
+                    continue;
+                for (int j = 0; j < document.Blocks.Length; j++)
+                {
+                    IfpBlock block = document.Blocks[j];
+                    for (int k = 0; k < block.Animations.Length; k++)
+                    {
+                        IfpAnimation animation = block.Animations[k];
+                        if (string.Equals(animation.Name, name, StringComparison.OrdinalIgnoreCase))
+                            return animation;
+                    }
+                }
+            }
+            return null;
         }
 
         private static void WriteDff(string source, DffDocument document, TextWriter output)
@@ -1071,6 +1196,8 @@ namespace SharpGTA.Headless
             output.WriteLine("  --dff-scan                Decode every DFF entry and print aggregate diagnostics.");
             output.WriteLine("  --ifp PATH               Read a loose IFP animation package; repeatable.");
             output.WriteLine("  --ifp-animation NAME     Print one animation from the read IFP packages.");
+            output.WriteLine("  --ifp-model PATH|IMG:NAME  Bind that animation to a DFF skeleton and print the pose.");
+            output.WriteLine("  --ifp-time SECONDS       Pose time for --ifp-model (default 0).");
             output.WriteLine("  --txd PATH                Read D3D8 TXD and decode all its mip levels; repeatable.");
             output.WriteLine("  --txd-entry NAME          Read a named D3D8 TXD entry from loaded IMG files.");
             output.WriteLine("  --txd-scan                Decode every D3D8 TXD texture and mip level in IMG.");
