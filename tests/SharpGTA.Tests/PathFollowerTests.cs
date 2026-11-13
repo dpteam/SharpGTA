@@ -170,6 +170,32 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void FollowersCanBeReleasedAndAreNotAssignedTwice()
+        {
+            PathGraph graph = ChainGraph();
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry);
+            DynamicEntity vehicle = SpawnVehicle(world, registry);
+            PathFollowerModule module = new PathFollowerModule(graph);
+
+            Assert.False(module.Contains(vehicle));
+            Assert.True(module.Assign(vehicle, new int[] { 0, 1 }, 10.0f));
+            Assert.True(module.Contains(vehicle));
+            Assert.Throws<InvalidOperationException>(delegate
+            {
+                module.Assign(vehicle, new int[] { 1, 2 }, 10.0f);
+            });
+            Assert.Throws<ArgumentNullException>(delegate { module.Release(null); });
+            Assert.True(module.Release(vehicle));
+            Assert.False(module.Contains(vehicle));
+            Assert.False(module.Release(vehicle));
+            Assert.Equal(0, module.Count);
+
+            // Releasing before despawning keeps the world consistent: the car stops where it is.
+            Assert.True(world.DespawnEntity(WorldEntityKind.Vehicle, vehicle.Handle));
+        }
+
+        [Test]
         public void TwoFollowersOfTheSameRouteStayDeterministic()
         {
             PathGraph graph = ChainGraph();

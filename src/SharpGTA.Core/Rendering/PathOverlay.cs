@@ -53,6 +53,9 @@ namespace SharpGTA.Rendering
                 throw new ArgumentNullException("graph");
             if (!(radius > 0.0f) || float.IsInfinity(radius))
                 throw new ArgumentOutOfRangeException("radius");
+            if (float.IsNaN(center.X) || float.IsNaN(center.Y) || float.IsNaN(center.Z) ||
+                float.IsInfinity(center.X) || float.IsInfinity(center.Y) || float.IsInfinity(center.Z))
+                throw new ArgumentOutOfRangeException("center");
             if (maxSegments <= 0)
                 throw new ArgumentOutOfRangeException("maxSegments");
 

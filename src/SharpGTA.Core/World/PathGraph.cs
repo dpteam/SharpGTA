@@ -208,7 +208,11 @@ namespace SharpGTA.World
             internal int[] SlotNodes;
         }
 
-        /// <summary>Original `maxdist` passed to PreparePathDataForType for both path types.</summary>
+        /// <summary>
+        /// Original `maxdist` passed to PreparePathDataForType for both path types. The greedy
+        /// pairing is order dependent: the original walks `m_mapObjects`, we walk (group, tile,
+        /// slot), which only matters where competing externals are within one unit of each other.
+        /// </summary>
         private const float DefaultExternMergeDistance = 1.0f;
 
         private readonly List<PathGraphNode> nodes = new List<PathGraphNode>();

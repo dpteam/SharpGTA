@@ -61,6 +61,10 @@ namespace SharpGTA.Tests
             {
                 PathOverlayBuilder.Build(graph, Vector3.Zero, 10.0f, 0);
             });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                PathOverlayBuilder.Build(graph, new Vector3(float.NaN, 0.0f, 0.0f), 10.0f, 10);
+            });
         }
 
         [Test]

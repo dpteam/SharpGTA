@@ -65,6 +65,37 @@ namespace SharpGTA.World
         public float TravelledDistance { get { return travelled; } }
 
         /// <summary>
+        /// Stops following an entity, for example before despawning it. The entity keeps its
+        /// current position and velocity, so the caller decides what happens next.
+        /// </summary>
+        public bool Release(DynamicEntity entity)
+        {
+            if (entity == null)
+                throw new ArgumentNullException("entity");
+            for (int i = 0; i < followers.Count; i++)
+            {
+                if (!ReferenceEquals(followers[i].Entity, entity))
+                    continue;
+                followers.RemoveAt(i);
+                return true;
+            }
+            return false;
+        }
+
+        /// <summary>True when this module currently drives the entity.</summary>
+        public bool Contains(DynamicEntity entity)
+        {
+            if (entity == null)
+                throw new ArgumentNullException("entity");
+            for (int i = 0; i < followers.Count; i++)
+            {
+                if (ReferenceEquals(followers[i].Entity, entity))
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Assigns a resolved route to a spawned vehicle. The vehicle is snapped to the first
         /// node, so callers should spawn it there; a shorter route is rejected.
         /// </summary>
@@ -85,6 +116,12 @@ namespace SharpGTA.World
                     throw new ArgumentOutOfRangeException("route",
                         "Route contains a node index outside the graph.");
                 }
+            }
+
+            for (int i = 0; i < followers.Count; i++)
+            {
+                if (ReferenceEquals(followers[i].Entity, entity))
+                    throw new InvalidOperationException("The entity is already following a route.");
             }
 
             Follower follower = new Follower();
@@ -202,6 +239,9 @@ namespace SharpGTA.World
             if (writer == null)
                 throw new ArgumentNullException("writer");
             writer.WriteInt32(followers.Count);
+            writer.WriteSingle(travelled);
+            writer.WriteInt32(completed);
+            writer.WriteInt32(replanned);
             for (int i = 0; i < followers.Count; i++)
             {
                 Follower follower = followers[i];
@@ -210,6 +250,11 @@ namespace SharpGTA.World
                 writer.WriteSingle(follower.Progress);
                 writer.WriteSingle(follower.Speed);
                 writer.WriteByte(follower.Finished ? (byte)1 : (byte)0);
+                // The route itself is part of the state: two runs that follow different chains
+                // must not hash the same just because they are at the same progress.
+                writer.WriteInt32(follower.Route.Length);
+                for (int k = 0; k < follower.Route.Length; k++)
+                    writer.WriteInt32(follower.Route[k]);
             }
         }
 
