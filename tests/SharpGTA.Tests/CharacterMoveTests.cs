@@ -136,6 +136,34 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void WalksOverAKerbButNotOverALowWall()
+        {
+            // A 0.3 kerb is below the step band, so the body walks over it and the ground query
+            // lifts the feet; a 0.6 box is above it and blocks like a wall.
+            ModelRegistry kerbRegistry;
+            StaticWorld kerbWorld = CreateObstacleWorld(out kerbRegistry, 0.3f);
+            DynamicEntity kerbWalker = SpawnPed(kerbWorld, kerbRegistry, Vector3.Zero);
+            CharacterMoveModule kerbModule = new CharacterMoveModule(kerbWorld, kerbWalker);
+            kerbModule.Speed = 2.0f;
+            SimulationRuntime kerbRuntime = Runtime(Forward(1.0f));
+            kerbRuntime.AddModule(kerbModule);
+            kerbRuntime.RunTicks(60);
+            Assert.True(kerbWalker.Position.X > 2.5f, "kerb blocked the walker");
+            Assert.Near(0.3f, kerbWalker.Position.Z, 0.05f);
+
+            ModelRegistry wallRegistry;
+            StaticWorld wallWorld = CreateObstacleWorld(out wallRegistry, 0.6f);
+            DynamicEntity wallWalker = SpawnPed(wallWorld, wallRegistry, Vector3.Zero);
+            CharacterMoveModule wallModule = new CharacterMoveModule(wallWorld, wallWalker);
+            wallModule.Speed = 2.0f;
+            SimulationRuntime wallRuntime = Runtime(Forward(1.0f));
+            wallRuntime.AddModule(wallModule);
+            wallRuntime.RunTicks(90);
+            Assert.True(wallWalker.Position.X < 3.0f, "low wall did not block the walker");
+            Assert.True(wallModule.CollisionHitCount > 0);
+        }
+
+        [Test]
         public void ZeroInputKeepsTheCharacterInPlace()
         {
             ModelRegistry registry;
@@ -205,6 +233,24 @@ namespace SharpGTA.Tests
             world.Bind(new IplReader(DataSchema.III).Read(
                 "inst\n1, ground, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
                 "10, wall, 6, 0, 0, 1, 1, 1, 0, 0, 1, 1\nend\n"),
+                registry, new LoadReport());
+            return world;
+        }
+
+        /// <summary>Ground plus one long obstacle at x = 3..5 whose top is `top` above the ground.</summary>
+        private static StaticWorld CreateObstacleWorld(out ModelRegistry registry, float top)
+        {
+            registry = new ModelRegistry(new WorldTestDefinition(GameId.III, DataSchema.III, 32));
+            CollisionRepository collisions = new CollisionRepository(registry);
+            collisions.Add(WorldTestAssets.CreateBoxCollision("ground", 20.0f, -1.0f, 0.0f), 0);
+            collisions.Add(CreateWallCollision("kerb", 1.0f, 10.0f, -1.0f, top), 0);
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n1, ground, generic, 1, 100, 0\nend\n" +
+                "objs\n11, kerb, generic, 1, 100, 0\nend\n"));
+            StaticWorld world = new StaticWorld();
+            world.Bind(new IplReader(DataSchema.III).Read(
+                "inst\n1, ground, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "11, kerb, 4, 0, 0, 1, 1, 1, 0, 0, 1, 1\nend\n"),
                 registry, new LoadReport());
             return world;
         }

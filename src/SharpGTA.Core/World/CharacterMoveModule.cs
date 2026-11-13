@@ -16,6 +16,9 @@ namespace SharpGTA.World
         /// <summary>Ray height above the feet: a chest-high sweep, like a ped's collision volume.</summary>
         private const float ChestHeight = 1.0f;
 
+        /// <summary>Body probe heights: just above a climbable ledge and at chest level.</summary>
+        private static readonly float[] ProbeHeights = { 0.45f, ChestHeight };
+
         /// <summary>`GRAVITY` from Physical.h, in units per 50 Hz step squared.</summary>
         private const float Gravity = 0.008f;
 
@@ -101,9 +104,12 @@ namespace SharpGTA.World
         }
 
         /// <summary>
-        /// Moves by `step`, stopping at walls and sliding along them. Each of the three probe rays
-        /// is offset by the body radius across the direction of travel, so the chest cannot clip a
-        /// corner even though the body is not a swept volume.
+        /// Moves by `step`, stopping at walls and sliding along them. The body is a stack of probe
+        /// rings (six rays: three lateral offsets at the chest and three just above the step
+        /// height), so geometry above <see cref="StepHeight"/> blocks and anything lower is walked
+        /// over with the ground query lifting the feet. It is still not a swept volume: a corner
+        /// can be clipped at the probe heights, and a slope steeper than about 45 degrees reads as
+        /// a wall because its normal leaves the "floor" band.
         /// </summary>
         private void MoveByStep(Vector3 step)
         {
@@ -118,24 +124,28 @@ namespace SharpGTA.World
                 float allowed = distance;
                 Vector3 normal = Vector3.Zero;
                 bool blocked = false;
-                for (int probe = -1; probe <= 1; probe++)
+                for (int height = 0; height < ProbeHeights.Length; height++)
                 {
-                    Vector3 origin = entity.Position + new Vector3(0.0f, 0.0f, ChestHeight) +
-                        side * (Radius * probe);
-                    StaticWorldHit wall;
-                    if (!world.QueryRay(origin, direction, distance + Radius, out wall))
-                        continue;
-                    // Floors and ceilings are not walls: only near-vertical surfaces block.
-                    if (Math.Abs(wall.Normal.Z) > 0.7f)
-                        continue;
-                    float limit = wall.Distance - Radius;
-                    if (limit < 0.0f)
-                        limit = 0.0f;
-                    if (limit < allowed)
+                    for (int probe = -1; probe <= 1; probe++)
                     {
-                        allowed = limit;
-                        normal = wall.Normal;
-                        blocked = true;
+                        Vector3 origin = entity.Position +
+                            new Vector3(0.0f, 0.0f, ProbeHeights[height]) +
+                            side * (Radius * probe);
+                        StaticWorldHit wall;
+                        if (!world.QueryRay(origin, direction, distance + Radius, out wall))
+                            continue;
+                        // Floors and ceilings are not walls: only near-vertical surfaces block.
+                        if (Math.Abs(wall.Normal.Z) > 0.7f)
+                            continue;
+                        float limit = wall.Distance - Radius;
+                        if (limit < 0.0f)
+                            limit = 0.0f;
+                        if (limit < allowed)
+                        {
+                            allowed = limit;
+                            normal = wall.Normal;
+                            blocked = true;
+                        }
                     }
                 }
                 if (!blocked)

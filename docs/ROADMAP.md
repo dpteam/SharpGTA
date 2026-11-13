@@ -47,7 +47,7 @@
 
 ## Этап 3 — gameplay III/VC
 
-- [~] Player/ped AI, animation state, weapons, vehicles и VC bikes/boats/flying. Первый кусок игрокоподобного движения есть: `CharacterMoveModule` берёт `InputFrame`, идёт со скоростью, не проходит сквозь COLL-стены (`StaticWorld.QueryRay`, три зонда на высоте груди, скольжение по нормали) и имеет вертикаль `CPhysical::ApplyGravity` (падение с края и приземление по `QueryVertical`, `IsGrounded`); в headless это `--walk X Y Z DX DY SPEED`, в D3D9 preview — `--play` с камерой третьего лица, WASD относительно камеры и укорачиванием выноса по `QueryRay`. Нет step/slope response, коллизий между entity, транспорта и анимации.
+- [~] Player/ped AI, animation state, weapons, vehicles и VC bikes/boats/flying. Первый кусок игрокоподобного движения есть: `CharacterMoveModule` берёт `InputFrame`, идёт со скоростью, не проходит сквозь COLL-стены (`StaticWorld.QueryRay`, три зонда на высоте груди, скольжение по нормали) и имеет вертикаль `CPhysical::ApplyGravity` (падение с края и приземление по `QueryVertical`, `IsGrounded`); в headless это `--walk X Y Z DX DY SPEED`, в D3D9 preview — `--play` с камерой третьего лица, WASD относительно камеры и укорачиванием выноса по `QueryRay`. Тело — два кольца зондов (0.45 и грудь), поэтому низкие препятствия перешагиваются, а всё выше блокирует; нет ответа на настоящие наклоны (круче ~45° читаются как стена), коллизий между entity, транспорта и анимации.
 - [ ] Camera, game logic, missions/scripts, pickups/garages/restart/weather/water.
 - [ ] III MLO/subway/cull-zone specifics; VC interiors/ropes/attractors/set pieces/stinger и др.
 - [ ] Отдельные save schemas III/VC и retail compatibility tests; не копировать C++ pointers/struct images.

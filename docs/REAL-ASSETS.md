@@ -42,6 +42,7 @@
 | Light-controlled ped crossings (`bTrafficLight`) | 402 | 20 |
 | Ped waiting ticks (60 peds, 1200 / 3000 ticks) | 491 / 6953 | 0 (routes never reach a flagged crossing) |
 | `--walk 812 -936 36 1 0 3`, 120 ticks (hits / travelled) | 57 / 11.9, stopped by a railing | — |
+| `--walk 812 -936 36 1 0 3` with the two-ring body, 120 ticks | 83 / 11.85, same railing | — |
 | `--walk 812 -900 10 0 1 3`, 90 ticks (slope) | 0 hits / 9 units, z rises 9.50 → 10.40 | — |
 | `--walk 812 -900 60 0 1 3`, 10 / 60 ticks (fall) | 0 hits, z 58.78 → 19.33 while falling | — |
 | `--walk -864 -575 10 1 0 3`, 200 ticks (VC) | — | 0 hits / 20 units, z = 9.8875 |
