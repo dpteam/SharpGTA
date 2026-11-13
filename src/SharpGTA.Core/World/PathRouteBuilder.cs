@@ -13,6 +13,16 @@ namespace SharpGTA.World
     {
         public static int[] BuildGreedy(PathGraph graph, int start, int maximumHops)
         {
+            return BuildGreedy(graph, start, maximumHops, false);
+        }
+
+        /// <summary>
+        /// Same walk, optionally refusing to step onto dead-end car nodes. The start node is
+        /// always allowed, because a car may legitimately finish its route on one.
+        /// </summary>
+        public static int[] BuildGreedy(PathGraph graph, int start, int maximumHops,
+            bool avoidDeadEnds)
+        {
             if (graph == null)
                 throw new ArgumentNullException("graph");
             if (start < 0 || start >= graph.NodeCount)
@@ -32,6 +42,8 @@ namespace SharpGTA.World
                 {
                     int candidate = links[k];
                     if (candidate == previous)
+                        continue;
+                    if (avoidDeadEnds && graph.Nodes[candidate].IsDeadEnd)
                         continue;
                     if (best < 0 || candidate < best)
                         best = candidate;

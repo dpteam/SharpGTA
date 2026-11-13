@@ -123,6 +123,10 @@ namespace SharpGTA.D3D9
             if (model == null)
                 throw new ArgumentException("--spawn-cars needs a registered vehicle model.");
             PathFollowerModule followers = new PathFollowerModule(graph);
+            followers.RouteSource = delegate(int node)
+            {
+                return PathRouteBuilder.BuildGreedy(graph, node, 40, true);
+            };
             // Cars must be close enough to survive the model draw distance, so starts are the
             // nearest car nodes to the preview spawn, ordered by distance then node index.
             const int MaxCandidates = 64;
@@ -154,7 +158,9 @@ namespace SharpGTA.D3D9
             {
                 int i = candidates[c];
                 PathGraphNode node = graph.Nodes[i];
-                int[] route = PathRouteBuilder.BuildGreedy(graph, i, 40);
+                int[] route = PathRouteBuilder.BuildGreedy(graph, i, 40, true);
+                if (route.Length < 2)
+                    route = PathRouteBuilder.BuildGreedy(graph, i, 40);
                 if (route.Length < 2)
                     continue;
                 DynamicEntity entity;
@@ -308,6 +314,7 @@ namespace SharpGTA.D3D9
                             " nearest=" + dynamicCarNearest.ToString("0.#", CultureInfo.InvariantCulture) +
                             " alive=" + loader.World.DynamicEntities.Count +
                             " completed=" + dynamicCarFollowers.CompletedCount +
+                            " replans=" + dynamicCarFollowers.ReplanCount +
                             " travelled=" + dynamicCarFollowers.TravelledDistance.ToString("0.##",
                                 CultureInfo.InvariantCulture) +
                             " rejected=" + dynamicRejected);

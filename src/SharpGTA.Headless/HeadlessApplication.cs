@@ -75,6 +75,11 @@ namespace SharpGTA.Headless
                     if (options.HasSpawnCars)
                     {
                         followers = new PathFollowerModule(loader.PathGraph);
+                        PathGraph followGraph = loader.PathGraph;
+                        followers.RouteSource = delegate(int node)
+                        {
+                            return PathRouteBuilder.BuildGreedy(followGraph, node, 40, true);
+                        };
                         SpawnCars(loader, options, followers);
                         runtime.AddModule(followers);
                     }
@@ -571,7 +576,13 @@ namespace SharpGTA.Headless
                 PathGraphNode node = graph.Nodes[i];
                 if (node.Kind != PathKind.Car || node.LinkCount == 0)
                     continue;
-                int[] route = PathRouteBuilder.BuildGreedy(graph, i, 40);
+                int[] route = PathRouteBuilder.BuildGreedy(graph, i, 40, true);
+                if (route.Length < 2)
+                {
+                    // A start on a spur has no dead-end-free way out; driving to the end of the
+                    // spur is still a better probe than refusing to spawn the car at all.
+                    route = PathRouteBuilder.BuildGreedy(graph, i, 40);
+                }
                 if (route.Length < 2)
                     continue;
                 DynamicEntity entity;
@@ -603,38 +614,11 @@ namespace SharpGTA.Headless
                 "--spawn-cars needs a vehicle model; add --spawn-model NAME.");
         }
 
-        /// <summary>Walks the lowest-numbered unvisited neighbour so the route is deterministic.</summary>
-        private static int[] BuildGreedyRoute(PathGraph graph, int start, int maximumHops)
-        {
-            List<int> route = new List<int>();
-            route.Add(start);
-            int current = start;
-            int previous = -1;
-            for (int hop = 0; hop < maximumHops; hop++)
-            {
-                IList<int> links = graph.Nodes[current].Links;
-                int best = -1;
-                for (int k = 0; k < links.Count; k++)
-                {
-                    int candidate = links[k];
-                    if (candidate == previous)
-                        continue;
-                    if (best < 0 || candidate < best)
-                        best = candidate;
-                }
-                if (best < 0)
-                    break;
-                route.Add(best);
-                previous = current;
-                current = best;
-            }
-            return route.ToArray();
-        }
-
         private static void WritePathFollowSummary(PathFollowerModule followers, TextWriter output)
         {
             output.WriteLine("Path-Follow: vehicles=" + followers.Count.ToString(CultureInfo.InvariantCulture) +
                 " completed=" + followers.CompletedCount.ToString(CultureInfo.InvariantCulture) +
+                " replans=" + followers.ReplanCount.ToString(CultureInfo.InvariantCulture) +
                 " travelled=" + followers.TravelledDistance.ToString("0.##", CultureInfo.InvariantCulture));
         }
 

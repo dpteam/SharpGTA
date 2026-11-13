@@ -97,6 +97,79 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void RouteSourceKeepsCarsDrivingUntilItReturnsNothing()
+        {
+            PathGraph graph = ChainGraph();
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry);
+            DynamicEntity vehicle = SpawnVehicle(world, registry);
+
+            PathFollowerModule module = new PathFollowerModule(graph);
+            Assert.True(module.Assign(vehicle, new int[] { 0, 1 }, 10.0f));
+            // Without a provider the car parks on the last node of its first route.
+            SimulationRuntime runtime = new SimulationRuntime(
+                new WorldTestDefinition(GameId.III, DataSchema.III, 32));
+            runtime.AddModule(module);
+            runtime.RunTicks(60);
+            Assert.Equal(1, module.CompletedCount);
+            Assert.Equal(0, module.ReplanCount);
+            AssertVector(new Vector3(10.0f, 0.0f, 0.0f), vehicle.Position);
+
+            // With a provider the car continues from wherever it stopped.
+            PathFollowerModule replanning = new PathFollowerModule(graph);
+            replanning.RouteSource = delegate(int node)
+            {
+                return node + 1 < graph.NodeCount && node < 2
+                    ? new int[] { node, node + 1 }
+                    : null;
+            };
+            DynamicEntity second = SpawnVehicle(world, registry);
+            Assert.True(replanning.Assign(second, new int[] { 0, 1 }, 10.0f));
+            SimulationRuntime second_runtime = new SimulationRuntime(
+                new WorldTestDefinition(GameId.III, DataSchema.III, 32));
+            second_runtime.AddModule(replanning);
+            second_runtime.RunTicks(60);
+            Assert.Equal(1, replanning.ReplanCount);
+            AssertVector(new Vector3(20.0f, 0.0f, 0.0f), second.Position);
+
+            second_runtime.RunTicks(60);
+            // The provider refuses anything past node 2, so the car parks there.
+            Assert.Equal(1, replanning.ReplanCount);
+            AssertVector(new Vector3(20.0f, 0.0f, 0.0f), second.Position);
+            AssertVector(Vector3.Zero, second.Velocity);
+        }
+
+        [Test]
+        public void GreedyRoutesCanAvoidDeadEndNodes()
+        {
+            PathGraph graph = ChainGraph();
+            // The chain ends are dead ends after the peeling pass, and the ends of the chain
+            // are exactly what a driving car should stop stepping onto.
+            Assert.True(graph.Nodes[0].IsDeadEnd);
+            int[] plain = PathRouteBuilder.BuildGreedy(graph, 0, 10);
+            int[] avoiding = PathRouteBuilder.BuildGreedy(graph, 0, 10, true);
+            Assert.True(plain.Length >= 2);
+            Assert.Equal(1, avoiding.Length);
+
+            Assert.Throws<ArgumentNullException>(delegate
+            {
+                PathRouteBuilder.BuildGreedy(null, 0, 4);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                PathRouteBuilder.BuildGreedy(graph, -1, 4);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                PathRouteBuilder.BuildGreedy(graph, 99, 4);
+            });
+            Assert.Throws<ArgumentOutOfRangeException>(delegate
+            {
+                PathRouteBuilder.BuildGreedy(graph, 0, -1);
+            });
+        }
+
+        [Test]
         public void TwoFollowersOfTheSameRouteStayDeterministic()
         {
             PathGraph graph = ChainGraph();

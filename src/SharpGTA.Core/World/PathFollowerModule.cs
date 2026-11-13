@@ -19,6 +19,14 @@ namespace SharpGTA.World
         private readonly List<Follower> followers = new List<Follower>();
         private float travelled;
         private int completed;
+        private int replanned;
+
+        /// <summary>
+        /// Optional route provider: when a car reaches the end of its chain the module asks for
+        /// a fresh route from that node so it keeps driving. Returning null or a short route
+        /// leaves the car parked, which is the documented behaviour without a provider.
+        /// </summary>
+        public Func<int, int[]> RouteSource { get; set; }
 
         public PathFollowerModule(PathGraph graph)
         {
@@ -31,6 +39,9 @@ namespace SharpGTA.World
 
         public int Count { get { return followers.Count; } }
         public int CompletedCount { get { return completed; } }
+
+        /// <summary>Routes that were replaced by a new one from <see cref="RouteSource"/>.</summary>
+        public int ReplanCount { get { return replanned; } }
 
         /// <summary>Total distance the followers have driven, for probes and diagnostics.</summary>
         public float TravelledDistance { get { return travelled; } }
@@ -122,9 +133,18 @@ namespace SharpGTA.World
             follower.Progress = 0.0f;
             if (follower.Segment < follower.Route.Length - 1)
                 return;
-            follower.Finished = true;
-            completed++;
             follower.Entity.SetPosition(segmentEnd);
+            completed++;
+            int[] next = RouteSource == null ? null : RouteSource(follower.Route[follower.Route.Length - 1]);
+            if (next != null && next.Length >= 2)
+            {
+                follower.Route = next;
+                follower.Segment = 0;
+                follower.Progress = 0.0f;
+                replanned++;
+                return;
+            }
+            follower.Finished = true;
             follower.Entity.Velocity = Vector3.Zero;
         }
 

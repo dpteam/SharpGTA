@@ -386,7 +386,7 @@ function Test-SpawnedCars([string]$reference) {
     if ($LASTEXITCODE -ne 0) { throw "Spawned cars repeat run failed." }
 
     $lateText = [string]::Join("`n", $lateLog)
-    if ($lateText -notmatch "World-Cars: spawned=4 model=\S+ nearest=") {
+    if ($lateText -notmatch "World-Cars: spawned=4 model=\S+ nearest=\S+ alive=4 completed=\d+ replans=\d+") {
         throw "Spawned cars were not reported: $lateText"
     }
     if ($lateText -notmatch "World-Dynamic: spawned=4 alive=4 drawn=[1-9]\d*") {
