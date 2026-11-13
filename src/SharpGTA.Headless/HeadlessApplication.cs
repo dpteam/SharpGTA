@@ -10,6 +10,7 @@ using SharpGTA.Games.III;
 using SharpGTA.Games.VC;
 using SharpGTA.IO;
 using SharpGTA.Mathematics;
+using SharpGTA.Rendering;
 using SharpGTA.Runtime;
 
 namespace SharpGTA.Headless
@@ -952,6 +953,16 @@ namespace SharpGTA.Headless
             output.WriteLine("IFP-Animation: name=" + wanted + " found=false");
         }
 
+        private static float MatrixDifference(Matrix left, Matrix right)
+        {
+            return Math.Abs(left.Right.X - right.Right.X) + Math.Abs(left.Right.Y - right.Right.Y) +
+                Math.Abs(left.Right.Z - right.Right.Z) + Math.Abs(left.Forward.X - right.Forward.X) +
+                Math.Abs(left.Forward.Y - right.Forward.Y) + Math.Abs(left.Forward.Z - right.Forward.Z) +
+                Math.Abs(left.Up.X - right.Up.X) + Math.Abs(left.Up.Y - right.Up.Y) +
+                Math.Abs(left.Up.Z - right.Up.Z) + Math.Abs(left.Position.X - right.Position.X) +
+                Math.Abs(left.Position.Y - right.Position.Y) + Math.Abs(left.Position.Z - right.Position.Z);
+        }
+
         private static string SequenceNames(IfpAnimation animation)
         {
             StringBuilder names = new StringBuilder();
@@ -1039,6 +1050,126 @@ namespace SharpGTA.Headless
                 }
                 output.WriteLine("IFP-Pose-Unbound: " + names);
             }
+
+            if (options.Skin)
+                WriteIfpSkin(model, modelSource, animation, options.IfpTime, output);
+        }
+
+        /// <summary>
+        /// Deforms every skinned geometry with the sampled pose, proving the bind matrices and bone
+        /// frames line up on real data. Rigid atomics are counted but not moved: they are placed by
+        /// their frame matrix, not by weights, and this diagnostic does not claim otherwise.
+        /// </summary>
+        private static void WriteIfpSkin(DffDocument model, string source, IfpAnimation animation,
+            float time, TextWriter output)
+        {
+            AnimationPose pose = AnimationSampler.SampleLooping(animation, time);
+            int skinnedGeometries = 0;
+            int rigid = 0;
+            int unsupported = 0;
+            int vertices = 0;
+            int moved = 0;
+            int bones = 0;
+            float maxDelta = 0.0f;
+            float bindDelta = 0.0f;
+            float minX = float.MaxValue, minY = float.MaxValue, minZ = float.MaxValue;
+            float maxX = float.MinValue, maxY = float.MinValue, maxZ = float.MinValue;
+            StateWriter digest = new StateWriter();
+            for (int c = 0; c < model.Clumps.Length; c++)
+            {
+                DffClump clump = model.Clumps[c];
+                AnimationBinding binding = AnimationBinding.Bind(clump, animation);
+                Matrix[] frameWorld = binding.ResolveWorld(pose);
+                Matrix[] restWorld = binding.RestWorld();
+                DffAtomic[] atomics = clump.Atomics ?? new DffAtomic[0];
+                for (int i = 0; i < atomics.Length; i++)
+                {
+                    DffAtomic atomic = atomics[i];
+                    if (atomic == null || atomic.Geometry == null)
+                        continue;
+                    DffGeometry geometry = atomic.Geometry;
+                    DffSkin skin = geometry.Skin != null ? geometry.Skin : atomic.LegacySkin;
+                    if (skin == null)
+                    {
+                        rigid++;
+                        continue;
+                    }
+                    Matrix[] boneMatrices;
+                    Vector3[] deformed;
+                    Vector3[] original = geometry.MorphTargets[0].Vertices;
+                    try
+                    {
+                        boneMatrices = SkinDeformer.ComputeBoneMatrices(clump, skin, frameWorld);
+                        deformed = SkinDeformer.DeformPositions(geometry, skin, boneMatrices);
+                    }
+                    catch (AssetFormatException exception)
+                    {
+                        // Old-format skins store their bind matrices in a space this reader cannot
+                        // map yet; report that instead of drawing garbage.
+                        unsupported++;
+                        output.WriteLine("IFP-Skin-Unsupported: atomic=" + i.ToString(CultureInfo.InvariantCulture) +
+                            " old=" + (skin.IsOldFormat ? "yes" : "no") +
+                            " split=" + (skin.SplitMeshCount != 0 ? "yes" : "no") +
+                            " reason=" + exception.Message);
+                        continue;
+                    }
+                    // The bind skeleton must reproduce the stored vertices exactly; a large value
+                    // here would mean the inverse matrices or the bone-to-frame mapping are wrong.
+                    Vector3[] bindPose = SkinDeformer.DeformPositions(geometry, skin,
+                        SkinDeformer.ComputeBoneMatrices(clump, skin, restWorld));
+                    for (int b = 0; b < bindPose.Length; b++)
+                    {
+                        float bx = bindPose[b].X - original[b].X;
+                        float by = bindPose[b].Y - original[b].Y;
+                        float bz = bindPose[b].Z - original[b].Z;
+                        float delta = (float)Math.Sqrt(bx * bx + by * by + bz * bz);
+                        if (delta > bindDelta)
+                            bindDelta = delta;
+                    }
+                    if (skin.NumBones > bones)
+                        bones = skin.NumBones;
+                    skinnedGeometries++;
+                    for (int v = 0; v < deformed.Length; v++)
+                    {
+                        Vector3 value = deformed[v];
+                        float dx = value.X - original[v].X;
+                        float dy = value.Y - original[v].Y;
+                        float dz = value.Z - original[v].Z;
+                        float delta = (float)Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                        if (delta > 0.001f)
+                            moved++;
+                        if (delta > maxDelta)
+                            maxDelta = delta;
+                        if (value.X < minX) minX = value.X;
+                        if (value.Y < minY) minY = value.Y;
+                        if (value.Z < minZ) minZ = value.Z;
+                        if (value.X > maxX) maxX = value.X;
+                        if (value.Y > maxY) maxY = value.Y;
+                        if (value.Z > maxZ) maxZ = value.Z;
+                        digest.WriteSingle(value.X);
+                        digest.WriteSingle(value.Y);
+                        digest.WriteSingle(value.Z);
+                    }
+                    vertices += deformed.Length;
+                }
+            }
+
+            output.WriteLine("IFP-Skin: model=" + source + " animation=" + animation.Name +
+                " t=" + time.ToString("0.###", CultureInfo.InvariantCulture) +
+                " clumps=" + model.Clumps.Length.ToString(CultureInfo.InvariantCulture) +
+                " skinned=" + skinnedGeometries.ToString(CultureInfo.InvariantCulture) +
+                " rigid=" + rigid.ToString(CultureInfo.InvariantCulture) +
+                " unsupported=" + unsupported.ToString(CultureInfo.InvariantCulture) +
+                " bones=" + bones.ToString(CultureInfo.InvariantCulture) +
+                " vertices=" + vertices.ToString(CultureInfo.InvariantCulture) +
+                " moved=" + moved.ToString(CultureInfo.InvariantCulture) +
+                " maxDelta=" + maxDelta.ToString("0.###", CultureInfo.InvariantCulture) +
+                " bindDelta=" + bindDelta.ToString("0.###", CultureInfo.InvariantCulture) +
+                " bounds=" + (vertices == 0
+                    ? "none"
+                    : FormatVector(new Vector3(minX, minY, minZ)) + ".." +
+                      FormatVector(new Vector3(maxX, maxY, maxZ))) +
+                " hash=" + digest.ToHex());
         }
 
         private static string FormatVector(Vector3 value)
@@ -1198,6 +1329,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --ifp-animation NAME     Print one animation from the read IFP packages.");
             output.WriteLine("  --ifp-model PATH|IMG:NAME  Bind that animation to a DFF skeleton and print the pose.");
             output.WriteLine("  --ifp-time SECONDS       Pose time for --ifp-model (default 0).");
+            output.WriteLine("  --skin                   Deform skinned geometries with the sampled pose and print IFP-Skin.");
             output.WriteLine("  --txd PATH                Read D3D8 TXD and decode all its mip levels; repeatable.");
             output.WriteLine("  --txd-entry NAME          Read a named D3D8 TXD entry from loaded IMG files.");
             output.WriteLine("  --txd-scan                Decode every D3D8 TXD texture and mip level in IMG.");

@@ -261,10 +261,26 @@ try {
             if ($ifpPose -notmatch "IFP-Pose: model=IMG:PLAYER\.DFF animation=walk_civi t=0\.4 looped=no frames=17 skinned=no bound=16 unbound=0 changed=16 maxShift=0\.8") {
                 throw "III IFP pose was not sampled on PLAYER.DFF."
             }
+            # III peds are a rigid hierarchy, so skinning must report exactly that and invent nothing.
+            $ifpSkin = Invoke-Case "III IFP skin on PLAYER.DFF" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:PLAYER.DFF", "--ifp-animation", "walk_civi", "--ifp-time", "0.4", "--skin", "--ticks", "0")) $false
+            if ($ifpSkin -notmatch "IFP-Skin: model=IMG:PLAYER\.DFF animation=walk_civi t=0\.4 clumps=1 skinned=0 rigid=16 unsupported=0 bones=0 vertices=0 moved=0 maxDelta=0 bindDelta=0") {
+                throw "III PLAYER.DFF must stay a rigid hierarchy, not a skinned mesh."
+            }
         } else {
             $ifpPose = Invoke-Case "VC IFP pose on skinned ped" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:FIREMAN.DFF", "--ifp-animation", "WALK_civi", "--ifp-time", "0.4", "--ticks", "0")) $false
             if ($ifpPose -notmatch "IFP-Pose: model=IMG:FIREMAN\.DFF animation=WALK_civi t=0\.4 looped=no frames=25 skinned=yes bound=22 unbound=0 changed=23 maxShift=1\.7") {
                 throw "VC IFP pose was not sampled on the skinned ped."
+            }
+            # Split-skin deformation is exact: bindDelta must be zero on the real bind pose.
+            $ifpSkin = Invoke-Case "VC IFP skin on skinned ped" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:FIREMAN.DFF", "--ifp-animation", "WALK_civi", "--ifp-time", "0.4", "--skin", "--ticks", "0")) $false
+            if ($ifpSkin -notmatch "IFP-Skin: model=IMG:FIREMAN\.DFF animation=WALK_civi t=0\.4 clumps=1 skinned=1 rigid=0 unsupported=0 bones=24 vertices=855 moved=855 maxDelta=1\.0[0-9]* bindDelta=0") {
+                throw "VC split-skin deformation is missing or the bind pose does not round-trip."
+            }
+            # Old-format skins are reported instead of being skinned with a guessed mapping.
+            $legacySkin = Invoke-Case "VC IFP skin on old-format skin" $net40 ($common + @("--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-model", "IMG:male01.DFF", "--ifp-animation", "WALK_civi", "--ifp-time", "0.4", "--skin", "--ticks", "0")) $false
+            if ($legacySkin -notmatch "IFP-Skin-Unsupported: atomic=0 old=yes split=no" -or
+                $legacySkin -notmatch "IFP-Skin: model=IMG:male01\.DFF .*skinned=0 rigid=0 unsupported=1") {
+                throw "VC old-format skin must be reported as unsupported."
             }
         }
         $looseTxd = Invoke-Case "$game loose TXD" $net40 ($common + @("--txd", "MODELS/particle.txd", "--ticks", "0")) $false

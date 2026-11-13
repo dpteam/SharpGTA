@@ -59,6 +59,7 @@ namespace SharpGTA.Headless
         public string IfpModel { get; set; }
         public float IfpTime { get; set; }
         public bool HasIfpTime { get; set; }
+        public bool Skin { get; set; }
         public List<string> DffEntries { get; private set; }
         public ulong Ticks { get; set; }
         public ulong StateAt { get; set; }
@@ -191,6 +192,9 @@ namespace SharpGTA.Headless
                     case "--ifp-time":
                         options.IfpTime = ParseSingle(Value(args, ref i, argument), "--ifp-time");
                         options.HasIfpTime = true;
+                        break;
+                    case "--skin":
+                        options.Skin = true;
                         break;
                     case "--dff-entry":
                         options.DffEntries.Add(Value(args, ref i, argument));
@@ -376,6 +380,8 @@ namespace SharpGTA.Headless
                 }
                 if (options.IfpTime < 0.0f)
                     throw new CommandLineException("--ifp-time must not be negative.");
+                if (options.Skin && options.IfpModel == null)
+                    throw new CommandLineException("--skin requires --ifp-model.");
                 if (options.RenderPreview && options.DffPaths.Count + options.DffEntries.Count == 0)
                     throw new CommandLineException("--render-preview requires at least one --dff or --dff-entry.");
                 if (options.HasGroundQuery)
