@@ -1,5 +1,6 @@
 using System;
 using SharpGTA.IO;
+using SharpGTA.Mathematics;
 
 namespace SharpGTA.Assets
 {
@@ -44,6 +45,46 @@ namespace SharpGTA.Assets
 
         public AnimationPose Pose { get; private set; }
 
+        /// <summary>
+        /// Root translation this clip moves the character by over one cycle, i.e. the locomotion
+        /// `mover`. III walk clips carry it; an in-place clip reports zero and takes its speed from
+        /// the caller, which is what `ASSOC_MOVEMENT` + `relSpeed` do in the original.
+        /// </summary>
+        public Vector3 CycleDisplacement
+        {
+            get
+            {
+                AnimationPose start = AnimationSampler.SampleLooping(binding.Animation, 0.0f);
+                AnimationPose end = AnimationSampler.Sample(binding.Animation, Duration);
+                Vector3 startTranslation = SumTranslation(start);
+                Vector3 endTranslation = SumTranslation(end);
+                return new Vector3(
+                    endTranslation.X - startTranslation.X,
+                    endTranslation.Y - startTranslation.Y,
+                    endTranslation.Z - startTranslation.Z);
+            }
+        }
+
+        /// <summary>Locomotion speed in units per second taken from the clip's mover.</summary>
+        public float CycleSpeed
+        {
+            get
+            {
+                if (Duration <= 0.0f)
+                    return 0.0f;
+                Vector3 displacement = CycleDisplacement;
+                return (float)Math.Sqrt(displacement.X * displacement.X +
+                    displacement.Y * displacement.Y + displacement.Z * displacement.Z) / Duration;
+            }
+        }
+
+        /// <summary>
+        /// Translation difference between the previous and the current tick, divided by the delta:
+        /// the per-tick velocity `FrameUpdateCallBackWithVelocityExtraction` writes into
+        /// `velocity2d`, with the wrap-around segment added when the clip loops inside the tick.
+        /// </summary>
+        public Vector3 Velocity { get; private set; }
+
         private AnimationPlayer(AnimationBinding binding)
         {
             this.binding = binding;
@@ -73,10 +114,12 @@ namespace SharpGTA.Assets
 
             float duration = Duration;
             double next = time + deltaSeconds * Speed;
+            Vector3 current = SumTranslation(Pose);
             if (duration <= 0.0f)
             {
                 time = 0.0;
                 Pose = AnimationSampler.SampleLooping(binding.Animation, 0.0f);
+                Velocity = Vector3.Zero;
                 Finished = true;
                 return;
             }
@@ -85,22 +128,34 @@ namespace SharpGTA.Assets
 
             if (Looping)
             {
-                double wrapped = next % duration;
-                time = wrapped;
+                bool wrapped = next >= duration;
+                double wrappedTime = next % duration;
+                time = wrappedTime;
                 Finished = false;
-                Pose = AnimationSampler.SampleLooping(binding.Animation, (float)wrapped);
+                Pose = AnimationSampler.SampleLooping(binding.Animation, (float)wrappedTime);
+                Vector3 moved = Difference(SumTranslation(Pose), current);
+                if (wrapped)
+                {
+                    // The tick crossed the loop point: add the rest of the clip, exactly like
+                    // `velocity2d += end` in the original extraction callback.
+                    moved = Add(moved, SumTranslation(AnimationSampler.Sample(
+                        binding.Animation, duration)));
+                }
+                Velocity = Scale(moved, deltaSeconds);
             }
             else if (next >= duration)
             {
                 time = duration;
                 Finished = true;
                 Pose = AnimationSampler.Sample(binding.Animation, duration);
+                Velocity = Scale(Difference(SumTranslation(Pose), current), deltaSeconds);
             }
             else
             {
                 time = next;
                 Finished = false;
                 Pose = AnimationSampler.Sample(binding.Animation, (float)next);
+                Velocity = Scale(Difference(SumTranslation(Pose), current), deltaSeconds);
             }
         }
 
@@ -131,6 +186,42 @@ namespace SharpGTA.Assets
         public Mathematics.Matrix[] ResolveWorld()
         {
             return binding.ResolveWorld(Pose);
+        }
+
+        /// <summary>Sum of the translation channels, i.e. the mover offset in pose space.</summary>
+        public static Vector3 SumTranslation(AnimationPose pose)
+        {
+            if (pose == null)
+                throw new ArgumentNullException("pose");
+            float x = 0.0f;
+            float y = 0.0f;
+            float z = 0.0f;
+            for (int i = 0; i < pose.Bones.Length; i++)
+            {
+                if (!pose.Bones[i].HasTranslation)
+                    continue;
+                x += pose.Bones[i].Translation.X;
+                y += pose.Bones[i].Translation.Y;
+                z += pose.Bones[i].Translation.Z;
+            }
+            return new Vector3(x, y, z);
+        }
+
+        private static Vector3 Difference(Vector3 left, Vector3 right)
+        {
+            return new Vector3(left.X - right.X, left.Y - right.Y, left.Z - right.Z);
+        }
+
+        private static Vector3 Add(Vector3 left, Vector3 right)
+        {
+            return new Vector3(left.X + right.X, left.Y + right.Y, left.Z + right.Z);
+        }
+
+        private static Vector3 Scale(Vector3 value, float factor)
+        {
+            if (factor <= 0.0f)
+                return Vector3.Zero;
+            return new Vector3(value.X / factor, value.Y / factor, value.Z / factor);
         }
     }
 }

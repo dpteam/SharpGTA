@@ -9,6 +9,42 @@ namespace SharpGTA.Tests
         private const float Pi = 3.14159265358979323846f;
 
         [Test]
+        public void ExtractsTheMoverSpeedFromTheClip()
+        {
+            IfpAnimation animation = OneBoneClip(1.0f);
+            AnimationPlayer player = AnimationPlayer.Create(Clump(), animation);
+
+            // The clip slides the root 2 units over 1 s, so that is its locomotion speed.
+            Vector3 mover = player.CycleDisplacement;
+            Assert.Near(0.0f, mover.X, 1e-4f);
+            Assert.Near(2.0f, mover.Z, 1e-4f);
+            Assert.Near(2.0f, player.CycleSpeed, 1e-4f);
+
+            player.Advance(0.5f);
+            Assert.Near(0.0f, player.Velocity.X, 1e-4f);
+            Assert.Near(2.0f, player.Velocity.Z, 1e-4f);
+
+            // A tick that crosses the loop point adds the remainder of the clip, so the velocity
+            // stays continuous instead of flipping negative for one tick.
+            player.Seek(0.9f);
+            player.Advance(0.2f);
+            Assert.Near(2.0f, player.Velocity.Z, 1e-3f);
+        }
+
+        [Test]
+        public void InPlaceClipReportsNoVelocity()
+        {
+            IfpAnimation animation = OneBoneClip(1.0f);
+            animation.Sequences[0].HasTranslation = false;
+            AnimationPlayer player = AnimationPlayer.Create(Clump(), animation);
+            player.Advance(0.5f);
+            Assert.Near(0.0f, player.CycleSpeed, 1e-6f);
+            Assert.Near(0.0f, player.Velocity.X, 1e-6f);
+            Assert.Near(0.0f, player.Velocity.Y, 1e-6f);
+            Assert.Near(0.0f, player.Velocity.Z, 1e-6f);
+        }
+
+        [Test]
         public void AdvanceMovesTheClipAndResamplesThePose()
         {
             IfpAnimation animation = OneBoneClip(1.0f);

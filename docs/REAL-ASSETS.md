@@ -98,6 +98,7 @@
 | IFP skin: skinned / rigid / unsupported | 0 / 16 / 0 | 1 / 0 / 0 |
 | IFP skin `maxDelta` / `bindDelta` | 0 / 0 | 1.001 / 0 |
 | IFP play 30 Hz `wraps` / `maxStep` / `loopGap` | 2 / 1.549 / 1.567 | 2 / 0.112 / 0 |
+| IFP mover `speed` (walk / run) | 1.306 / 5.86 u/s | 0 (in-place) / — |
 
 `LoadStandard()` завершается успешно на обеих играх и на обоих runtimes. Отсутствующих моделей для прочитанных IPL нет. Полные `--dff-scan` и `--txd-scan` проходят на всех nonempty DFF/TXD. Проверены отдельно III `loplyguy.dff` (legacy `0x30200`), `peds.dff` (22 clumps) и VC `wheels.DFF` (20 geometries), VC `FIREMAN.DFF` (split Skin + HAnim), loose `particle.txd` обеих игр, III `PLAYER.TXD`, VC DXT1 `WMYBE.TXD` (9 levels), DXT3 `AIRPLAN.TXD` и uncompressed `DOCENTRANCE.TXD`. VC дополнительно читает 30 COLL-ресурсов из IMG до первого IPL. Реальные ground queries прошли:
 
@@ -109,6 +110,8 @@
 Это чтение и сэмплирование (DTO + времена в дельтах + поза), плюс CPU-скиннинг split-skin моделей. Реальные проверки: VC `FIREMAN.DFF` + `WALK_civi` при `t=0.4` даёт `skinned=1 rigid=0 unsupported=0 bones=24 vertices=855 moved=855 maxDelta=1.001 bindDelta=0` — то есть bind-поза возвращается в исходные вершины ровно, а поза реально их двигает. Старые VC-скины (`male01.DFF` и ещё 160 файлов) честно попадают в `IFP-Skin-Unsupported: ... old=yes split=no` (`unsupported=1`): их bind-матрицы хранятся как bind (это учтено), но кости нельзя сопоставить кадрам без game-специфичной таблицы bone name. III педы — жёсткая иерархия, а не скин: `PLAYER.DFF` даёт `skinned=0 rigid=16`. Blending и playback на актёрах по-прежнему отсутствуют.
 
 Playback-часы проверены на реальных клипах: III `PLAYER.DFF` + `walk_civi` за 2.5 с даёт `ticks=75 wraps=2 maxStep=1.549 loopGap=1.567` — корень за цикл уезжает вперёд на 1.57 unit, то есть это локомоционный mover, который в оригинале снимает velocity extraction, а не ошибка чтения; VC `FIREMAN.DFF` + `WALK_civi` за 3 с — `ticks=90 wraps=2 maxStep=0.112 loopGap=0`, петля сходится ровно и поза идёт плавно.
+
+Скорость тоже берётся из клипа, а не из константы: III `walk_civi` даёт `mover=(0.007,1.567,0) speed=1.306` u/s (≈4.7 км/ч), III `run_civi` — `mover=(0.001,3.907,0.003) speed=5.86` u/s (≈21 км/ч), VC `WALK_civi` — `mover=(0,0,0) speed=0`, то есть клип in-place и скорость должен задавать вызов. Порядок величин совпадает с тем, как педы ходят и бегают в игре — это и есть проверка, что mover читается правильно, а не подогнан.
 
 Полученные warnings относятся только к явно не реализованным directives:
 

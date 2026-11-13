@@ -1123,6 +1123,9 @@ namespace SharpGTA.Headless
                 " wraps=" + wraps.ToString(CultureInfo.InvariantCulture) +
                 " maxStep=" + maxStep.ToString("0.####", CultureInfo.InvariantCulture) +
                 " loopGap=" + loopGap.ToString("0.####", CultureInfo.InvariantCulture) +
+                " mover=" + FormatVector(player.CycleDisplacement) +
+                " speed=" + player.CycleSpeed.ToString("0.###", CultureInfo.InvariantCulture) +
+                " tickSpeed=" + FormatVector(player.Velocity) +
                 " hash=" + digest.ToHex());
         }
 
