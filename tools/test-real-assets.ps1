@@ -302,6 +302,24 @@ try {
                 throw "VC WALK_civi playback did not advance, wrap seamlessly and stay in place."
             }
         }
+        if ($game -eq "iii") {
+            $animated = Invoke-Case "III animated peds" $net40 ($common + @("--standard", "--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-animation", "walk_civi", "--animate-actors", "--spawn-peds", "4", "--ticks", "120")) $false
+            if ($animated -notmatch "Path-Animation: actors=4 clip=walk_civi clipSpeed=1\.306" -or
+                $animated -notmatch "Path-Follow: vehicles=0 peds=4 .*travelled=20\.") {
+                throw "III peds did not walk at the clip speed; travelled distance does not match walk_civi."
+            }
+            # Without animation the same actors ignore the clip and move at the configured speed.
+            $plain = Invoke-Case "III peds at the configured speed" $net40 ($common + @("--standard", "--spawn-peds", "4", "--spawn-ped-speed", "10", "--ticks", "120")) $false
+            if ($plain -notmatch "Path-Follow: vehicles=0 peds=4 .*travelled=160") {
+                throw "III baseline ped speed probe changed; the clip speed comparison is meaningless."
+            }
+        } else {
+            # WALK_civi is in place, so VC actors keep the configured speed instead of a mover.
+            $animated = Invoke-Case "VC animated peds" $net40 ($common + @("--standard", "--img", "MODELS/GTA3.IMG", "--ifp", "ANIM/ped.ifp", "--ifp-animation", "WALK_civi", "--animate-actors", "--spawn-peds", "4", "--ticks", "120")) $false
+            if ($animated -notmatch "Path-Animation: actors=4 clip=WALK_civi clipSpeed=0") {
+                throw "VC in-place clip must report clipSpeed=0 and keep the configured speed."
+            }
+        }
         $looseTxd = Invoke-Case "$game loose TXD" $net40 ($common + @("--txd", "MODELS/particle.txd", "--ticks", "0")) $false
         if ($looseTxd -notmatch "TXD: source=MODELS/particle\.txd declared=[1-9]" -or $looseTxd -notmatch "pixels=[1-9]") {
             throw "$game loose particle.txd decode failed."

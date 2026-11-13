@@ -83,6 +83,7 @@ namespace SharpGTA.Headless
                     gameClock = new GameClock();
                     runtime.AddModule(gameClock);
                     PathFollowerModule followers = null;
+                    ActorAnimationModule actorAnimations = null;
                     if (options.HasWalk)
                     {
                         // A player-shaped probe: one ped, scripted forward input, COLL walls.
@@ -140,6 +141,11 @@ namespace SharpGTA.Headless
                         }
                         ModelDefinition carModel = null;
                         ModelDefinition pedModel = null;
+                        IfpAnimation pedClip = null;
+                        float clipSpeed = 0.0f;
+                        List<DynamicEntity> spawnedPeds = options.AnimateActors
+                            ? new List<DynamicEntity>()
+                            : null;
                         if (options.HasSpawnCars)
                         {
                             carModel = ResolveCarModel(loader, options);
@@ -152,9 +158,20 @@ namespace SharpGTA.Headless
                         {
                             pedModel = ResolvePedModel(loader, options);
                             pedModelName = pedModel.Name;
+                            // An animated actor walks as fast as its clip says it does, so the clip
+                            // speed replaces the hand-picked constant when it carries a mover.
+                            float pedSpeed = options.SpawnPedSpeed;
+                            if (options.AnimateActors)
+                            {
+                                pedClip = ResolveActorClip(loader, options);
+                                clipSpeed = AnimationPlayer.ComputeCycleSpeed(pedClip);
+                                if (clipSpeed > 0.0f)
+                                    pedSpeed = clipSpeed;
+                            }
                             pedsSpawned = SpawnFollowed(loader, followGraph, followers,
                                 PathKind.Ped, WorldEntityKind.Ped, pedModel,
-                                options.SpawnPedSpeed, options.SpawnPedCount);
+                                pedSpeed, options.SpawnPedCount,
+                                options.AnimateActors ? spawnedPeds : null);
                         }
                         if (options.Recycle)
                         {
@@ -176,6 +193,12 @@ namespace SharpGTA.Headless
                         if (!dynamicModuleAdded)
                             runtime.AddModule(new DynamicEntityModule(loader.World));
                         runtime.AddModule(followers);
+                        if (options.AnimateActors)
+                        {
+                            actorAnimations = AttachActorClips(loader, pedModel, pedClip, spawnedPeds,
+                                clipSpeed, options.SpawnPedSpeed);
+                            runtime.AddModule(actorAnimations);
+                        }
                         if (population != null)
                             runtime.AddModule(population);
                     }
@@ -200,6 +223,8 @@ namespace SharpGTA.Headless
                             carModelName, pedModelName, output);
                     if (population != null)
                         WriteTrafficSummary(population, output);
+                    if (actorAnimations != null)
+                        WriteActorAnimationSummary(actorAnimations, output);
                     if (walkerModule != null)
                     {
                         Vector3 walkerPosition = walkerModule.Entity.Position;
@@ -701,6 +726,14 @@ namespace SharpGTA.Headless
             PathFollowerModule followers, PathKind pathKind, WorldEntityKind entityKind,
             ModelDefinition model, float speed, int count)
         {
+            return SpawnFollowed(loader, graph, followers, pathKind, entityKind, model, speed, count,
+                null);
+        }
+
+        private static int SpawnFollowed(GameDataLoader loader, PathGraph graph,
+            PathFollowerModule followers, PathKind pathKind, WorldEntityKind entityKind,
+            ModelDefinition model, float speed, int count, List<DynamicEntity> collected)
+        {
             int spawned = 0;
             for (int i = 0; i < graph.NodeCount && spawned < count; i++)
             {
@@ -722,6 +755,8 @@ namespace SharpGTA.Headless
                     break;
                 if (!followers.Assign(entity, route, speed))
                     continue;
+                if (collected != null)
+                    collected.Add(entity);
                 spawned++;
             }
             return spawned;
@@ -799,6 +834,59 @@ namespace SharpGTA.Headless
                 " despawned=" + population.DespawnedCount.ToString(CultureInfo.InvariantCulture) +
                 " recycled=" + population.RecycledCount.ToString(CultureInfo.InvariantCulture);
             output.WriteLine(line);
+        }
+
+        private static IfpAnimation ResolveActorClip(GameDataLoader loader, HeadlessOptions options)
+        {
+            IfpDocument[] documents = new IfpDocument[options.IfpPaths.Count];
+            for (int i = 0; i < documents.Length; i++)
+                documents[i] = loader.LoadIfp(options.IfpPaths[i]);
+            IfpAnimation animation = FindAnimation(documents, options.IfpAnimation);
+            if (animation == null)
+            {
+                throw new CommandLineException("--ifp-animation '" + options.IfpAnimation +
+                    "' was not found in the --ifp packages.");
+            }
+            return animation;
+        }
+
+        /// <summary>
+        /// Binds the clip to every spawned ped through its real DFF skeleton. A ped model that cannot
+        /// be loaded, or an actor whose skeleton the clip does not cover, is reported instead of
+        /// silently sliding along the path.
+        /// </summary>
+        private static ActorAnimationModule AttachActorClips(GameDataLoader loader,
+            ModelDefinition pedModel, IfpAnimation clip, List<DynamicEntity> peds, float clipSpeed,
+            float configuredSpeed)
+        {
+            if (pedModel == null)
+                throw new CommandLineException("--animate-actors requires --spawn-peds.");
+            if (loader.Stats.ImageCount == 0)
+            {
+                throw new CommandLineException(
+                    "--animate-actors needs an IMG for the ped model; add --img MODELS/GTA3.IMG.");
+            }
+
+            DffDocument document = loader.LoadDffEntry(pedModel.Name + ".DFF");
+            if (document.Clumps.Length == 0)
+            {
+                throw new CommandLineException("Ped model '" + pedModel.Name + "' has no clumps.");
+            }
+            DffClump clump = document.Clumps[0];
+
+            ActorAnimationModule module = new ActorAnimationModule();
+            float speed = clipSpeed > 0.0f ? clipSpeed : configuredSpeed;
+            for (int i = 0; i < peds.Count; i++)
+                module.Attach(peds[i], clump, clip, speed);
+            return module;
+        }
+
+        private static void WriteActorAnimationSummary(ActorAnimationModule animations, TextWriter output)
+        {
+            output.WriteLine("Path-Animation: actors=" + animations.Count.ToString(CultureInfo.InvariantCulture) +
+                " clip=" + animations.ClipName +
+                " clipSpeed=" + animations.ClipSpeed.ToString("0.###", CultureInfo.InvariantCulture) +
+                " posedigest=" + animations.PoseDigest().ToString("x16", CultureInfo.InvariantCulture));
         }
 
         private static void WritePathFollowSummary(StaticWorld world, PathFollowerModule followers,

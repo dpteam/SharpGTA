@@ -22,7 +22,7 @@
 - [x] Model registry + static IPL world + sector broad phase + bounded diagnostics.
 - [x] RenderWare chunk inventory и static non-native DFF: Clump/FrameList/GeometryList/Atomic, geometry/morph, materials/texture refs, BinMesh list/strip, multi-clump и stale parent lengths.
 - [x] DFF HAnim, old/split Skin и MatFX (включая embedded textures) читаются на всех реальных DFF; counters в `--dff[-entry]/scan`.
-- [~] Animation/skinning/render behavior: IFP читается, сэмплируется на реальном скелете и уже крутится по 30 Hz (`AnimationPlayer`, `--ifp-play`), split-skin деформируется точно (`bindDelta=0`), но на актёрах клипов ещё нет, как и blending, старые VC-скины и GPU-скиннинг.
+- [~] Animation/skinning/render behavior: IFP читается, сэмплируется на реальном скелете, крутится по 30 Hz и играет на актёрах (`ActorAnimationModule`, `--animate-actors`, скорость из mover'а), split-skin деформируется точно (`bindDelta=0`), но анимации в preview, blending, старые VC-скины и GPU-скиннинг ещё не сделаны.
 - [x] Smoke `LoadStandard()` на двух локальных реальных III/VC trees, обоих runtimes; counts в `docs/REAL-ASSETS.md`.
 - [x] Начальная синхронная загрузка 30 VC COLL-ресурсов из IMG до первого IPL и реальные ground queries.
 - [ ] Расширенные golden manifests/запросы для retail variants; bounds-based streaming/eviction ещё впереди.
@@ -37,7 +37,8 @@
 - [x] CPU-скиннинг: `SkinDeformer`/`SkinBinding` строят `inverseBind * boneWorld`, привязывают кости к кадрам по bind-матрицам (в файле нет per-frame node index, а порядок кадров VC-педов не совпадает с порядком узлов), учитывают, что старые скины хранят bind-матрицу, а не её инверсию, и деформируют позиции/нормали. `--skin` печатает `IFP-Skin:` с `bindDelta` (bind-поза обязана вернуться в исходные вершины) и `unsupported=` для старых скинов, которые пока честно не поддержаны.
 - [x] Playback-часы: `AnimationPlayer` владеет временем клипа (double-аккумулятор, `Advance`/`Seek`, speed, looping, `Finished`), сэмплирует позу и отдаёт world-матрицы; `--ifp-play` прогоняет клип на 30 Hz и печатает `wraps`, `maxStep` (плавность) и `loopGap` (непрерывность петли).
 - [x] Извлечение velocity из mover'а: `AnimationPlayer.CycleDisplacement`/`CycleSpeed` (смещение корня за цикл / длительность) и `Velocity` (дельта между тиками с компенсацией перехода петли, как `velocity2d += end` в `FrameUpdateCallBackWithVelocityExtraction`); `IFP-Play:` печатает `mover`/`speed`/`tickSpeed`. Реальные клипы дают III `walk_civi` 1.306 u/s и `run_civi` 5.86 u/s, VC `WALK_civi` — in-place (`mover=0`).
-- [ ] Анимации на актёрах (`PathFollowerModule` берёт скорость из `CycleSpeed` вместо константы), blending/partial weights, старые VC-скины (нужна game-специфичная таблица bone name) и SCM VM с отдельными numeric opcode tables III/VC.
+- [x] Актёры играют клип: `ActorAnimationModule` (`--animate-actors`) привязывает клип к DFF-скелету педа, ставит скорость актёра из mover'а (`--spawn-ped-speed` заменяется на `walk_civi` 1.306 u/s), масштабирует часы клипа под эту скорость, крутит позу каждый тик и входит в state hash через `WriteState`/`PoseDigest` (`Path-Animation:`).
+- [ ] Анимации на актёрах в preview, blending/partial weights, старые VC-скины (нужна game-специфичная таблица bone name), клипы для заменяемых актёров при `--recycle` и SCM VM с отдельными numeric opcode tables III/VC.
 
 ## Этап 2 — streaming и simulation world
 

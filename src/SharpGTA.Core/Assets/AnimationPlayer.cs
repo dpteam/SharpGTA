@@ -52,30 +52,40 @@ namespace SharpGTA.Assets
         /// </summary>
         public Vector3 CycleDisplacement
         {
-            get
-            {
-                AnimationPose start = AnimationSampler.SampleLooping(binding.Animation, 0.0f);
-                AnimationPose end = AnimationSampler.Sample(binding.Animation, Duration);
-                Vector3 startTranslation = SumTranslation(start);
-                Vector3 endTranslation = SumTranslation(end);
-                return new Vector3(
-                    endTranslation.X - startTranslation.X,
-                    endTranslation.Y - startTranslation.Y,
-                    endTranslation.Z - startTranslation.Z);
-            }
+            get { return ComputeCycleDisplacement(binding.Animation); }
+        }
+
+        public static Vector3 ComputeCycleDisplacement(IfpAnimation animation)
+        {
+            if (animation == null)
+                throw new ArgumentNullException("animation");
+            AnimationPose start = AnimationSampler.SampleLooping(animation, 0.0f);
+            AnimationPose end = AnimationSampler.Sample(animation, animation.Duration);
+            Vector3 startTranslation = SumTranslation(start);
+            Vector3 endTranslation = SumTranslation(end);
+            return new Vector3(
+                endTranslation.X - startTranslation.X,
+                endTranslation.Y - startTranslation.Y,
+                endTranslation.Z - startTranslation.Z);
+        }
+
+        /// <summary>Mover speed of a clip in units per second; zero for an in-place clip.</summary>
+        public static float ComputeCycleSpeed(IfpAnimation animation)
+        {
+            if (animation == null)
+                throw new ArgumentNullException("animation");
+            if (animation.Duration <= 0.0f)
+                return 0.0f;
+            Vector3 displacement = ComputeCycleDisplacement(animation);
+            return (float)Math.Sqrt(displacement.X * displacement.X +
+                displacement.Y * displacement.Y + displacement.Z * displacement.Z) /
+                animation.Duration;
         }
 
         /// <summary>Locomotion speed in units per second taken from the clip's mover.</summary>
         public float CycleSpeed
         {
-            get
-            {
-                if (Duration <= 0.0f)
-                    return 0.0f;
-                Vector3 displacement = CycleDisplacement;
-                return (float)Math.Sqrt(displacement.X * displacement.X +
-                    displacement.Y * displacement.Y + displacement.Z * displacement.Z) / Duration;
-            }
+            get { return ComputeCycleSpeed(binding.Animation); }
         }
 
         /// <summary>

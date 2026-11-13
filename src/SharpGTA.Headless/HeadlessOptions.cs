@@ -62,6 +62,7 @@ namespace SharpGTA.Headless
         public bool Skin { get; set; }
         public float IfpPlay { get; set; }
         public bool HasIfpPlay { get; set; }
+        public bool AnimateActors { get; set; }
         public List<string> DffEntries { get; private set; }
         public ulong Ticks { get; set; }
         public ulong StateAt { get; set; }
@@ -201,6 +202,9 @@ namespace SharpGTA.Headless
                     case "--ifp-play":
                         options.IfpPlay = ParseSingle(Value(args, ref i, argument), "--ifp-play");
                         options.HasIfpPlay = true;
+                        break;
+                    case "--animate-actors":
+                        options.AnimateActors = true;
                         break;
                     case "--dff-entry":
                         options.DffEntries.Add(Value(args, ref i, argument));
@@ -394,6 +398,18 @@ namespace SharpGTA.Headless
                         throw new CommandLineException("--ifp-play requires --ifp-model.");
                     if (options.IfpPlay < 0.0f)
                         throw new CommandLineException("--ifp-play must not be negative.");
+                }
+                if (options.AnimateActors)
+                {
+                    if (!options.HasSpawnCars && options.SpawnPedCount == 0)
+                        throw new CommandLineException("--animate-actors requires --spawn-peds or --spawn-cars.");
+                    if (options.IfpPaths.Count == 0 || options.IfpAnimation == null)
+                        throw new CommandLineException("--animate-actors requires --ifp and --ifp-animation.");
+                    if (options.Recycle)
+                    {
+                        throw new CommandLineException(
+                            "--animate-actors cannot be combined with --recycle yet: replaced actors would lose their clip.");
+                    }
                 }
                 if (options.RenderPreview && options.DffPaths.Count + options.DffEntries.Count == 0)
                     throw new CommandLineException("--render-preview requires at least one --dff or --dff-entry.");
