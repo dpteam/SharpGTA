@@ -148,6 +148,34 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void SpawnLookupsSkipTheNullModel()
+        {
+            WorldTestDefinition definition = new WorldTestDefinition(GameId.III, DataSchema.III, 200);
+            ModelRegistry registry = new ModelRegistry(definition);
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n1, building, generic, 1, 100, 0\nend\n" +
+                "cars\n90, landstal, landstal, car, LANDSTAL, LANDSTAL, normal, 10, 0, 1a, 0, 1.0\nend\n" +
+                "peds\n0, null, null, CIVMALE, STAT_PLAYER, ped, 0\nend\n" +
+                "peds\n7, civmale, civmale, CIVMALE, STAT_CIVILE, ped, 0\nend\n"));
+
+            // Raw id order still reports the placeholder, which is what makes the record visible.
+            ModelDefinition firstPed;
+            Assert.True(registry.TryFindFirst(ModelKind.Ped, out firstPed));
+            Assert.Equal("null", firstPed.Name);
+            Assert.True(ModelRegistry.IsPlaceholder(firstPed));
+
+            // Spawn helpers must not pick a model that has no DFF: the actor would be invisible.
+            ModelDefinition spawnablePed;
+            Assert.True(registry.TryFindFirst(ModelKind.Ped, true, out spawnablePed));
+            Assert.Equal("civmale", spawnablePed.Name);
+            Assert.False(ModelRegistry.IsPlaceholder(spawnablePed));
+            ModelDefinition spawnableVehicle;
+            Assert.True(registry.TryFindFirst(ModelKind.Vehicle, true, out spawnableVehicle));
+            Assert.Equal("landstal", spawnableVehicle.Name);
+            Assert.False(ModelRegistry.IsPlaceholder(null));
+        }
+
+        [Test]
         public void RejectsDuplicateAndInvalidIdsWithoutPartialBindings()
         {
             ModelRegistry registry = new ModelRegistry(

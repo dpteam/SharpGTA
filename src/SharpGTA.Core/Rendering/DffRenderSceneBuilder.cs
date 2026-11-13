@@ -32,6 +32,24 @@ namespace SharpGTA.Rendering
             return result;
         }
 
+        /// <summary>
+        /// Resolves the atomic transforms of every clump in a document, in clump order. GTA III
+        /// ped models ship as two clumps (body and head), so a single-clump assumption would
+        /// either fail or silently drop half the model; atomics are concatenated in the same
+        /// order <see cref="RenderResourceManager.GetModel"/> emits them.
+        /// </summary>
+        public static Matrix[] ResolveAll(DffDocument document)
+        {
+            if (document == null)
+                throw new ArgumentNullException("document");
+            if (document.Clumps == null || document.Clumps.Length == 0)
+                throw new AssetFormatException("DFF document has no clumps.");
+            List<Matrix> all = new List<Matrix>();
+            for (int i = 0; i < document.Clumps.Length; i++)
+                all.AddRange(Resolve(document.Clumps[i]));
+            return all.ToArray();
+        }
+
         public static Matrix Concatenate(Matrix child, Matrix parent)
         {
             return new Matrix(

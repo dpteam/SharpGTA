@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using SharpGTA.Assets;
 using SharpGTA.IO;
 
@@ -208,6 +209,43 @@ namespace SharpGTA.Rendering
             if (document.Clumps.Length != 1)
                 throw new AssetFormatException("Expected one DFF clump for a model resource.");
             cached = DffRenderConverter.ConvertClump(document.Clumps[0], name);
+            for (int i = 0; i < cached.Length; i++)
+                cached[i].TextureDictionary = textureDictionary;
+            models.Add(name, cached);
+            return cached;
+        }
+
+        /// <summary>
+        /// Converts every clump of a DFF into one atomic list, in clump order. GTA III ped
+        /// models ship as two clumps (body and head), so callers that render gameplay actors
+        /// must use this instead of <see cref="GetClump"/>; the transform list has to come from
+        /// <see cref="DffFrameTransforms.ResolveAll"/> to stay index-aligned.
+        /// </summary>
+        public GeometryRenderData[] GetModel(string name, DffDocument document, string textureDictionary)
+        {
+            if (name == null)
+                throw new ArgumentNullException("name");
+            if (document == null)
+                throw new ArgumentNullException("document");
+            GeometryRenderData[] cached;
+            if (models.TryGetValue(name, out cached))
+                return cached;
+            if (document.Clumps == null || document.Clumps.Length == 0)
+                throw new AssetFormatException("DFF document has no clumps.");
+            if (document.Clumps.Length == 1)
+            {
+                cached = DffRenderConverter.ConvertClump(document.Clumps[0], name);
+            }
+            else
+            {
+                List<GeometryRenderData> all = new List<GeometryRenderData>();
+                for (int i = 0; i < document.Clumps.Length; i++)
+                {
+                    all.AddRange(DffRenderConverter.ConvertClump(document.Clumps[i],
+                        name + "#clump" + i.ToString(CultureInfo.InvariantCulture)));
+                }
+                cached = all.ToArray();
+            }
             for (int i = 0; i < cached.Length; i++)
                 cached[i].TextureDictionary = textureDictionary;
             models.Add(name, cached);

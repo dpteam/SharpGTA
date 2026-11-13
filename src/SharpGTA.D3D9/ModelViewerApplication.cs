@@ -44,11 +44,10 @@ namespace SharpGTA.D3D9
             resources = new RenderResourceManager();
             resources.AddDictionary(loader.LoadTxdEntry(ModelName + ".txd"));
             DffDocument document = loader.LoadDffEntry(ModelName + ".dff");
-            if (document.Clumps.Length != 1)
-                throw new AssetFormatException("Model preview expects exactly one DFF clump.");
-            DffClump clump = document.Clumps[0];
-            GeometryRenderData[] atomics = resources.GetClump(ModelName, document);
-            Matrix[] transforms = DffFrameTransforms.Resolve(clump);
+            // Ped DFFs ship as two clumps (body and head), so the preview converts every clump
+            // instead of refusing anything that is not a single-clump static model.
+            GeometryRenderData[] atomics = resources.GetModel(ModelName, document, null);
+            Matrix[] transforms = DffFrameTransforms.ResolveAll(document);
             snapshot = DffRenderSceneBuilder.Build(atomics, transforms, Matrix.Identity);
             BoundingBox bounds = DffRenderSceneBuilder.ComputeBounds(atomics, transforms);
             center = (bounds.Min + bounds.Max) * 0.5f;

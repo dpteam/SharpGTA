@@ -53,16 +53,38 @@ namespace SharpGTA.World
         /// </summary>
         public bool TryFindFirst(ModelKind kind, out ModelDefinition model)
         {
+            return TryFindFirst(kind, false, out model);
+        }
+
+        /// <summary>
+        /// Same scan as <see cref="TryFindFirst"/>, but skips the engine's null model when
+        /// <paramref name="skipPlaceholder"/> is set. The IDE lists that model as "null" and it
+        /// has no DFF, so an actor spawned on it exists but never draws.
+        /// </summary>
+        public bool TryFindFirst(ModelKind kind, bool skipPlaceholder, out ModelDefinition model)
+        {
             for (int id = 0; id < models.Length; id++)
             {
                 ModelDefinition candidate = models[id];
                 if (candidate == null || candidate.Kind != kind)
+                    continue;
+                if (skipPlaceholder && IsPlaceholder(candidate))
                     continue;
                 model = candidate;
                 return true;
             }
             model = null;
             return false;
+        }
+
+        /// <summary>
+        /// True for the engine's null model ("null" in the IDE lists, id 0 in both games). It is
+        /// a valid record but has no DFF, so gameplay spawns must not pick it by accident.
+        /// </summary>
+        public static bool IsPlaceholder(ModelDefinition model)
+        {
+            return model != null &&
+                string.Equals(model.Name, "null", StringComparison.OrdinalIgnoreCase);
         }
 
         public bool TryGet(int id, out ModelDefinition model)

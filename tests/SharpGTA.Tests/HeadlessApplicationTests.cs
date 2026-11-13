@@ -118,6 +118,61 @@ namespace SharpGTA.Tests
             temporary.WriteText("DATA/GTA3.DAT", "# empty main\n");
         }
 
+        /// <summary>
+        /// A ped-only network next to the car one: same four-node chain, offset on Y so the two
+        /// networks never overlap. Used to prove peds spawn, walk and hash deterministically.
+        /// </summary>
+        private static void CreatePedPathTree(TemporaryDirectory temporary)
+        {
+            temporary.WriteBytes("MODELS/GTA3.DIR", new byte[0]);
+            temporary.WriteBytes("MODELS/GTA3.IMG", new byte[0]);
+            temporary.WriteText("DATA/A.IDE",
+                "objs\n1, ground, generic, 1, 100, 0\nend\n" +
+                "peds\n0, null, null, CIVMALE, STAT_PLAYER, ped, 0\n" +
+                "7, civmale, civmale, CIVMALE, STAT_CIVILE, ped, 0\nend\n" +
+                "path\n" +
+                "ped, -1, unused\n" +
+                "2, 1, 0, 0, 320, 0, 160, 1, 1\n" +
+                "2, 2, 0, 160, 320, 0, 160, 1, 1\n" +
+                "2, 3, 0, 320, 320, 0, 160, 1, 1\n" +
+                "2, -1, 0, 480, 320, 0, 160, 1, 1\n" +
+                RepeatLine("0, -1, 0, 0, 0, 0, 0, 0, 0", 8) +
+                "end\n");
+            temporary.WriteBytes("DATA/A.COL", WorldTestAssets.CreateBoxCollision("ground", 2.0f, -1.0f, 0.0f));
+            temporary.WriteText("DATA/A.IPL", "inst\n1, ground, 10, 20, 3, 5, 5, 5, 0, 0, 1, 1\nend\n");
+            temporary.WriteText("DATA/DEFAULT.DAT", "IDE DATA/A.IDE\nCOLFILE 0 DATA/A.COL\nIPL DATA/A.IPL\n");
+            temporary.WriteText("DATA/GTA3.DAT", "# empty main\n");
+        }
+
+        /// <summary>Both networks and both model kinds, for mixing cars, peds and objects.</summary>
+        private static void CreateMixedPathTree(TemporaryDirectory temporary)
+        {
+            temporary.WriteBytes("MODELS/GTA3.DIR", new byte[0]);
+            temporary.WriteBytes("MODELS/GTA3.IMG", new byte[0]);
+            temporary.WriteText("DATA/A.IDE",
+                "objs\n1, ground, generic, 1, 100, 0\nend\n" +
+                "cars\n130, landstal, landstal, car, LANDSTAL, LANDSTAL, normal, 10, 0, 1a, 0, 1.0\nend\n" +
+                "peds\n7, civmale, civmale, CIVMALE, STAT_PLAYER, ped, 0\nend\n" +
+                "path\n" +
+                "car, -1, unused\n" +
+                "2, 1, 0, 0, 0, 0, 160, 1, 1\n" +
+                "2, 2, 0, 160, 0, 0, 160, 1, 1\n" +
+                "2, 3, 0, 320, 0, 0, 160, 1, 1\n" +
+                "2, -1, 0, 480, 0, 0, 160, 1, 1\n" +
+                RepeatLine("0, -1, 0, 0, 0, 0, 0, 0, 0", 8) +
+                "ped, -1, unused\n" +
+                "2, 1, 0, 0, 320, 0, 160, 1, 1\n" +
+                "2, 2, 0, 160, 320, 0, 160, 1, 1\n" +
+                "2, 3, 0, 320, 320, 0, 160, 1, 1\n" +
+                "2, -1, 0, 480, 320, 0, 160, 1, 1\n" +
+                RepeatLine("0, -1, 0, 0, 0, 0, 0, 0, 0", 8) +
+                "end\n");
+            temporary.WriteBytes("DATA/A.COL", WorldTestAssets.CreateBoxCollision("ground", 2.0f, -1.0f, 0.0f));
+            temporary.WriteText("DATA/A.IPL", "inst\n1, ground, 10, 20, 3, 5, 5, 5, 0, 0, 1, 1\nend\n");
+            temporary.WriteText("DATA/DEFAULT.DAT", "IDE DATA/A.IDE\nCOLFILE 0 DATA/A.COL\nIPL DATA/A.IPL\n");
+            temporary.WriteText("DATA/GTA3.DAT", "# empty main\n");
+        }
+
         private static string RepeatLine(string line, int count)
         {
             string result = "";
@@ -283,9 +338,97 @@ namespace SharpGTA.Tests
                 Assert.Equal(first, second);
                 // The synthetic chain is three ten-unit segments, driven at 12 units per second.
                 Assert.True(first.IndexOf(
-                    "Path-Follow: requested=1 vehicles=1 completed=1 replans=0 stalled=0 travelled=30",
+                    "Path-Follow: vehicles=1 peds=0 actors=1 completed=1 replans=0 stalled=0 travelled=30",
                     StringComparison.Ordinal) >= 0, first);
                 Assert.True(first.IndexOf("State@120:", StringComparison.Ordinal) >= 0);
+            }
+        }
+
+        [Test]
+        public void SpawnedPedsFollowThePedNetwork()
+        {
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreatePedPathTree(temporary);
+                string first;
+                string second;
+                string error;
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-peds", "2",
+                    "--ticks", "640", "--state-at", "640" }, out first, out error), error);
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-peds", "2",
+                    "--ticks", "640", "--state-at", "640" }, out second, out error), error);
+                Assert.Equal(first, second);
+                // Two ped nodes start routes, so both walk: the counters prove movement, not a fixed
+                // distance, because RouteSource keeps them walking after the chain ends.
+                Assert.True(first.IndexOf(
+                    "Path-Follow: vehicles=0 peds=2 actors=2", StringComparison.Ordinal) >= 0, first);
+                // Model 0 is "null" in the IDE and has no DFF: the spawner must skip it.
+                Assert.True(first.IndexOf("pedModel=civmale", StringComparison.Ordinal) >= 0, first);
+                Assert.True(first.IndexOf("pedModel=null", StringComparison.Ordinal) < 0, first);
+                Assert.True(first.IndexOf("completed=", StringComparison.Ordinal) >= 0, first);
+                Assert.True(first.IndexOf("Path-Graph: mergeDistance=1 tiles=1 nodes=4 car=0 ped=4",
+                    StringComparison.Ordinal) >= 0, first);
+            }
+        }
+
+        [Test]
+        public void PedSpawningRejectsBadInput()
+        {
+            string output;
+            string error;
+            Assert.Equal(2, Invoke(new string[] { "--spawn-peds", "1" }, out output, out error));
+            Assert.True(error.IndexOf("--root", StringComparison.Ordinal) >= 0);
+
+            Assert.Equal(2, Invoke(new string[] { "--root", ".", "--spawn-ped-speed", "0" },
+                out output, out error));
+            Assert.True(error.IndexOf("--spawn-ped-speed", StringComparison.Ordinal) >= 0);
+
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreateSyntheticTree(temporary);
+                // Path data is a prerequisite: no path groups means no network to walk.
+                Assert.Equal(2, Invoke(new string[] { "--root", temporary.Path, "--spawn-peds", "1" },
+                    out output, out error));
+                Assert.True(error.IndexOf("--spawn-cars/--spawn-peds", StringComparison.Ordinal) >= 0);
+            }
+
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreatePathTree(temporary);
+                // A car model cannot stand in for a ped: the model kind is checked, not guessed.
+                Assert.Equal(2, Invoke(new string[] { "--root", temporary.Path, "--spawn-peds", "1",
+                    "--spawn-model", "landstal" }, out output, out error));
+                Assert.True(error.IndexOf("is not a ped model", StringComparison.Ordinal) >= 0);
+            }
+
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreatePedPathTree(temporary);
+                // The engine's null model is a valid record with no mesh; naming it is an error
+                // instead of spawning an actor that would never draw.
+                Assert.Equal(2, Invoke(new string[] { "--root", temporary.Path, "--spawn-peds", "1",
+                    "--spawn-model", "null" }, out output, out error));
+                Assert.True(error.IndexOf("null model", StringComparison.Ordinal) >= 0);
+            }
+        }
+
+        [Test]
+        public void VehiclesAndPedsShareOneFollowerAndOneIntegrator()
+        {
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreateMixedPathTree(temporary);
+                string output;
+                string error;
+                // Mixing spawned objects with actors must not register DynamicEntityModule twice,
+                // otherwise every entity integrates twice per tick.
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-objects", "1",
+                    "--spawn-cars", "1", "--spawn-peds", "1", "--ticks", "30" },
+                    out output, out error), error);
+                Assert.True(output.IndexOf("Dynamic: requested=1 alive=3 objects=1",
+                    StringComparison.Ordinal) >= 0, output);
+                Assert.True(output.IndexOf("Path-Follow: vehicles=1 peds=1 actors=2",
+                    StringComparison.Ordinal) >= 0, output);
             }
         }
 

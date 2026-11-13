@@ -570,10 +570,8 @@ namespace SharpGTA.D3D9
             try
             {
                 DffDocument document = DffReader.Read(data);
-                if (document.Clumps.Length != 1)
-                    throw new AssetFormatException("Expected one clump for IPL model " + name + ".");
-                GeometryRenderData[] atomics = resources.GetClump(name, document, definition.Txd);
-                Matrix[] transforms = DffFrameTransforms.Resolve(document.Clumps[0]);
+                GeometryRenderData[] atomics = resources.GetModel(name, document, definition.Txd);
+                Matrix[] transforms = DffFrameTransforms.ResolveAll(document);
                 for (int i = 0; i < atomics.Length; i++)
                 {
                     for (int j = 0; j < atomics[i].Materials.Length; j++)

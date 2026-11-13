@@ -6,12 +6,13 @@ using SharpGTA.Runtime;
 namespace SharpGTA.World
 {
     /// <summary>
-    /// Drives vehicles along a resolved path route at a constant speed. This is the first
-    /// gameplay motion that follows the network instead of drifting in a straight line: each
-    /// assigned entity walks its node chain, takes its heading from the current segment and
-    /// stops at the end. There is no physics, collision response, lane offset or traffic rule
-    /// yet, and the follower owns its vehicles' positions (their plain integration is
-    /// overwritten every tick).
+    /// Drives vehicles and peds along a resolved path route at a constant speed. This is the
+    /// first gameplay motion that follows the network instead of drifting in a straight line:
+    /// each assigned entity walks its node chain, takes its heading from the current segment
+    /// and stops at the end. Cars walk car nodes and peds walk ped nodes, but one module owns
+    /// both so a mixed spawn still has exactly one position owner per entity. There is no
+    /// physics, collision response, lane offset or traffic rule yet, and the follower owns its
+    /// actors' positions (their plain integration is overwritten every tick).
     /// </summary>
     public sealed class PathFollowerModule : ISimulationModule, IStateSerializable
     {
@@ -27,9 +28,9 @@ namespace SharpGTA.World
         private int stalledSteps;
 
         /// <summary>
-        /// Optional route provider: when a car reaches the end of its chain the module asks for
-        /// a fresh route from that node so it keeps driving. Returning null or a short route
-        /// leaves the car parked, which is the documented behaviour without a provider.
+        /// Optional route provider: when an actor reaches the end of its chain the module asks for
+        /// a fresh route from that node so it keeps moving. Returning null or a short route
+        /// leaves the actor parked, which is the documented behaviour without a provider.
         /// </summary>
         public Func<int, int[]> RouteSource { get; set; }
 
@@ -40,7 +41,7 @@ namespace SharpGTA.World
 
         /// <summary>
         /// The optional world keeps the sector index in sync when a follower repositions or
-        /// snaps a car; without it the caller owns that bookkeeping.
+        /// snaps an actor; without it the caller owns that bookkeeping.
         /// </summary>
         public PathFollowerModule(PathGraph graph, StaticWorld world)
         {
@@ -96,8 +97,8 @@ namespace SharpGTA.World
         }
 
         /// <summary>
-        /// Assigns a resolved route to a spawned vehicle. The vehicle is snapped to the first
-        /// node, so callers should spawn it there; a shorter route is rejected.
+        /// Assigns a resolved route to a spawned vehicle or ped. The actor is snapped to the
+        /// first node, so callers should spawn it there; a shorter route is rejected.
         /// </summary>
         public bool Assign(DynamicEntity entity, int[] route, float speed)
         {
@@ -105,7 +106,10 @@ namespace SharpGTA.World
                 throw new ArgumentNullException("entity");
             if (route == null)
                 throw new ArgumentNullException("route");
-            if (entity.Kind != WorldEntityKind.Vehicle || route.Length < 2)
+            // Only gameplay actors walk paths: objects have no heading and no route semantics.
+            if (entity.Kind != WorldEntityKind.Vehicle && entity.Kind != WorldEntityKind.Ped)
+                return false;
+            if (route.Length < 2)
                 return false;
             if (!(speed > 0.0f) || float.IsInfinity(speed))
                 throw new ArgumentOutOfRangeException("speed");
@@ -190,7 +194,7 @@ namespace SharpGTA.World
             follower.Entity.Velocity = (end - start) * (follower.Speed / length);
         }
 
-        /// <summary>Repositions through the world so the sector index follows the car.</summary>
+        /// <summary>Repositions through the world so the sector index follows the actor.</summary>
         private void Move(DynamicEntity entity, Vector3 position)
         {
             if (world == null)
@@ -209,7 +213,7 @@ namespace SharpGTA.World
             completed++;
             int lastNode = follower.Route[follower.Route.Length - 1];
             int[] next = RouteSource == null ? null : RouteSource(lastNode);
-            // A provider must continue from the node the car stands on, or the car would jump.
+            // A provider must continue from the node the actor stands on, or it would jump.
             if (next != null && next.Length >= 2 && next[0] == lastNode &&
                 IsValidRoute(next))
             {

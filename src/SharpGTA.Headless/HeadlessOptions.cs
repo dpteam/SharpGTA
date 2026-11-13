@@ -30,6 +30,7 @@ namespace SharpGTA.Headless
             PathNearestRadius = 100.0f;
             PathVerifyLength = 200.0f;
             SpawnCarSpeed = 12.0f;
+            SpawnPedSpeed = 1.5f;
         }
 
         public string Game { get; set; }
@@ -96,6 +97,8 @@ namespace SharpGTA.Headless
         public bool HasSpawnCars { get; set; }
         public int SpawnCarCount { get; set; }
         public float SpawnCarSpeed { get; set; }
+        public int SpawnPedCount { get; set; }
+        public float SpawnPedSpeed { get; set; }
         public int PathGroupIndex { get; set; }
         public int PathNodeIndex { get; set; }
 
@@ -261,6 +264,14 @@ namespace SharpGTA.Headless
                         options.SpawnCarCount = ParseNonNegativeInt32(Value(args, ref i, argument), argument);
                         options.HasSpawnCars = true;
                         break;
+                    case "--spawn-peds":
+                        options.SpawnPedCount = ParseNonNegativeInt32(Value(args, ref i, argument), argument);
+                        break;
+                    case "--spawn-ped-speed":
+                        options.SpawnPedSpeed = ParseSingle(Value(args, ref i, argument), argument);
+                        if (!(options.SpawnPedSpeed > 0.0f))
+                            throw new CommandLineException("--spawn-ped-speed must be positive.");
+                        break;
                     case "--spawn-car-speed":
                         options.SpawnCarSpeed = ParseSingle(Value(args, ref i, argument), argument);
                         if (!(options.SpawnCarSpeed > 0.0f))
@@ -310,7 +321,7 @@ namespace SharpGTA.Headless
                     options.HasGroundQuery || options.HasZoneQuery || options.HasPathQuery ||
                     options.HasBuildingQuery || options.HasSpawnObjects || options.RenderPreview ||
                     options.HasPathNearestQuery || options.HasPathMergeDistance || options.HasPathRouteQuery ||
-                    options.VerifyPaths || options.HasSpawnCars;
+                    options.VerifyPaths || options.HasSpawnCars || options.SpawnPedCount > 0;
                 if (needsRoot && options.Root == null)
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)

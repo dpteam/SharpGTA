@@ -420,6 +420,69 @@ function Test-SpawnedCars([string]$reference) {
     Write-Host "PASS spawned cars follow the network and move: $(($lateLog | Where-Object { $_ -match 'World-Cars:' }) -join ' ')"
 }
 
+function Test-SpawnedPeds([string]$reference) {
+    Write-Host "=== Path-following peds ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    $output = Join-Path $root "artifacts/world-smoke"
+    [IO.Directory]::CreateDirectory($output) | Out-Null
+    $early = Join-Path $output "world-peds-early.bmp"
+    $late = Join-Path $output "world-peds-late.bmp"
+    $again = Join-Path $output "world-peds-again.bmp"
+    [string[]]$lateLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 60 `
+        --spawn-peds 6 --screenshot $late 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Spawned peds run failed." }
+    [string[]]$earlyLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 2 `
+        --spawn-peds 6 --screenshot $early 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Spawned peds early run failed." }
+    [string[]]$againLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 60 `
+        --spawn-peds 6 --screenshot $again 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Spawned peds repeat run failed." }
+
+    $lateText = [string]::Join("`n", $lateLog)
+    # model=null is the engine placeholder and never draws, so it must not appear here even
+    # though a summary line alone would still say "spawned".
+    $pedLine = [regex]::Match($lateText, "World-Peds: spawned=6 model=(?!null)\S+ nearest=\S+ alive=6 completed=\d+ replans=\d+")
+    if (-not $pedLine.Success) {
+        throw "Spawned peds were not reported: $lateText"
+    }
+    # Six cop atomics sets (body + head) must reach the render scene, not just the entity pool.
+    if ($lateText -notmatch "World-Dynamic: spawned=6 alive=6 drawn=150 ") {
+        throw "Spawned peds did not reach the renderer: $lateText"
+    }
+    if ($lateText -match "World-Cars:") {
+        throw "Peds were reported as cars: $lateText"
+    }
+
+    # Pixel equality is deliberately not asserted here: at the preview spawn the ped network
+    # runs under the highway deck, so a frame diff would prove occlusion, not rendering. The
+    # mesh itself is proven by the two-clump ped screenshot in test-model.ps1; what this test
+    # proves is that peds spawn on the real network, walk, and hash deterministically.
+    $moved = [regex]::Match($lateText, "World-Actors-Final: cars=0 peds=6 .*travelled=([\d.]+)")
+    $before = [regex]::Match([string]::Join("`n", $earlyLog), "World-Actors-Final: cars=0 peds=6 .*travelled=([\d.]+)")
+    if (-not $moved.Success -or -not $before.Success) {
+        throw "Spawned peds did not report their travelled distance: $lateText"
+    }
+    if ([double]$moved.Groups[1].Value -le [double]$before.Groups[1].Value) {
+        throw "Spawned peds did not walk between two and sixty frames: $($before.Groups[1].Value) -> $($moved.Groups[1].Value)"
+    }
+    if ((Get-FileHash $late -Algorithm SHA256).Hash -ne
+        (Get-FileHash $again -Algorithm SHA256).Hash) {
+        throw "Spawned peds are not deterministic."
+    }
+
+    # Cars and peds must share one follower module, not fight over positions.
+    $mixed = Join-Path $output "world-peds-cars.bmp"
+    [string[]]$mixedLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 60 `
+        --spawn-cars 2 --spawn-peds 4 --screenshot $mixed 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Mixed cars and peds run failed." }
+    $mixedText = [string]::Join("`n", $mixedLog)
+    if ($mixedText -notmatch "World-Cars: spawned=2 model=\S+ nearest=\S+ alive=6" -or
+        $mixedText -notmatch "World-Peds: spawned=4 model=\S+ nearest=\S+ alive=6") {
+        throw "Mixed cars and peds shared one world incorrectly: $mixedText"
+    }
+    Write-Host "PASS spawned peds walk the ped network: $(($lateLog | Where-Object { $_ -match 'World-Peds:' }) -join ' ')"
+}
+
 function Test-PathOverlay([string]$reference) {
     Write-Host "=== Path graph overlay ==="
     $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
@@ -797,6 +860,7 @@ try {
     Test-DynamicEntities $baseline
     Test-PathOverlay $baseline
     Test-SpawnedCars $baseline
+    Test-SpawnedPeds $baseline
 
     Invoke-World "net9.0-windows" "dotnet" `
         @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `

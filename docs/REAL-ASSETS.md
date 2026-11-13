@@ -37,6 +37,7 @@
 | Path audit (`--verify-paths`) | consistent, longest 186.61, no long links | consistent, 26 long links (all water, max 329.02) |
 | Route probe (ground to 200 units away) | 26 hops, 728.49 units | 282 hops, 4847.98 units |
 | Car ground delta (preview / full map) | +0.46 max / −19.8 min (multi-level roads) | −0.72 max / −0.29 avg |
+| Spawned actors, 120 ticks (`--spawn-cars 2 --spawn-peds 3`) | 5 actors, `vehicleModel=landstal pedModel=cop`, travelled 73.77 | 5 actors, `landstal`/`cop`, travelled 114 |
 | Path graph extern slots / empty slots | 6726 / 14691 | 5090 / 8752 |
 | Path graph components (car / ped / water) | 109 (3 / 106 / 0) | 42 (4 / 32 / 6) |
 | Single-node components / largest component | 20 / 1967 | 0 / 5102 |
@@ -100,6 +101,8 @@ Flood-fill группы показывают, насколько граф свя
 `--query-path-route` проверяет маршрутизацию на этих же данных: III находит car-маршрут в 26 переходов / 728.49 unit между `(812,-936,36)` и `(700,-700,36)`, VC — ped-маршрут в 282 hops / 4847.98 unit внутри крупнейшей компоненты (компонента 2).
 
 Car-связи получают `CCarPathLink`-данные: III 2079 записей и всего 4 стороны, ушедшие в дефолт 1/1; VC 3064 записи и тоже 4 fallback'а, то есть полосы почти везде известны из extern-переходов. Направление и midpoint считаются по тем же правилам, что в оригинале: направление всегда к нижнему индексу узла, одна запись общая для обоих направлений связи.
+
+Спавн актёров проверяется на обоих деревьях: `--spawn-cars 2 --spawn-peds 3` даёт 5 actor'ов с моделями `landstal`/`cop` (III 73.77 unit за 120 тиков, VC 114) — то есть подхватывается первый реальный рекорд своего вида, а не `null`-модель id 0, которая есть в IDE обоих городов и не имеет меша. Ped DFF в III состоит из двух clump'ов (`cop.dff`: 2 clumps, 25 atomics, 1096 треугольников), поэтому статическая модель конвертируется по всем clump'ам; в world preview стартовая точка на эстакаде оставляет ped-сеть под настилом, так что пиксельное доказательство ped-меша даёт `--model cop`, а не кадр мира.
 
 ## Важные границы проверки
 

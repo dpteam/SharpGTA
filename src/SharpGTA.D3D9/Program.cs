@@ -39,6 +39,8 @@ namespace SharpGTA.D3D9
             bool pathRoute = false;
             int spawnCarCount = 0;
             float spawnCarSpeed = 12.0f;
+            int spawnPedCount = 0;
+            float spawnPedSpeed = 1.5f;
             float[] routePoints = new float[6];
             string pathKind = "car";
             float pathRadius = 200.0f;
@@ -103,6 +105,26 @@ namespace SharpGTA.D3D9
                             out spawnCarSpeed) || !(spawnCarSpeed > 0.0f))
                     {
                         Console.Error.WriteLine("Invalid --spawn-car-speed; expected a positive number.");
+                        return 2;
+                    }
+                }
+                else if (args[i] == "--spawn-peds")
+                {
+                    if (i + 1 >= args.Length ||
+                        !int.TryParse(args[++i], NumberStyles.Integer, CultureInfo.InvariantCulture,
+                            out spawnPedCount) || spawnPedCount < 0 || spawnPedCount > 1000)
+                    {
+                        Console.Error.WriteLine("Invalid --spawn-peds value; expected 0..1000 peds.");
+                        return 2;
+                    }
+                }
+                else if (args[i] == "--spawn-ped-speed")
+                {
+                    if (i + 1 >= args.Length ||
+                        !float.TryParse(args[++i], NumberStyles.Float, CultureInfo.InvariantCulture,
+                            out spawnPedSpeed) || !(spawnPedSpeed > 0.0f))
+                    {
+                        Console.Error.WriteLine("Invalid --spawn-ped-speed; expected a positive number.");
                         return 2;
                     }
                 }
@@ -303,7 +325,7 @@ namespace SharpGTA.D3D9
                     return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
                         frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
                         spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
-                        spawnCarCount, spawnCarSpeed);
+                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -327,7 +349,7 @@ namespace SharpGTA.D3D9
                         if (frontend.Menu.WorldPreviewRequested)
                             return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
                         spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
-                        spawnCarCount, spawnCarSpeed);
+                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed);
                         return result;
                     }
                 }
@@ -382,7 +404,7 @@ namespace SharpGTA.D3D9
             IGameFileSystem files, int frames, string screenshot, bool exerciseReset,
             int streamBudget, int txdBudget, int byteBudgetMiB, int startHour, bool verifySectors,
             int spawnCount, string spawnModel, bool pathOverlay, bool pathRoute, float[] routePoints, string pathKind, float pathRadius,
-            int spawnCarCount, float spawnCarSpeed)
+            int spawnCarCount, float spawnCarSpeed, int spawnPedCount, float spawnPedSpeed)
         {
             using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
             {
@@ -391,7 +413,7 @@ namespace SharpGTA.D3D9
                     new WorldViewerApplication(window, device, loader, streamBudget, txdBudget,
                         byteBudgetMiB * 1024 * 1024, startHour, verifySectors, spawnCount, spawnModel,
                         pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
-                        spawnCarCount, spawnCarSpeed))
+                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed))
                     return viewer.Run(frames, screenshot, exerciseReset);
             }
         }
@@ -444,6 +466,7 @@ namespace SharpGTA.D3D9
             Console.WriteLine("  --verify-sectors: cross-check the sector index against a linear scan (exit 3 on mismatch).");
             Console.WriteLine("  --spawn N [--spawn-model NAME]: spawn N drifting gameplay objects for the preview.");
             Console.WriteLine("  --spawn-cars N [--spawn-car-speed S]: spawn N cars that follow the car network.");
+            Console.WriteLine("  --spawn-peds N [--spawn-ped-speed S]: spawn N peds that follow the ped network.");
             Console.WriteLine("  --path-overlay: draw the path graph as lines over the world.");
             Console.WriteLine("  --path-route X Y Z X2 Y2 Z2 [--path-kind K] [--path-radius R]: draw a resolved route.");
             Console.WriteLine("  --import-settings FILE and --export-settings FILE share launcher settings.");

@@ -47,7 +47,7 @@ namespace SharpGTA.Headless
         {
             if (document.Clumps.Length == 0)
                 throw new AssetFormatException("No clumps in render preview source: " + source);
-            GeometryRenderData[] geometry = resources.GetClump(source, document);
+            GeometryRenderData[] geometry = resources.GetModel(source, document, null);
             for (int i = 0; i < geometry.Length; i++)
             {
                 for (int j = 0; j < geometry[i].Materials.Length; j++)
@@ -63,7 +63,7 @@ namespace SharpGTA.Headless
 
             // Validate the same static frame hierarchy used by the real renderer.
             RenderSceneSnapshot snapshot = DffRenderSceneBuilder.Build(geometry,
-                DffFrameTransforms.Resolve(document.Clumps[0]), Matrix.Identity);
+                DffFrameTransforms.ResolveAll(document), Matrix.Identity);
 
             using (NullRenderDevice device = new NullRenderDevice())
             {

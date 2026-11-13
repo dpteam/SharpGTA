@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|Path-Follow:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -105,6 +105,17 @@ try {
         $pedNode = if ($game -eq "iii") { "node=2245 group=165 local=0" } else { "node=9176 group=1885 local=4" }
         if ($pedPath -notmatch "Path-Nearest: kind=ped .*found=true $pedNode ") {
             throw "$game ped path lookup did not find the expected node."
+        }
+        # Cars and peds must spawn on the real networks with a real mesh: the engine's "null"
+        # model is a valid record, so a summary that says "spawned" can still be invisible.
+        $actors = Invoke-Case "$game spawned cars and peds" $net40 ($common + @("--standard",
+            "--spawn-cars", "2", "--spawn-peds", "3", "--ticks", "120")) $false
+        $actorLine = [regex]::Match($actors, "Path-Follow: vehicles=2 peds=3 actors=5.*")
+        if (-not $actorLine.Success) {
+            throw "$game actors did not spawn on both networks."
+        }
+        if ($actorLine.Value -notmatch "vehicleModel=(?!null)\S+" -or $actorLine.Value -notmatch "pedModel=(?!null)\S+") {
+            throw "$game actors spawned on the null model: $($actorLine.Value)"
         }
         # Routing must follow real connections only: III is fragmented at the probe, VC connects.
         $route = if ($game -eq "iii") {

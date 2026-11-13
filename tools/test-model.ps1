@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 
-function Assert-ModelBmp([string]$name, [string]$path) {
+function Assert-ModelBmp([string]$name, [string]$path, [int]$MinModel = 5000, [int]$MinBright = 500) {
     [byte[]]$bytes = [IO.File]::ReadAllBytes($path)
     if ($bytes.Length -lt 54 -or [BitConverter]::ToUInt16($bytes, 0) -ne 0x4D42) {
         throw "$name did not produce a BMP."
@@ -45,7 +45,7 @@ function Assert-ModelBmp([string]$name, [string]$path) {
             if ($r + $g + $b -gt 180) { $bright++ }
         }
     }
-    if ($model -lt 5000 -or $bright -lt 500 -or $maxX -le $minX -or $maxY -le $minY) {
+    if ($model -lt $MinModel -or $bright -lt $MinBright -or $maxX -le $minX -or $maxY -le $minY) {
         throw "$name has no sufficiently lit 3D model: model=$model bright=$bright bounds=$minX,$minY..$maxX,$maxY."
     }
     if ($background -lt 250000) {
@@ -122,7 +122,18 @@ try {
     Invoke-Model "net40 (x86)" (Join-Path $x86Output "SharpGTA.D3D9.exe") `
         @() (Join-Path $output "player-x86.bmp")
 
-    Write-Host "Real model smoke passed: original PLAYER.DFF/TXD, hierarchy, light, depth, reset and x86/x64."
+    # A ped model is two clumps (body and head) in III, so it exercises the multi-clump path
+    # that a single-clump preview would reject. The cop is dark navy, hence the lower bright bar.
+    $pedShot = Join-Path $output "cop-net40.bmp"
+    [string[]]$pedLines = @(& $net40 --model cop --game iii --root $GameRoot --hidden --frames 2 --screenshot $pedShot 2>&1 | ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Two-clump ped model preview failed." }
+    $pedText = [string]::Join("`n", $pedLines)
+    if ($pedText -notmatch "Model: cop atomics=25 drawCalls=25 triangles=1096 textures=1 missing=0") {
+        throw "Two-clump ped model was not converted: $pedText"
+    }
+    Assert-ModelBmp "two-clump ped" $pedShot 8000 300
+
+    Write-Host "Real model smoke passed: original PLAYER.DFF/TXD, two-clump ped, hierarchy, light, depth, reset and x86/x64."
 }
 finally {
     Pop-Location

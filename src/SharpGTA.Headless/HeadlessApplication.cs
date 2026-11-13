@@ -43,6 +43,11 @@ namespace SharpGTA.Headless
                 output.WriteLine("Game: " + options.Game.ToLowerInvariant() + " (" + definition.DisplayName + ")");
                 GameClock gameClock = null;
                 bool inconsistentPathGraph = false;
+                int carsSpawned = 0;
+                int pedsSpawned = 0;
+                string carModelName = null;
+                string pedModelName = null;
+                bool dynamicModuleAdded = false;
                 using (GameDataLoader loader = CreateLoader(definition, options))
                 {
                     if (loader != null)
@@ -73,21 +78,47 @@ namespace SharpGTA.Headless
                     gameClock = new GameClock();
                     runtime.AddModule(gameClock);
                     PathFollowerModule followers = null;
-                    if (options.HasSpawnCars)
-                    {
-                        followers = new PathFollowerModule(loader.PathGraph);
-                        PathGraph followGraph = loader.PathGraph;
-                        followers.RouteSource = delegate(int node)
-                        {
-                            return PathRouteBuilder.BuildGreedy(followGraph, node, 40, true);
-                        };
-                        SpawnCars(loader, options, followers);
-                        runtime.AddModule(followers);
-                    }
                     if (options.HasSpawnObjects)
                     {
                         SpawnObjects(loader, options);
                         runtime.AddModule(new DynamicEntityModule(loader.World));
+                        dynamicModuleAdded = true;
+                    }
+                    if (options.HasSpawnCars || options.SpawnPedCount > 0)
+                    {
+                        if (loader.Paths.GroupCount == 0)
+                        {
+                            throw new CommandLineException(
+                                "--spawn-cars/--spawn-peds require loaded path data; add --standard.");
+                        }
+                        // One graph for spawning, following and diagnostics, so
+                        // --path-merge-distance cannot mean two different worlds in one run.
+                        PathGraph followGraph = CreatePathGraph(loader, options);
+                        followers = new PathFollowerModule(followGraph, loader.World);
+                        followers.RouteSource = delegate(int node)
+                        {
+                            return PathRouteBuilder.BuildGreedy(followGraph, node, 40, true);
+                        };
+                        if (options.HasSpawnCars)
+                        {
+                            ModelDefinition carModel = ResolveCarModel(loader, options);
+                            carModelName = carModel.Name;
+                            carsSpawned = SpawnFollowed(loader, followGraph, followers,
+                                PathKind.Car, WorldEntityKind.Vehicle, carModel,
+                                options.SpawnCarSpeed, options.SpawnCarCount);
+                        }
+                        if (options.SpawnPedCount > 0)
+                        {
+                            ModelDefinition pedModel = ResolvePedModel(loader, options);
+                            pedModelName = pedModel.Name;
+                            pedsSpawned = SpawnFollowed(loader, followGraph, followers,
+                                PathKind.Ped, WorldEntityKind.Ped, pedModel,
+                                options.SpawnPedSpeed, options.SpawnPedCount);
+                        }
+                        // Registered last so path positions win over plain integration.
+                        if (!dynamicModuleAdded)
+                            runtime.AddModule(new DynamicEntityModule(loader.World));
+                        runtime.AddModule(followers);
                     }
                     if (options.RenderPreview)
                         RenderPreviewRunner.Run(loader, options, output);
@@ -106,7 +137,8 @@ namespace SharpGTA.Headless
                     if (options.HasSpawnObjects)
                         WriteDynamicSummary(loader.World, options, output);
                     if (followers != null)
-                        WritePathFollowSummary(loader.World, followers, options.SpawnCarCount, output);
+                        WritePathFollowSummary(loader.World, followers, carsSpawned, pedsSpawned,
+                            carModelName, pedModelName, output);
                     output.WriteLine("Clock: day=" + gameClock.DaysPassed.ToString(CultureInfo.InvariantCulture) +
                         " time=" + gameClock.Hours.ToString("00", CultureInfo.InvariantCulture) + ":" +
                         gameClock.Minutes.ToString("00", CultureInfo.InvariantCulture) + ":" +
@@ -570,38 +602,67 @@ namespace SharpGTA.Headless
         }
 
         /// <summary>
-        /// Spawns deterministic cars on the car network: each one takes the next car node with
-        /// links, walks a short greedy route through its neighbours, and follows it at a fixed
-        /// speed. No traffic rules, lane offsets or model variety yet.
+        /// Spawns deterministic actors on one path network: each takes the next node of that kind
+        /// with links, walks a short greedy route through its neighbours and follows it at a
+        /// fixed speed. No traffic rules, lane offsets or model variety yet.
         /// </summary>
-        private static void SpawnCars(GameDataLoader loader, HeadlessOptions options,
-            PathFollowerModule followers)
+        private static int SpawnFollowed(GameDataLoader loader, PathGraph graph,
+            PathFollowerModule followers, PathKind pathKind, WorldEntityKind entityKind,
+            ModelDefinition model, float speed, int count)
         {
-            ModelDefinition model = ResolveCarModel(loader, options);
-            PathGraph graph = loader.PathGraph;
             int spawned = 0;
-            for (int i = 0; i < graph.NodeCount && spawned < options.SpawnCarCount; i++)
+            for (int i = 0; i < graph.NodeCount && spawned < count; i++)
             {
                 PathGraphNode node = graph.Nodes[i];
-                if (node.Kind != PathKind.Car || node.LinkCount == 0)
+                if (node.Kind != pathKind || node.LinkCount == 0)
                     continue;
                 int[] route = PathRouteBuilder.BuildGreedy(graph, i, 40, true);
                 if (route.Length < 2)
                 {
-                    // A start on a spur has no dead-end-free way out; driving to the end of the
-                    // spur is still a better probe than refusing to spawn the car at all.
+                    // A start on a spur has no dead-end-free way out; walking to the end of the
+                    // spur is still a better probe than refusing to spawn the actor at all.
                     route = PathRouteBuilder.BuildGreedy(graph, i, 40);
                 }
                 if (route.Length < 2)
                     continue;
                 DynamicEntity entity;
-                if (!loader.World.TrySpawnEntity(WorldEntityKind.Vehicle, model, node.Position,
+                if (!loader.World.TrySpawnEntity(entityKind, model, node.Position,
                     Vector3.Zero, out entity))
-                    return;
-                if (!followers.Assign(entity, route, options.SpawnCarSpeed))
+                    break;
+                if (!followers.Assign(entity, route, speed))
                     continue;
                 spawned++;
             }
+            return spawned;
+        }
+
+        private static ModelDefinition ResolvePedModel(GameDataLoader loader, HeadlessOptions options)
+        {
+            if (options.SpawnModel != null)
+            {
+                ModelDefinition named = loader.Models.Find(options.SpawnModel);
+                if (named == null)
+                {
+                    throw new CommandLineException("--spawn-model '" + options.SpawnModel +
+                        "' is not registered.");
+                }
+                if (named.Kind != ModelKind.Ped)
+                {
+                    throw new CommandLineException("--spawn-model '" + options.SpawnModel +
+                        "' is not a ped model; --spawn-peds needs a ped.");
+                }
+                if (ModelRegistry.IsPlaceholder(named))
+                {
+                    throw new CommandLineException("--spawn-model '" + options.SpawnModel +
+                        "' is the engine's null model and has no mesh; pick a real ped.");
+                }
+                return named;
+            }
+            ModelDefinition ped;
+            if (loader.Models.TryFindFirst(ModelKind.Ped, true, out ped))
+                return ped;
+            throw new CommandLineException(
+                "--spawn-peds needs a ped model; add --spawn-model NAME.");
         }
 
         private static ModelDefinition ResolveCarModel(GameDataLoader loader, HeadlessOptions options)
@@ -614,24 +675,37 @@ namespace SharpGTA.Headless
                     throw new CommandLineException("--spawn-model '" + options.SpawnModel +
                         "' is not registered.");
                 }
+                if (ModelRegistry.IsPlaceholder(named))
+                {
+                    throw new CommandLineException("--spawn-model '" + options.SpawnModel +
+                        "' is the engine's null model and has no mesh; pick a real vehicle.");
+                }
                 return named;
             }
             ModelDefinition vehicle;
-            if (loader.Models.TryFindFirst(ModelKind.Vehicle, out vehicle))
+            if (loader.Models.TryFindFirst(ModelKind.Vehicle, true, out vehicle))
                 return vehicle;
             throw new CommandLineException(
                 "--spawn-cars needs a vehicle model; add --spawn-model NAME.");
         }
 
         private static void WritePathFollowSummary(StaticWorld world, PathFollowerModule followers,
-            int requested, TextWriter output)
+            int cars, int peds, string carModel, string pedModel, TextWriter output)
         {
-            output.WriteLine("Path-Follow: requested=" + requested.ToString(CultureInfo.InvariantCulture) +
-                " vehicles=" + followers.Count.ToString(CultureInfo.InvariantCulture) +
+            // The model names matter: an actor on the engine's "null" model would walk and count
+            // exactly like a real one while never drawing, so the summary states what spawned.
+            string summary = "Path-Follow: vehicles=" + cars.ToString(CultureInfo.InvariantCulture) +
+                " peds=" + peds.ToString(CultureInfo.InvariantCulture) +
+                " actors=" + followers.Count.ToString(CultureInfo.InvariantCulture) +
                 " completed=" + followers.CompletedCount.ToString(CultureInfo.InvariantCulture) +
                 " replans=" + followers.ReplanCount.ToString(CultureInfo.InvariantCulture) +
                 " stalled=" + followers.StalledStepCount.ToString(CultureInfo.InvariantCulture) +
-                " travelled=" + followers.TravelledDistance.ToString("0.##", CultureInfo.InvariantCulture));
+                " travelled=" + followers.TravelledDistance.ToString("0.##", CultureInfo.InvariantCulture);
+            if (carModel != null)
+                summary += " vehicleModel=" + carModel;
+            if (pedModel != null)
+                summary += " pedModel=" + pedModel;
+            output.WriteLine(summary);
             output.WriteLine(VehicleGroundProbe.Format(VehicleGroundProbe.Measure(world)));
         }
 
@@ -845,6 +919,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --path-verify-length R    Over-length threshold for --verify-paths (default 200 units).");
             output.WriteLine("  --path-merge-distance R   Merge external path slots closer than R units (default 1, the original).");
             output.WriteLine("  --spawn-cars N [--spawn-car-speed S]  Spawn N cars that follow the car network.");
+            output.WriteLine("  --spawn-peds N [--spawn-ped-speed S]  Spawn N peds that follow the ped network.");
             output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
             output.WriteLine("  --spawn-objects N [--spawn-model NAME]  Spawn N drifting gameplay objects and tick them.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");

@@ -44,6 +44,48 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void EveryClumpOfAMultiClumpModelIsConvertedAndAligned()
+        {
+            DffClump source = DffReader.ReadClump(DffTestData.Create(0x34003u));
+            // GTA III ped models are two clumps (body and head). A single-clump loader would
+            // silently drop the head, so both conversion and transforms must walk every clump.
+            DffClump body = new DffClump
+            {
+                Frames = new[] { new DffFrame { LocalTransform = Matrix.Identity, ParentIndex = -1 } },
+                Atomics = new[] {
+                    new DffAtomic { FrameIndex = 0, GeometryIndex = 0, Geometry = source.Geometries[0] }
+                }
+            };
+            DffClump head = new DffClump
+            {
+                Frames = new[] {
+                    new DffFrame { LocalTransform = Matrix.CreateTranslation(0, 0, 50), ParentIndex = -1 }
+                },
+                Atomics = new[] {
+                    new DffAtomic { FrameIndex = 0, GeometryIndex = 0, Geometry = source.Geometries[0] }
+                }
+            };
+            DffDocument document = new DffDocument { Clumps = new[] { body, head } };
+
+            Matrix[] transforms = DffFrameTransforms.ResolveAll(document);
+            Assert.Equal(2, transforms.Length);
+
+            RenderResourceManager resources = new RenderResourceManager();
+            GeometryRenderData[] atomics = resources.GetModel("cop", document, null);
+            Assert.Equal(2, atomics.Length);
+            Assert.Equal(transforms.Length, atomics.Length);
+            // The head clump keeps its own transform instead of inheriting the body's frames.
+            Assert.Near(50, transforms[1].Position.Z);
+            Assert.Near(0, transforms[0].Position.Z);
+            RenderSceneSnapshot snapshot = DffRenderSceneBuilder.Build(atomics, transforms, Matrix.Identity);
+            Assert.True(snapshot.DrawCalls.Count >= 2);
+            Assert.Throws<AssetFormatException>(delegate
+            {
+                resources.GetClump("cop-single", document, null);
+            });
+        }
+
+        [Test]
         public void InvalidFrameCyclesAndAtomicIndicesAreRejected()
         {
             DffClump cycle = new DffClump
