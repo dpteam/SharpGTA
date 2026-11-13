@@ -164,6 +164,42 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void DoesNotWalkThroughAnotherActor()
+        {
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry, false);
+            DynamicEntity walker = SpawnPed(world, registry, Vector3.Zero);
+            DynamicEntity blocker = SpawnPed(world, registry, new Vector3(2.0f, 0.0f, 0.0f));
+            CharacterMoveModule module = new CharacterMoveModule(world, walker);
+            module.Speed = 2.0f;
+            SimulationRuntime runtime = Runtime(Forward(1.0f));
+            runtime.AddModule(module);
+            runtime.RunTicks(120);
+            // Body radii 0.35 + 0.4, so the walker stops about 1.25 from the other ped.
+            Assert.True(walker.Position.X < 1.4f, "walked through another ped: x=" + walker.Position.X);
+            Assert.True(walker.Position.X > 1.0f, "stopped too far away: x=" + walker.Position.X);
+            Assert.True(module.CollisionHitCount > 0);
+
+            // A vehicle is a wider body, so the same walk stops sooner.
+            DynamicEntity car;
+            Assert.True(world.TrySpawnEntity(WorldEntityKind.Vehicle, registry.Find("landstal"),
+                new Vector3(4.0f, 2.0f, 0.0f), Vector3.Zero, out car));
+            DynamicEntity second = SpawnPed(world, registry, new Vector3(0.0f, 2.0f, 0.0f));
+            CharacterMoveModule carModule = new CharacterMoveModule(world, second);
+            carModule.Speed = 2.0f;
+            SimulationRuntime carRuntime = Runtime(Forward(1.0f));
+            carRuntime.AddModule(carModule);
+            carRuntime.RunTicks(120);
+            Assert.True(second.Position.X < 2.6f, "walked into a car: x=" + second.Position.X);
+            Assert.True(carModule.CollisionHitCount > 0);
+
+            // Removing the blocker lets the walker continue; nothing is pushed or stuck.
+            Assert.True(world.DespawnEntity(WorldEntityKind.Ped, blocker.Handle));
+            runtime.RunTicks(120);
+            Assert.True(walker.Position.X > 2.5f, "blocker removal did not free the walker");
+        }
+
+        [Test]
         public void ZeroInputKeepsTheCharacterInPlace()
         {
             ModelRegistry registry;
@@ -228,7 +264,8 @@ namespace SharpGTA.Tests
             }
             registry.Bind(new IdeReader(DataSchema.III).Read(
                 "objs\n1, ground, generic, 1, 100, 0\nend\n" +
-                "objs\n10, wall, generic, 1, 100, 0\nend\n"));
+                "objs\n10, wall, generic, 1, 100, 0\nend\n" +
+                "cars\n20, landstal, landstal, car, LANDSTAL, LANDSTAL, normal, 10, 0, 1a, 0, 1.0\nend\n"));
             StaticWorld world = new StaticWorld();
             world.Bind(new IplReader(DataSchema.III).Read(
                 "inst\n1, ground, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +

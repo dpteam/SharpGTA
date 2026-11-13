@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using SharpGTA.Mathematics;
 using SharpGTA.Runtime;
 
@@ -19,6 +20,14 @@ namespace SharpGTA.World
         /// <summary>Body probe heights: just above a climbable ledge and at chest level.</summary>
         private static readonly float[] ProbeHeights = { 0.45f, ChestHeight };
 
+        /// <summary>Vertical band in which two bodies count as touching.</summary>
+        private const float BodyHeight = 1.5f;
+
+        /// <summary>Contact radii for the other actor kinds; vehicles are wide.</summary>
+        private const float SmallActorRadius = 0.4f;
+        private const float LargeActorRadius = 1.2f;
+        private const float VehicleRadius = 1.2f;
+
         /// <summary>`GRAVITY` from Physical.h, in units per 50 Hz step squared.</summary>
         private const float Gravity = 0.008f;
 
@@ -35,6 +44,7 @@ namespace SharpGTA.World
         private readonly DynamicEntity entity;
         private int collisionHits;
         private float travelled;
+        private readonly List<WorldEntity> actorBuffer = new List<WorldEntity>();
         private float verticalSpeed;
         private bool grounded;
 
@@ -148,12 +158,24 @@ namespace SharpGTA.World
                         }
                     }
                 }
+                // Other actors are cylinders, not rays: a body must not walk through a ped or a car.
+                float actorLimit;
+                Vector3 actorNormal;
+                if (ActorLimit(direction, distance, out actorLimit, out actorNormal) &&
+                    actorLimit < allowed)
+                {
+                    allowed = actorLimit;
+                    normal = actorNormal;
+                    blocked = true;
+                }
                 if (!blocked)
                 {
                     MoveEntity(remaining);
                     travelled += distance;
                     return;
                 }
+
+                collisionHits++;
 
                 collisionHits++;
                 if (allowed > 0.0f)
@@ -174,6 +196,53 @@ namespace SharpGTA.World
         private void MoveEntity(Vector3 delta)
         {
             world.MoveEntity(entity, entity.Position + delta);
+        }
+
+        /// <summary>
+        /// Nearest other actor on this movement line, treated as a vertical cylinder. One-sided by
+        /// design: the walker stops, the other body is never pushed, because there is no shared
+        /// `CPhysical` solver yet and traffic keeps its own lane gap (`VehicleGap`).
+        /// </summary>
+        private bool ActorLimit(Vector3 direction, float distance, out float limit,
+            out Vector3 normal)
+        {
+            limit = float.MaxValue;
+            normal = Vector3.Zero;
+            Vector3 position = entity.Position;
+            float reach = distance + Radius + LargeActorRadius;
+            world.QueryEntities(position, reach, actorBuffer);
+            bool found = false;
+            for (int i = 0; i < actorBuffer.Count; i++)
+            {
+                DynamicEntity other = actorBuffer[i] as DynamicEntity;
+                if (other == null || ReferenceEquals(other, entity))
+                    continue;
+                Vector3 delta = other.Position - position;
+                // Bodies only block when they share the vertical band; a car on a bridge above is
+                // not something a walker on the street bumps into.
+                if (Math.Abs(delta.Z) > BodyHeight)
+                    continue;
+                float actorRadius = other.Kind == WorldEntityKind.Vehicle
+                    ? VehicleRadius
+                    : SmallActorRadius;
+                float combined = Radius + actorRadius;
+                float along = Vector3.Dot(delta, direction);
+                if (along <= 0.0f)
+                    continue;
+                float perpendicularSquared = delta.X * delta.X + delta.Y * delta.Y - along * along;
+                if (perpendicularSquared >= combined * combined)
+                    continue;
+                float entry = along - (float)Math.Sqrt(combined * combined - perpendicularSquared);
+                if (entry < 0.0f)
+                    entry = 0.0f;
+                if (entry >= limit)
+                    continue;
+                limit = entry;
+                Vector3 sideways = new Vector3(delta.X, delta.Y, 0.0f) - direction * along;
+                normal = sideways.LengthSquared() > 0.0001f ? -sideways.Normalize() : -direction;
+                found = true;
+            }
+            return found;
         }
 
 
