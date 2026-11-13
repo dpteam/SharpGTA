@@ -20,6 +20,7 @@ namespace SharpGTA.Tests
         {
             ModelRegistry registry;
             StaticWorld world = CreateWorld(out registry, false);
+
             DynamicEntity ped = SpawnPed(world, registry, Vector3.Zero);
             CharacterMoveModule module = new CharacterMoveModule(world, ped);
             module.Speed = 2.0f;
@@ -71,6 +72,67 @@ namespace SharpGTA.Tests
             Assert.True(ped.Position.X < 5.0f, "The character walked into the wall.");
             Assert.True(ped.Position.Y > 1.0f, "The character did not slide along the wall.");
             Assert.True(module.CollisionHitCount > 0);
+        }
+
+        [Test]
+        public void FallsAndLandsOnTheGround()
+        {
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry, false);
+            // Spawned five units above the ground box: gravity brings the body down and the ground
+            // query stops it exactly on the surface.
+            DynamicEntity ped = SpawnPed(world, registry, new Vector3(0.0f, 0.0f, 5.0f));
+            CharacterMoveModule module = new CharacterMoveModule(world, ped);
+            SimulationRuntime runtime = Runtime(new ForwardInput(0.0f, 0.0f));
+            runtime.AddModule(module);
+
+            runtime.RunTicks(5);
+            Assert.False(module.IsGrounded);
+            Assert.True(ped.Position.Z < 5.0f);
+            Assert.True(ped.Position.Z > 0.0f);
+
+            runtime.RunTicks(120);
+            Assert.True(module.IsGrounded);
+            Assert.Near(0.0f, ped.Position.Z, 0.001f);
+        }
+
+        [Test]
+        public void WalksOffALedgeAndLandsOnTheLowerGround()
+        {
+            ModelRegistry registry;
+            StaticWorld world = CreateWorld(out registry, false);
+            // Upper slab ends at x = 2, lower slab sits three units below it.
+            registry = new ModelRegistry(new WorldTestDefinition(GameId.III, DataSchema.III, 32));
+            CollisionRepository collisions = new CollisionRepository(registry);
+            collisions.Add(WorldTestAssets.CreateBoxCollision("ground", 2.0f, -1.0f, 0.0f), 0);
+            collisions.Add(WorldTestAssets.CreateBoxCollision("lower", 4.0f, -4.0f, -3.0f), 0);
+            registry.Bind(new IdeReader(DataSchema.III).Read(
+                "objs\n1, ground, generic, 1, 100, 0\nend\n" +
+                "objs\n2, lower, generic, 1, 100, 0\nend\n" +
+                "peds\n7, civmale, civmale, CIVMALE, STAT_PLAYER, ped, 0\nend\n"));
+            world = new StaticWorld();
+            world.Bind(new IplReader(DataSchema.III).Read(
+                "inst\n1, ground, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1\n" +
+                "2, lower, 6, 0, 0, 1, 1, 1, 0, 0, 1, 1\nend\n"),
+                registry, new LoadReport());
+
+            DynamicEntity ped = SpawnPed(world, registry, Vector3.Zero);
+            CharacterMoveModule module = new CharacterMoveModule(world, ped);
+            module.Speed = 2.0f;
+            SimulationRuntime runtime = Runtime(Forward(1.0f));
+            runtime.AddModule(module);
+
+            runtime.RunTicks(34);
+            // Just past the edge the body is airborne and already below the upper slab; the lower
+            // slab is three units down, so the fall is short.
+            Assert.True(ped.Position.X > 2.0f, "x=" + ped.Position.X);
+            Assert.False(module.IsGrounded);
+            Assert.True(ped.Position.Z < 0.0f, "z=" + ped.Position.Z);
+
+            // The lower slab ends at x = 10, so stop checking well before the body runs off it.
+            runtime.RunTicks(60);
+            Assert.True(module.IsGrounded, "still falling: z=" + ped.Position.Z);
+            Assert.Near(-3.0f, ped.Position.Z, 0.05f, "z=" + ped.Position.Z + " x=" + ped.Position.X);
         }
 
         [Test]
@@ -195,8 +257,12 @@ namespace SharpGTA.Tests
         private static DynamicEntity SpawnPed(StaticWorld world, ModelRegistry registry,
             Vector3 position)
         {
-            registry.Bind(new IdeReader(DataSchema.III).Read(
-                "peds\n7, civmale, civmale, CIVMALE, STAT_PLAYER, ped, 0\nend\n"));
+            // The world fixtures either bind the ped record themselves or leave it to us.
+            if (registry.Find("civmale") == null)
+            {
+                registry.Bind(new IdeReader(DataSchema.III).Read(
+                    "peds\n7, civmale, civmale, CIVMALE, STAT_PLAYER, ped, 0\nend\n"));
+            }
             DynamicEntity entity;
             Assert.True(world.TrySpawnEntity(WorldEntityKind.Ped, registry.Find("civmale"),
                 position, Vector3.Zero, out entity));

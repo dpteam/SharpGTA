@@ -42,7 +42,8 @@
 | Light-controlled ped crossings (`bTrafficLight`) | 402 | 20 |
 | Ped waiting ticks (60 peds, 1200 / 3000 ticks) | 491 / 6953 | 0 (routes never reach a flagged crossing) |
 | `--walk 812 -936 36 1 0 3`, 120 ticks (hits / travelled) | 57 / 11.9, stopped by a railing | — |
-| `--walk 700 -700 10 0 1 3`, 300 ticks | 0 hits / 30 units, z = 10 | — |
+| `--walk 812 -900 10 0 1 3`, 90 ticks (slope) | 0 hits / 9 units, z rises 9.50 → 10.40 | — |
+| `--walk 812 -900 60 0 1 3`, 10 / 60 ticks (fall) | 0 hits, z 58.78 → 19.33 while falling | — |
 | `--walk -864 -575 10 1 0 3`, 200 ticks (VC) | — | 0 hits / 20 units, z = 9.8875 |
 | `--play` + held W in the preview | `World-Play: model=cop`, `World-Play-Final: hits=0 travelled=0.53` | — |
 | Actor-ticks held at lights (8 cars / 4 cars, 3000 ticks) | 3177 | 1936 |

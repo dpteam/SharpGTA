@@ -16,9 +16,14 @@ namespace SharpGTA.World
         /// <summary>Ray height above the feet: a chest-high sweep, like a ped's collision volume.</summary>
         private const float ChestHeight = 1.0f;
 
-        /// <summary>Ground probe window, in world units.</summary>
-        private const float GroundProbeAbove = 1.0f;
-        private const float GroundProbeBelow = 2.0f;
+        /// <summary>`GRAVITY` from Physical.h, in units per 50 Hz step squared.</summary>
+        private const float Gravity = 0.008f;
+
+        /// <summary>How far below the feet the ground probe looks before the body is airborne.</summary>
+        private const float GroundProbeBelow = 60.0f;
+
+        /// <summary>Safety net for falling out of the world (there is no water plane yet).</summary>
+        private const float MinimumZ = -100.0f;
 
         /// <summary>Slides attempted after the first contact; one is enough for a wall corner.</summary>
         private const int MaximumSlideAttempts = 2;
@@ -27,6 +32,8 @@ namespace SharpGTA.World
         private readonly DynamicEntity entity;
         private int collisionHits;
         private float travelled;
+        private float verticalSpeed;
+        private bool grounded;
 
         public CharacterMoveModule(StaticWorld world, DynamicEntity entity)
         {
@@ -38,6 +45,7 @@ namespace SharpGTA.World
             this.entity = entity;
             Speed = 2.0f;
             Radius = 0.35f;
+            StepHeight = 0.4f;
         }
 
         public string Name { get { return "CharacterMove"; } }
@@ -49,6 +57,16 @@ namespace SharpGTA.World
 
         /// <summary>Body radius used to keep the chest off walls.</summary>
         public float Radius { get; set; }
+
+        /// <summary>
+        /// How far above the feet the ground probe starts. Anything below chest height is climbed
+        /// by that probe rather than by an explicit step rule, so this is a look-up window, not a
+        /// step limit: there is no `CPhysical` step response yet.
+        /// </summary>
+        public float StepHeight { get; set; }
+
+        /// <summary>True while the ground is under the feet; a fall clears it.</summary>
+        public bool IsGrounded { get { return grounded; } }
 
         /// <summary>Yaw in radians; 0 walks along +X and rotates the input axes.</summary>
         public float Heading { get; set; }
@@ -79,7 +97,7 @@ namespace SharpGTA.World
                 direction = direction * (1.0f / magnitude);
             if (magnitude > 0.0001f)
                 MoveByStep(direction * (Speed * delta));
-            StayOnGround();
+            ApplyVerticalMotion(context.Time.TimeStep);
         }
 
         /// <summary>
@@ -126,6 +144,7 @@ namespace SharpGTA.World
                     travelled += distance;
                     return;
                 }
+
                 collisionHits++;
                 if (allowed > 0.0f)
                 {
@@ -147,18 +166,41 @@ namespace SharpGTA.World
             world.MoveEntity(entity, entity.Position + delta);
         }
 
+
         /// <summary>Keeps the feet on the static ground under the current position.</summary>
-        private void StayOnGround()
+        /// <summary>
+        /// Gravity and ground contact, the `CPhysical::ApplyGravity` part: vertical speed is in GTA
+        /// 50 Hz units, so it loses `GRAVITY * timeStep` per step and the body moves by
+        /// `speed * timeStep`. A body is grounded only when the ground is at or below the next
+        /// position; walking off a ledge therefore starts a real fall instead of teleporting down.
+        /// </summary>
+        private void ApplyVerticalMotion(float timeStep)
         {
+            if (!(timeStep > 0.0f))
+                return;
             Vector3 position = entity.Position;
             StaticWorldHit ground;
-            if (!world.QueryVertical(position.X, position.Y, position.Z + GroundProbeAbove,
-                position.Z - GroundProbeBelow, out ground))
+            bool hasGround = world.QueryVertical(position.X, position.Y,
+                position.Z + StepHeight, position.Z - GroundProbeBelow, out ground);
+            verticalSpeed -= Gravity * timeStep;
+            float nextZ = position.Z + verticalSpeed * timeStep;
+            if (hasGround && nextZ <= ground.Position.Z)
             {
-                return;
+                verticalSpeed = 0.0f;
+                nextZ = ground.Position.Z;
+                grounded = true;
             }
-            if (Math.Abs(ground.Position.Z - position.Z) > 0.0001f)
-                world.MoveEntity(entity, new Vector3(position.X, position.Y, ground.Position.Z));
+            else
+            {
+                grounded = false;
+            }
+            if (nextZ < MinimumZ)
+            {
+                verticalSpeed = 0.0f;
+                nextZ = MinimumZ;
+            }
+            if (Math.Abs(nextZ - position.Z) > 0.0001f)
+                world.MoveEntity(entity, new Vector3(position.X, position.Y, nextZ));
         }
 
         /// <summary>Position is hashed through the entity; the counters describe the movement.</summary>
@@ -170,6 +212,8 @@ namespace SharpGTA.World
             writer.WriteSingle(travelled);
             writer.WriteSingle(Speed);
             writer.WriteSingle(Heading);
+            writer.WriteSingle(verticalSpeed);
+            writer.WriteByte(grounded ? (byte)1 : (byte)0);
         }
     }
 }
