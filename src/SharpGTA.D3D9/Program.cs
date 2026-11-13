@@ -41,6 +41,7 @@ namespace SharpGTA.D3D9
             float spawnCarSpeed = 12.0f;
             int spawnPedCount = 0;
             float spawnPedSpeed = 1.5f;
+            bool recycle = false;
             float[] routePoints = new float[6];
             string pathKind = "car";
             float pathRadius = 200.0f;
@@ -128,6 +129,8 @@ namespace SharpGTA.D3D9
                         return 2;
                     }
                 }
+                else if (args[i] == "--recycle")
+                    recycle = true;
                 else if (args[i] == "--path-overlay")
                     pathOverlay = true;
                 else if (args[i] == "--path-route")
@@ -325,7 +328,7 @@ namespace SharpGTA.D3D9
                     return RunWorldViewer(window, device, new PhysicalGameFileSystem(root),
                         frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
                         spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
-                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed);
+                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed, recycle);
                 if (modelMode)
                     return RunModelViewer(window, device, new PhysicalGameFileSystem(root),
                         modelName, frames, screenshot, exerciseReset);
@@ -349,7 +352,7 @@ namespace SharpGTA.D3D9
                         if (frontend.Menu.WorldPreviewRequested)
                             return RunWorldViewer(window, device, files, frames, screenshot, exerciseReset, streamBudget, txdBudget, byteBudgetMiB, startHour, verifySectors,
                         spawnCount, spawnModel, pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
-                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed);
+                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed, recycle);
                         return result;
                     }
                 }
@@ -404,7 +407,8 @@ namespace SharpGTA.D3D9
             IGameFileSystem files, int frames, string screenshot, bool exerciseReset,
             int streamBudget, int txdBudget, int byteBudgetMiB, int startHour, bool verifySectors,
             int spawnCount, string spawnModel, bool pathOverlay, bool pathRoute, float[] routePoints, string pathKind, float pathRadius,
-            int spawnCarCount, float spawnCarSpeed, int spawnPedCount, float spawnPedSpeed)
+            int spawnCarCount, float spawnCarSpeed, int spawnPedCount, float spawnPedSpeed,
+            bool recycle)
         {
             using (GameDataLoader loader = new GameDataLoader(IIIDefinition.Instance, files))
             {
@@ -413,7 +417,7 @@ namespace SharpGTA.D3D9
                     new WorldViewerApplication(window, device, loader, streamBudget, txdBudget,
                         byteBudgetMiB * 1024 * 1024, startHour, verifySectors, spawnCount, spawnModel,
                         pathOverlay, pathRoute, routePoints, pathKind, pathRadius,
-                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed))
+                        spawnCarCount, spawnCarSpeed, spawnPedCount, spawnPedSpeed, recycle))
                     return viewer.Run(frames, screenshot, exerciseReset);
             }
         }
@@ -467,6 +471,7 @@ namespace SharpGTA.D3D9
             Console.WriteLine("  --spawn N [--spawn-model NAME]: spawn N drifting gameplay objects for the preview.");
             Console.WriteLine("  --spawn-cars N [--spawn-car-speed S]: spawn N cars that follow the car network.");
             Console.WriteLine("  --spawn-peds N [--spawn-ped-speed S]: spawn N peds that follow the ped network.");
+            Console.WriteLine("  --recycle: despawn actors that finish their route and replace them near the camera.");
             Console.WriteLine("  --path-overlay: draw the path graph as lines over the world.");
             Console.WriteLine("  --path-route X Y Z X2 Y2 Z2 [--path-kind K] [--path-radius R]: draw a resolved route.");
             Console.WriteLine("  --import-settings FILE and --export-settings FILE share launcher settings.");

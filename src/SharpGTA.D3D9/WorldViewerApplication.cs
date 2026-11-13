@@ -22,6 +22,12 @@ namespace SharpGTA.D3D9
         private const float ViewRadius = 260.0f;
         private const float StreamRadius = ViewRadius * 1.5f;
         private const int VerifyFrameLimit = 30;
+
+        /// <summary>
+        /// Route length used by the preview when recycling; short enough that actors finish inside
+        /// a normal preview run, unlike the forty-hop routes the headless probes use.
+        /// </summary>
+        private const int PreviewRecycleHops = 6;
         private readonly FreeFlyCamera camera = new FreeFlyCamera();
         private readonly SimulationRuntime runtime;
         private readonly GameClock clock;
@@ -44,6 +50,7 @@ namespace SharpGTA.D3D9
         private int dynamicCars;
         private int dynamicPeds;
         private PathFollowerModule dynamicFollowers;
+        private TrafficPopulationModule dynamicPopulation;
         private bool dynamicModuleAdded;
         private string dynamicCarModel = "";
         private string dynamicPedModel = "";
@@ -69,7 +76,8 @@ namespace SharpGTA.D3D9
             GameDataLoader loader, int modelBudget, int txdBudget, int byteBudget, int startHour,
             bool verifySectors, int spawnCount, string spawnModel, bool pathOverlay,
             bool pathRoute, float[] routePoints, string pathKind, float pathRouteRadius,
-            int spawnCarCount, float spawnCarSpeed, int spawnPedCount, float spawnPedSpeed)
+            int spawnCarCount, float spawnCarSpeed, int spawnPedCount, float spawnPedSpeed,
+            bool recycle)
         {
             if (window == null) throw new ArgumentNullException("window");
             if (device == null) throw new ArgumentNullException("device");
@@ -100,7 +108,7 @@ namespace SharpGTA.D3D9
             if (spawnCount > 0)
                 SpawnDynamicEntities(spawnCount, spawnModel);
             if (spawnCarCount > 0 || spawnPedCount > 0)
-                SpawnActors(spawnCarCount, spawnPedCount, spawnModel, spawnCarSpeed, spawnPedSpeed);
+                SpawnActors(spawnCarCount, spawnPedCount, spawnModel, spawnCarSpeed, spawnPedSpeed, recycle);
         }
 
         /// <summary>
@@ -114,40 +122,69 @@ namespace SharpGTA.D3D9
         /// --spawn-cars + --spawn-peds never integrates an entity twice.
         /// </summary>
         private void SpawnActors(int carCount, int pedCount, string modelName,
-            float carSpeed, float pedSpeed)
+            float carSpeed, float pedSpeed, bool recycle)
         {
             if (loader.Paths.GroupCount == 0)
                 throw new ArgumentException(
                     "--spawn-cars/--spawn-peds needs loaded path data; add --standard.");
             PathGraph graph = loader.PathGraph;
+            // A forty-hop route in III is roughly 2800 units long, which no short preview run can
+            // complete, so recycling there uses short routes and the lifecycle stays observable.
+            int hops = recycle ? PreviewRecycleHops : 40;
             PathFollowerModule followers = new PathFollowerModule(graph, loader.World);
-            followers.RouteSource = delegate(int node)
+            if (!recycle)
             {
-                return PathRouteBuilder.BuildGreedy(graph, node, 40, true);
-            };
+                // Recycling needs actors that actually finish; a provider would keep every actor
+                // moving forever and nothing would ever be replaced.
+                followers.RouteSource = delegate(int node)
+                {
+                    return PathRouteBuilder.BuildGreedy(graph, node, 40, true);
+                };
+            }
+            ModelDefinition carModel = null;
+            ModelDefinition pedModel = null;
             if (carCount > 0)
             {
-                ModelDefinition model = ResolveActorModel(modelName, ModelKind.Vehicle,
+                carModel = ResolveActorModel(modelName, ModelKind.Vehicle,
                     "--spawn-cars needs a registered vehicle model.");
                 dynamicCars = SpawnFollowers(followers, graph, PathKind.Car,
-                    WorldEntityKind.Vehicle, model, carSpeed, carCount);
-                dynamicCarModel = model.Name;
+                    WorldEntityKind.Vehicle, carModel, carSpeed, carCount, hops);
+                dynamicCarModel = carModel.Name;
                 dynamicCarNearest = NearestActor(WorldEntityKind.Vehicle);
             }
             if (pedCount > 0)
             {
-                ModelDefinition model = ResolveActorModel(modelName, ModelKind.Ped,
+                pedModel = ResolveActorModel(modelName, ModelKind.Ped,
                     "--spawn-peds needs a registered ped model.");
                 dynamicPeds = SpawnFollowers(followers, graph, PathKind.Ped,
-                    WorldEntityKind.Ped, model, pedSpeed, pedCount);
-                dynamicPedModel = model.Name;
+                    WorldEntityKind.Ped, pedModel, pedSpeed, pedCount, hops);
+                dynamicPedModel = pedModel.Name;
                 dynamicPedNearest = NearestActor(WorldEntityKind.Ped);
+            }
+            if (recycle)
+            {
+                // Replacements stay near the preview spawn instead of appearing city-wide: this
+                // is the first place where the population anchor is a camera, not the origin.
+                dynamicPopulation = new TrafficPopulationModule(loader.World, graph, followers);
+                dynamicPopulation.RouteHops = hops;
+                if (dynamicCars > 0)
+                {
+                    dynamicPopulation.AddCohort(PathKind.Car, WorldEntityKind.Vehicle, carModel,
+                        carSpeed, dynamicCars, spawn, ViewRadius);
+                }
+                if (dynamicPeds > 0)
+                {
+                    dynamicPopulation.AddCohort(PathKind.Ped, WorldEntityKind.Ped, pedModel,
+                        pedSpeed, dynamicPeds, spawn, ViewRadius);
+                }
             }
             dynamicFollowers = followers;
             dynamicRejected = loader.World.DynamicRejectedCount;
             EnsureDynamicModule();
             // Followers are registered after the integrator so their positions win.
             runtime.AddModule(followers);
+            if (dynamicPopulation != null)
+                runtime.AddModule(dynamicPopulation);
         }
 
         private ModelDefinition ResolveActorModel(string modelName, ModelKind kind, string message)
@@ -177,7 +214,7 @@ namespace SharpGTA.D3D9
         /// actors actually spawned.
         /// </summary>
         private int SpawnFollowers(PathFollowerModule followers, PathGraph graph, PathKind pathKind,
-            WorldEntityKind entityKind, ModelDefinition model, float speed, int count)
+            WorldEntityKind entityKind, ModelDefinition model, float speed, int count, int hops)
         {
             const int MaxCandidates = 64;
             List<int> candidates = new List<int>();
@@ -218,9 +255,9 @@ namespace SharpGTA.D3D9
                         continue;
                     int i = candidates[c];
                     PathGraphNode node = graph.Nodes[i];
-                    int[] route = PathRouteBuilder.BuildGreedy(graph, i, 40, true);
+                    int[] route = PathRouteBuilder.BuildGreedy(graph, i, hops, true);
                     if (route.Length < 2)
-                        route = PathRouteBuilder.BuildGreedy(graph, i, 40);
+                        route = PathRouteBuilder.BuildGreedy(graph, i, hops);
                     if (route.Length < 2)
                         continue;
                     DynamicEntity entity;
@@ -482,12 +519,18 @@ namespace SharpGTA.D3D9
                 // final line proves the actors kept moving for the whole run.
                 if (dynamicFollowers != null)
                 {
-                    Console.WriteLine("World-Actors-Final: cars=" + dynamicCars +
+                    string actorsFinal = "World-Actors-Final: cars=" + dynamicCars +
                         " peds=" + dynamicPeds +
                         " completed=" + dynamicFollowers.CompletedCount +
                         " replans=" + dynamicFollowers.ReplanCount +
                         " travelled=" + dynamicFollowers.TravelledDistance.ToString("0.##",
-                            CultureInfo.InvariantCulture));
+                            CultureInfo.InvariantCulture);
+                    if (dynamicPopulation != null)
+                    {
+                        actorsFinal += " recycled=" + dynamicPopulation.RecycledCount +
+                            " respawned=" + dynamicPopulation.SpawnedCount;
+                    }
+                    Console.WriteLine(actorsFinal);
                 }
             }
             return verifySectorsFailed ? 3 : 0;

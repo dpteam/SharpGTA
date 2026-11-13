@@ -26,6 +26,7 @@ namespace SharpGTA.World
         private readonly PathGraph graph;
         private readonly PathFollowerModule followers;
         private readonly List<Cohort> cohorts = new List<Cohort>();
+        private int routeHops = DefaultRouteHops;
         private int spawned;
         private int despawned;
         private int recycled;
@@ -44,6 +45,22 @@ namespace SharpGTA.World
         }
 
         public string Name { get { return "TrafficPopulation"; } }
+
+        /// <summary>
+        /// Route length given to replacements; the initial spawn builds its own routes with the
+        /// same policy. The preview lowers it, because a forty-hop route in III covers roughly
+        /// 2800 units and the lifecycle would never be visible in a short run.
+        /// </summary>
+        public int RouteHops
+        {
+            get { return routeHops; }
+            set
+            {
+                if (value < 1)
+                    throw new ArgumentOutOfRangeException("value");
+                routeHops = value;
+            }
+        }
 
         /// <summary>Actor kinds currently recycled, as a read-only snapshot for diagnostics.</summary>
         public IList<TrafficCohortStatus> Cohorts
@@ -216,9 +233,9 @@ namespace SharpGTA.World
 
         private int[] BuildRoute(int start)
         {
-            int[] route = PathRouteBuilder.BuildGreedy(graph, start, DefaultRouteHops, true);
+            int[] route = PathRouteBuilder.BuildGreedy(graph, start, routeHops, true);
             if (route.Length < 2)
-                route = PathRouteBuilder.BuildGreedy(graph, start, DefaultRouteHops);
+                route = PathRouteBuilder.BuildGreedy(graph, start, routeHops);
             if (route.Length < 2)
                 return null;
             return route;

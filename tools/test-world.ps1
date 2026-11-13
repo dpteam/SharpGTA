@@ -483,6 +483,54 @@ function Test-SpawnedPeds([string]$reference) {
     Write-Host "PASS spawned peds walk the ped network: $(($lateLog | Where-Object { $_ -match 'World-Peds:' }) -join ' ')"
 }
 
+function Test-RecycledTraffic([string]$reference) {
+    Write-Host "=== Traffic recycling ==="
+    $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
+    $output = Join-Path $root "artifacts/world-smoke"
+    [IO.Directory]::CreateDirectory($output) | Out-Null
+    $first = Join-Path $output "world-recycle-a.bmp"
+    $second = Join-Path $output "world-recycle-b.bmp"
+    $early = Join-Path $output "world-recycle-early.bmp"
+    [string[]]$earlyLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 2 `
+        --spawn-cars 3 --recycle --spawn-car-speed 200 --screenshot $early 2>&1 |
+        ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Recycled traffic early run failed." }
+    [string[]]$firstLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 60 `
+        --spawn-cars 3 --recycle --spawn-car-speed 200 --screenshot $first 2>&1 |
+        ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Recycled traffic run failed." }
+    [string[]]$secondLog = @(& $exe --world --game iii --root $gameRoot --hidden --frames 60 `
+        --spawn-cars 3 --recycle --spawn-car-speed 200 --screenshot $second 2>&1 |
+        ForEach-Object { $_.ToString() })
+    if ($LASTEXITCODE -ne 0) { throw "Recycled traffic repeat run failed." }
+
+    $text = [string]::Join("`n", $firstLog)
+    # The preview swaps finished actors, so both sides of the lifecycle must be non-zero.
+    $actors = [regex]::Match($text,
+        "World-Actors-Final: cars=3 peds=0 completed=\d+ replans=\d+ travelled=[\d.]+ recycled=(\d+) respawned=(\d+)")
+    if (-not $actors.Success) {
+        throw "Recycled traffic was not reported: $text"
+    }
+    if ([int]$actors.Groups[1].Value -lt 1) {
+        throw "No actor was recycled in the preview: $($actors.Value)"
+    }
+    if ([int]$actors.Groups[1].Value -ne [int]$actors.Groups[2].Value) {
+        throw "Recycled and respawned counts disagree: $($actors.Value)"
+    }
+    if ($text -notmatch "World-Cars: spawned=3 model=\S+ nearest=\S+ alive=3 ") {
+        throw "Recycling grew or shrank the preview population: $text"
+    }
+    if ((Get-FileHash $first -Algorithm SHA256).Hash -ne
+        (Get-FileHash $second -Algorithm SHA256).Hash) {
+        throw "Recycled traffic is not deterministic."
+    }
+    if ((Get-FileHash $first -Algorithm SHA256).Hash -eq
+        (Get-FileHash $early -Algorithm SHA256).Hash) {
+        throw "Recycled traffic did not move or leave between two and sixty frames."
+    }
+    Write-Host "PASS preview recycles finished actors: $($actors.Value)"
+}
+
 function Test-PathOverlay([string]$reference) {
     Write-Host "=== Path graph overlay ==="
     $exe = Join-Path $root "src/SharpGTA.D3D9/bin/Release/net40/SharpGTA.D3D9.exe"
@@ -861,6 +909,7 @@ try {
     Test-PathOverlay $baseline
     Test-SpawnedCars $baseline
     Test-SpawnedPeds $baseline
+    Test-RecycledTraffic $baseline
 
     Invoke-World "net9.0-windows" "dotnet" `
         @((Join-Path $root "src/SharpGTA.D3D9/bin/Release/net9.0-windows/SharpGTA.D3D9.dll")) `
