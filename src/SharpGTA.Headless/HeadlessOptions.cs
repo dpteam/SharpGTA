@@ -99,6 +99,11 @@ namespace SharpGTA.Headless
         public float SpawnCarSpeed { get; set; }
         public int SpawnPedCount { get; set; }
         public float SpawnPedSpeed { get; set; }
+        /// <summary>
+        /// Turns the one-shot actor spawn into a sustained population: finished actors are
+        /// despawned and replaced, so the count stays the same for the whole run.
+        /// </summary>
+        public bool Recycle { get; set; }
         public int PathGroupIndex { get; set; }
         public int PathNodeIndex { get; set; }
 
@@ -272,6 +277,9 @@ namespace SharpGTA.Headless
                         if (!(options.SpawnPedSpeed > 0.0f))
                             throw new CommandLineException("--spawn-ped-speed must be positive.");
                         break;
+                    case "--recycle":
+                        options.Recycle = true;
+                        break;
                     case "--spawn-car-speed":
                         options.SpawnCarSpeed = ParseSingle(Value(args, ref i, argument), argument);
                         if (!(options.SpawnCarSpeed > 0.0f))
@@ -326,6 +334,13 @@ namespace SharpGTA.Headless
                     throw new CommandLineException("Asset loading and ground queries require --root PATH.");
                 if (options.Root != null && !options.HasExplicitAssetAction)
                     options.Standard = true;
+                // Recycling only exists for path actors; accepting it alone would silently do
+                // nothing while still loading a whole game tree.
+                if (options.Recycle && !options.HasSpawnCars && options.SpawnPedCount == 0)
+                {
+                    throw new CommandLineException(
+                        "--recycle requires --spawn-cars or --spawn-peds.");
+                }
             }
             return options;
         }

@@ -22,6 +22,7 @@ namespace SharpGTA.World
         private readonly PathGraph graph;
         private readonly StaticWorld world;
         private readonly List<Follower> followers = new List<Follower>();
+        private readonly List<DynamicEntity> retired = new List<DynamicEntity>();
         private float travelled;
         private int completed;
         private int replanned;
@@ -33,6 +34,16 @@ namespace SharpGTA.World
         /// leaves the actor parked, which is the documented behaviour without a provider.
         /// </summary>
         public Func<int, int[]> RouteSource { get; set; }
+
+        /// <summary>
+        /// When true a finished vehicle is handed back through <see cref="TryTakeRetired"/> instead
+        /// of staying parked: traffic recycling despawns it and spawns a replacement elsewhere.
+        /// The module stops owning its position at that point, so the caller must despawn it.
+        /// </summary>
+        public bool RecycleVehicles { get; set; }
+
+        /// <summary>Same as <see cref="RecycleVehicles"/>, for peds.</summary>
+        public bool RecyclePeds { get; set; }
 
         public PathFollowerModule(PathGraph graph)
             : this(graph, null)
@@ -56,6 +67,18 @@ namespace SharpGTA.World
         public int Count { get { return followers.Count; } }
         public int CompletedCount { get { return completed; } }
 
+        /// <summary>Followers of one entity kind, so a population can adopt an existing spawn.</summary>
+        public int CountOf(WorldEntityKind kind)
+        {
+            int count = 0;
+            for (int i = 0; i < followers.Count; i++)
+            {
+                if (followers[i].Entity.Kind == kind)
+                    count++;
+            }
+            return count;
+        }
+
         /// <summary>Routes that were replaced by a new one from <see cref="RouteSource"/>.</summary>
         public int ReplanCount { get { return replanned; } }
 
@@ -64,6 +87,25 @@ namespace SharpGTA.World
 
         /// <summary>Total distance the followers have driven, for probes and diagnostics.</summary>
         public float TravelledDistance { get { return travelled; } }
+
+        /// <summary>Finished actors waiting for their owner to despawn them.</summary>
+        public int RetiredCount { get { return retired.Count; } }
+
+        /// <summary>
+        /// Takes the oldest finished actor off the retired queue. The entity is still in the
+        /// world; the caller decides whether to despawn it or reuse it.
+        /// </summary>
+        public bool TryTakeRetired(out DynamicEntity entity)
+        {
+            if (retired.Count == 0)
+            {
+                entity = null;
+                return false;
+            }
+            entity = retired[0];
+            retired.RemoveAt(0);
+            return true;
+        }
 
         /// <summary>
         /// Stops following an entity, for example before despawning it. The entity keeps its
@@ -150,6 +192,39 @@ namespace SharpGTA.World
                 if (!followers[i].Finished)
                     Advance(followers[i], delta);
             }
+            ReapFinished();
+        }
+
+        /// <summary>
+        /// Moves finished followers into the retired queue so their owner can replace them. Kept
+        /// out of the advance loop: removing entries while walking the list would skip actors and
+        /// shift the order the state hash depends on.
+        /// </summary>
+        private void ReapFinished()
+        {
+            int write = 0;
+            for (int read = 0; read < followers.Count; read++)
+            {
+                Follower follower = followers[read];
+                if (follower.Finished && IsRecyclable(follower.Entity.Kind))
+                {
+                    retired.Add(follower.Entity);
+                    continue;
+                }
+                followers[write] = follower;
+                write++;
+            }
+            if (write != followers.Count)
+                followers.RemoveRange(write, followers.Count - write);
+        }
+
+        private bool IsRecyclable(WorldEntityKind kind)
+        {
+            if (kind == WorldEntityKind.Vehicle)
+                return RecycleVehicles;
+            if (kind == WorldEntityKind.Ped)
+                return RecyclePeds;
+            return false;
         }
 
         private void Advance(Follower follower, float deltaSeconds)
@@ -246,6 +321,12 @@ namespace SharpGTA.World
             writer.WriteSingle(travelled);
             writer.WriteInt32(completed);
             writer.WriteInt32(replanned);
+            // Normally empty: the population module drains it in the same tick. It stays in the
+            // hash so a state captured between follower and population still differs from a
+            // state where nothing finished.
+            writer.WriteInt32(retired.Count);
+            for (int i = 0; i < retired.Count; i++)
+                writer.WriteInt32(retired[i].Handle);
             for (int i = 0; i < followers.Count; i++)
             {
                 Follower follower = followers[i];

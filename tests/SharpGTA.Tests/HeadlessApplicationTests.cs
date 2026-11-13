@@ -345,6 +345,61 @@ namespace SharpGTA.Tests
         }
 
         [Test]
+        public void RecyclingTrafficDespawnsAndReplacesActors()
+        {
+            using (TemporaryDirectory temporary = new TemporaryDirectory())
+            {
+                CreatePathTree(temporary);
+                string first;
+                string second;
+                string error;
+                // Twenty units per second over a thirty-unit chain: each car finishes every forty
+                // five ticks, so six hundred ticks exercise the whole despawn/replace cycle.
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-cars", "2",
+                    "--recycle", "--spawn-car-speed", "20", "--ticks", "600" }, out first, out error), error);
+                Assert.Equal(0, Invoke(new string[] { "--root", temporary.Path, "--spawn-cars", "2",
+                    "--recycle", "--spawn-car-speed", "20", "--ticks", "600" }, out second, out error), error);
+                Assert.Equal(first, second);
+                Assert.True(first.IndexOf("Path-Follow: vehicles=2 peds=0 actors=2",
+                    StringComparison.Ordinal) >= 0, first);
+                // The population must not grow, but it must actually recycle.
+                Assert.True(first.IndexOf("Path-Traffic: cars=2/2 spawned=",
+                    StringComparison.Ordinal) >= 0, first);
+                Assert.True(first.IndexOf("spawned=0 despawned=0 recycled=0",
+                    StringComparison.Ordinal) < 0, first);
+                int spawned = ReadCounter(first, "Path-Traffic:", "spawned=");
+                int despawned = ReadCounter(first, "Path-Traffic:", "despawned=");
+                int recycled = ReadCounter(first, "Path-Traffic:", "recycled=");
+                Assert.Equal(spawned, despawned);
+                Assert.Equal(spawned, recycled);
+                Assert.True(spawned > 10, first);
+            }
+        }
+
+        [Test]
+        public void RecycleNeedsActorsToRecycle()
+        {
+            string output;
+            string error;
+            Assert.Equal(2, Invoke(new string[] { "--root", ".", "--recycle" }, out output, out error));
+            Assert.True(error.IndexOf("--recycle", StringComparison.Ordinal) >= 0);
+        }
+
+        private static int ReadCounter(string text, string marker, string name)
+        {
+            int start = text.IndexOf(marker, StringComparison.Ordinal);
+            Assert.True(start >= 0, text);
+            int value = text.IndexOf(name, start, StringComparison.Ordinal);
+            Assert.True(value >= 0, text);
+            value += name.Length;
+            int end = value;
+            while (end < text.Length && char.IsDigit(text[end]))
+                end++;
+            return int.Parse(text.Substring(value, end - value),
+                System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        [Test]
         public void SpawnedPedsFollowThePedNetwork()
         {
             using (TemporaryDirectory temporary = new TemporaryDirectory())

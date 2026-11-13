@@ -24,7 +24,7 @@ try {
         $code = $LASTEXITCODE
         $text = $output | Out-String
         if ($code -ne 0) { throw "$name failed with exit code ${code}:`n$text" }
-        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|Path-Follow:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
+        $summary = $output | Where-Object { "$_" -match "^(Assets:|Entities:|World-Data:|Path-Graph:|Path-Groups:|Path-Follow:|Path-Traffic:|GXT:|RW:|DFF:|DFF-Scan:|TXD:|TXD-Scan:|Ground:|Zone:|Path:|Path-Nearest:|Path-Route:|Path-Verify:|Building:|Render-Preview:|Render-Resources:)" }
         $summary | ForEach-Object { Write-Host "$_" }
         return $text
     }
@@ -116,6 +116,23 @@ try {
         }
         if ($actorLine.Value -notmatch "vehicleModel=(?!null)\S+" -or $actorLine.Value -notmatch "pedModel=(?!null)\S+") {
             throw "$game actors spawned on the null model: $($actorLine.Value)"
+        }
+        # Finished actors must be recycled: despawned from the world and replaced, so the counted
+        # population stays at its target while the map keeps seeing traffic.
+        $recycle = Invoke-Case "$game recycled traffic" $net40 ($common + @("--standard",
+            "--spawn-cars", "3", "--recycle", "--spawn-car-speed", "40", "--ticks", "3000")) $false
+        $traffic = [regex]::Match($recycle, "Path-Traffic: cars=3/3 spawned=(\d+) despawned=(\d+) recycled=(\d+)")
+        if (-not $traffic.Success) {
+            throw "$game traffic recycling was not reported: $recycle"
+        }
+        $spawnedCount = [int]$traffic.Groups[1].Value
+        if ($spawnedCount -lt 3 -or
+            $spawnedCount -ne [int]$traffic.Groups[2].Value -or
+            $spawnedCount -ne [int]$traffic.Groups[3].Value) {
+            throw "$game recycling counters disagree: $($traffic.Value)"
+        }
+        if ($recycle -notmatch "Path-Follow: vehicles=3 peds=0 actors=3 ") {
+            throw "$game recycled population drifted away from its target: $recycle"
         }
         # Routing must follow real connections only: III is fragmented at the probe, VC connects.
         $route = if ($game -eq "iii") {

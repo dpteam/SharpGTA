@@ -47,6 +47,7 @@ namespace SharpGTA.Headless
                 int pedsSpawned = 0;
                 string carModelName = null;
                 string pedModelName = null;
+                TrafficPopulationModule population = null;
                 bool dynamicModuleAdded = false;
                 using (GameDataLoader loader = CreateLoader(definition, options))
                 {
@@ -95,13 +96,21 @@ namespace SharpGTA.Headless
                         // --path-merge-distance cannot mean two different worlds in one run.
                         PathGraph followGraph = CreatePathGraph(loader, options);
                         followers = new PathFollowerModule(followGraph, loader.World);
-                        followers.RouteSource = delegate(int node)
+                        if (!options.Recycle)
                         {
-                            return PathRouteBuilder.BuildGreedy(followGraph, node, 40, true);
-                        };
+                            // Without recycling an actor keeps driving by asking for a new route;
+                            // with it the actor must actually finish so the population can replace
+                            // it, otherwise nothing would ever be recycled.
+                            followers.RouteSource = delegate(int node)
+                            {
+                                return PathRouteBuilder.BuildGreedy(followGraph, node, 40, true);
+                            };
+                        }
+                        ModelDefinition carModel = null;
+                        ModelDefinition pedModel = null;
                         if (options.HasSpawnCars)
                         {
-                            ModelDefinition carModel = ResolveCarModel(loader, options);
+                            carModel = ResolveCarModel(loader, options);
                             carModelName = carModel.Name;
                             carsSpawned = SpawnFollowed(loader, followGraph, followers,
                                 PathKind.Car, WorldEntityKind.Vehicle, carModel,
@@ -109,16 +118,34 @@ namespace SharpGTA.Headless
                         }
                         if (options.SpawnPedCount > 0)
                         {
-                            ModelDefinition pedModel = ResolvePedModel(loader, options);
+                            pedModel = ResolvePedModel(loader, options);
                             pedModelName = pedModel.Name;
                             pedsSpawned = SpawnFollowed(loader, followGraph, followers,
                                 PathKind.Ped, WorldEntityKind.Ped, pedModel,
                                 options.SpawnPedSpeed, options.SpawnPedCount);
                         }
+                        if (options.Recycle)
+                        {
+                            // Target equals what actually spawned, so a pool that rejected a few
+                            // actors does not make the population spawn extras on the first tick.
+                            population = new TrafficPopulationModule(loader.World, followGraph, followers);
+                            if (carsSpawned > 0)
+                            {
+                                population.AddCohort(PathKind.Car, WorldEntityKind.Vehicle,
+                                    carModel, options.SpawnCarSpeed, carsSpawned);
+                            }
+                            if (pedsSpawned > 0)
+                            {
+                                population.AddCohort(PathKind.Ped, WorldEntityKind.Ped,
+                                    pedModel, options.SpawnPedSpeed, pedsSpawned);
+                            }
+                        }
                         // Registered last so path positions win over plain integration.
                         if (!dynamicModuleAdded)
                             runtime.AddModule(new DynamicEntityModule(loader.World));
                         runtime.AddModule(followers);
+                        if (population != null)
+                            runtime.AddModule(population);
                     }
                     if (options.RenderPreview)
                         RenderPreviewRunner.Run(loader, options, output);
@@ -139,6 +166,8 @@ namespace SharpGTA.Headless
                     if (followers != null)
                         WritePathFollowSummary(loader.World, followers, carsSpawned, pedsSpawned,
                             carModelName, pedModelName, output);
+                    if (population != null)
+                        WriteTrafficSummary(population, output);
                     output.WriteLine("Clock: day=" + gameClock.DaysPassed.ToString(CultureInfo.InvariantCulture) +
                         " time=" + gameClock.Hours.ToString("00", CultureInfo.InvariantCulture) + ":" +
                         gameClock.Minutes.ToString("00", CultureInfo.InvariantCulture) + ":" +
@@ -689,6 +718,27 @@ namespace SharpGTA.Headless
                 "--spawn-cars needs a vehicle model; add --spawn-model NAME.");
         }
 
+        /// <summary>
+        /// Recycling keeps the actor count constant, so the interesting numbers are the lifecycle
+        /// ones: something finished, was removed from the world and was replaced.
+        /// </summary>
+        private static void WriteTrafficSummary(TrafficPopulationModule population, TextWriter output)
+        {
+            string line = "Path-Traffic:";
+            IList<TrafficCohortStatus> cohorts = population.Cohorts;
+            for (int i = 0; i < cohorts.Count; i++)
+            {
+                TrafficCohortStatus cohort = cohorts[i];
+                line += " " + (cohort.EntityKind == WorldEntityKind.Vehicle ? "cars" : "peds") +
+                    "=" + cohort.LiveCount.ToString(CultureInfo.InvariantCulture) +
+                    "/" + cohort.TargetCount.ToString(CultureInfo.InvariantCulture);
+            }
+            line += " spawned=" + population.SpawnedCount.ToString(CultureInfo.InvariantCulture) +
+                " despawned=" + population.DespawnedCount.ToString(CultureInfo.InvariantCulture) +
+                " recycled=" + population.RecycledCount.ToString(CultureInfo.InvariantCulture);
+            output.WriteLine(line);
+        }
+
         private static void WritePathFollowSummary(StaticWorld world, PathFollowerModule followers,
             int cars, int peds, string carModel, string pedModel, TextWriter output)
         {
@@ -920,6 +970,7 @@ namespace SharpGTA.Headless
             output.WriteLine("  --path-merge-distance R   Merge external path slots closer than R units (default 1, the original).");
             output.WriteLine("  --spawn-cars N [--spawn-car-speed S]  Spawn N cars that follow the car network.");
             output.WriteLine("  --spawn-peds N [--spawn-ped-speed S]  Spawn N peds that follow the ped network.");
+            output.WriteLine("  --recycle                 Despawn finished actors and replace them, keeping the count.");
             output.WriteLine("  --query-building HANDLE   Resolve a building-pool handle to its IPL placement (needs --standard).");
             output.WriteLine("  --spawn-objects N [--spawn-model NAME]  Spawn N drifting gameplay objects and tick them.");
             output.WriteLine("  --ticks N                 Run N deterministic 30 Hz simulation ticks.");
